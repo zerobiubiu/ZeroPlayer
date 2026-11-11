@@ -80,7 +80,7 @@ Windows 11 x64；Android 17 / x86_64 模拟器（`-read-only`，ARM64 转译）�
 - 仓库 `zerobiubiu/ZeroPlayer` 为 public，默认分支 `main`，描述与主题已设置。
 - 首次提交 `76b01c1` 推送成功；随后修正流水线：`setup-android` 的 `tools` 包失败、`yes | sdkmanager --licenses` 管道退出码、`gradlew` 可执行权限、构建脚本 `java.util.Properties` 解析、`:data` 模块清单缺少权限与前台服务类型。模块级 Lint 陷阱记录在 [0004](../troubleshooting/0004-module-level-lint-permissions.md)。
 - 发行 Secrets：`ZEROPLAYER_KEYSTORE_BASE64`、`ZEROPLAYER_STORE_PASSWORD`、`ZEROPLAYER_KEY_ALIAS`、`ZEROPLAYER_KEY_PASSWORD` 已写入；`gh secret list` 可见四项。
-- CI 运行 `43015055350`（提交「修复模块级 Lint 报错并补充发布证据」）：单元测试、Lint、`:app:assembleDebug` 与报告归档全部成功。
+- CI 运行 `43015504826`（提交「补充发行实证与模块级 Lint 排查记录」）：单元测试、Lint、`:app:assembleDebug` 与报告归档全部成功。期间另一次运行因后续提交触发 `concurrency.cancel-in-progress` 被取消，其各步骤此前均已成功，不作结论依据。
 - Release 运行 `43013715539`：5 分 2 秒完成，创建 [v1.0.0](https://github.com/zerobiubiu/ZeroPlayer/releases/tag/v1.0.0)，资产为 `ZeroPlayer-1.0.0-arm64-v8a.apk`（43,925,428 字节）与 `.sha256`。
 - 下载发行包复核：文件 SHA-256 `379a015a3dce9a3afef93b4532a93c1ebaa9e681151404410deec05a7e84dcaf`，与随附 `.sha256` 一致；`apksigner` 证书 `CN=ZeroPlayer, O=ZeroPlayer, C=CN`、SHA-256 `d18d02ab…1358cb`，与本地密钥相同，说明 CI 使用的是仓库 Secrets 中的发行密钥而非调试签名；`aapt2 dump badging` 为 `versionCode='10000' versionName='1.0.0'`、`native-code: 'arm64-v8a'`。
 
