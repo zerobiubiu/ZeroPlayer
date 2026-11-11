@@ -16,17 +16,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -79,7 +81,45 @@ internal fun parseSettingNumber(raw: String, minimum: Double, maximum: Double, i
     return number.takeIf { it.isFinite() && it >= minimum && it <= maximum }
 }
 
-/** 数值可直接在设置页输入；保存前校验范围与小数格式。 */
+/** 一次数值编辑的处置结果。 */
+internal sealed interface NumericEdit {
+    /** 合法且与已保存值不同：需要写入。 */
+    data class Commit(val value: Double) : NumericEdit
+
+    /** 非法输入：不写入，由界面提示并恢复。 */
+    data object Reject : NumericEdit
+
+    /** 与已保存值或上次写入值相同：无需写入。 */
+    data object Unchanged : NumericEdit
+}
+
+/**
+ * 依据输入文本、仓库中的已保存值与本次会话上次写入值决定处置方式。
+ *
+ * - 非法输入一律拒绝，不落库；
+ * - 与已保存值或上次写入值相同不再重复写；
+ * - 其余情况提交新值。
+ */
+internal fun resolveNumericEdit(
+    text: String,
+    savedValue: Double?,
+    lastWrittenValue: Double?,
+    minimum: Double,
+    maximum: Double,
+    integerOnly: Boolean,
+): NumericEdit {
+    val parsed = parseSettingNumber(text, minimum, maximum, integerOnly) ?: return NumericEdit.Reject
+    if (parsed == savedValue || parsed == lastWrittenValue) return NumericEdit.Unchanged
+    return NumericEdit.Commit(parsed)
+}
+
+/**
+ * 数值设置行：输入完成即生效，与同页开关使用同一保存语义。
+ *
+ * - 键盘完成或失焦时写入合法值，不再提供逐行“保存”按钮；
+ * - 非法输入不写入，键盘完成时提示范围，失焦时恢复为已保存值；
+ * - 离开页面时若仍有未提交的合法输入补写一次，保证最后一次修改落盘。
+ */
 @Composable
 internal fun NumericSettingRow(
     title: String,
@@ -89,45 +129,93 @@ internal fun NumericSettingRow(
     maximum: Double,
     rangeLabel: String,
     integerOnly: Boolean,
-    onSave: (Double) -> Unit,
+    onCommit: (Double) -> Unit,
 ) {
-    var value by remember(title, initialValue) { mutableStateOf(initialValue) }
-    var edited by remember(title, initialValue) { mutableStateOf(false) }
+    var text by remember(title) { mutableStateOf(initialValue) }
+    var focused by remember(title) { mutableStateOf(false) }
+    var errorText by remember(title) { mutableStateOf<String?>(null) }
+    var notice by remember(title) { mutableStateOf<String?>(null) }
+    var lastCommitted by remember(title) { mutableStateOf<Double?>(null) }
+    val currentInitial by rememberUpdatedState(initialValue)
+    val currentOnCommit by rememberUpdatedState(onCommit)
     val focusManager = LocalFocusManager.current
-    val parsed = remember(value, minimum, maximum, integerOnly) {
-        parseSettingNumber(value, minimum, maximum, integerOnly)
+    val savedValue = remember(currentInitial, minimum, maximum, integerOnly) {
+        parseSettingNumber(currentInitial, minimum, maximum, integerOnly)
     }
-    val save: () -> Unit = {
-        parsed?.let {
-            onSave(it)
-            edited = false
-            focusManager.clearFocus()
+
+    /** 写入合法值；与已保存值或上次写入值相同时跳过，避免重复落盘。 */
+    fun commit(value: Double) {
+        if (value == savedValue || value == lastCommitted) return
+        lastCommitted = value
+        currentOnCommit(value)
+    }
+
+    LaunchedEffect(initialValue) {
+        if (!focused) text = initialValue
+    }
+
+    DisposableEffect(title) {
+        onDispose {
+            val pending = parseSettingNumber(text, minimum, maximum, integerOnly)
+            if (pending != null) commit(pending)
         }
     }
 
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.xs),
-    ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = { value = it; edited = true },
-            label = { Text(title) },
-            suffix = { Text(unit) },
-            singleLine = true,
-            isError = edited && parsed == null,
-            supportingText = { Text(if (edited && parsed == null) "请输入$rangeLabel" else "允许范围：$rangeLabel") },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = if (integerOnly) KeyboardType.Number else KeyboardType.Decimal,
-                imeAction = ImeAction.Done,
-            ),
-            keyboardActions = KeyboardActions(onDone = { save() }),
-            modifier = Modifier.weight(1f),
-        )
-        TextButton(
-            enabled = edited && parsed != null,
-            onClick = save,
-            modifier = Modifier.semantics { contentDescription = "保存$title" },
-        ) { Text("保存") }
-    }
+    OutlinedTextField(
+        value = text,
+        onValueChange = {
+            text = it
+            errorText = null
+            notice = null
+        },
+        label = { Text(title) },
+        suffix = { Text(unit) },
+        singleLine = true,
+        isError = errorText != null,
+        supportingText = {
+            val hint = errorText ?: notice ?: "允许范围：$rangeLabel"
+            Text(
+                text = hint,
+                color = if (errorText != null) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        },
+        keyboardOptions = KeyboardOptions(
+            keyboardType = if (integerOnly) KeyboardType.Number else KeyboardType.Decimal,
+            imeAction = ImeAction.Done,
+        ),
+        keyboardActions = KeyboardActions(
+            onDone = {
+                when (val edit = resolveNumericEdit(text, savedValue, lastCommitted, minimum, maximum, integerOnly)) {
+                    is NumericEdit.Commit -> {
+                        commit(edit.value)
+                        focusManager.clearFocus()
+                    }
+
+                    is NumericEdit.Unchanged -> focusManager.clearFocus()
+                    is NumericEdit.Reject -> errorText = "请输入$rangeLabel"
+                }
+            },
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.xs)
+            .testTag("setting-$title")
+            .onFocusChanged { state ->
+                focused = state.isFocused
+                if (state.isFocused) return@onFocusChanged
+                when (val edit = resolveNumericEdit(text, savedValue, lastCommitted, minimum, maximum, integerOnly)) {
+                    is NumericEdit.Commit -> commit(edit.value)
+                    is NumericEdit.Unchanged -> Unit
+                    is NumericEdit.Reject -> {
+                        text = currentInitial
+                        errorText = null
+                        notice = "输入无效，已恢复为$currentInitial"
+                    }
+                }
+            },
+    )
 }

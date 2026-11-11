@@ -1,8 +1,8 @@
 package com.privateplayer.feature.settings
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.privateplayer.core.common.di.ApplicationScope
 import com.privateplayer.core.common.di.IoDispatcher
 import com.privateplayer.core.playback.PlaybackEngineProvider
 import com.privateplayer.domain.model.AppSettings
@@ -14,17 +14,16 @@ import com.privateplayer.domain.model.ThemeMode
 import com.privateplayer.domain.model.VideoAspect
 import com.privateplayer.domain.repository.SettingsRepository
 import com.privateplayer.domain.repository.StorageRepository
-import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 data class SettingsUiState(
@@ -41,17 +40,25 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val storageRepository: StorageRepository,
     engineProvider: PlaybackEngineProvider,
-    @ApplicationContext private val context: Context,
+    versionNameProvider: AppVersionNameProvider,
+    @ApplicationScope private val applicationScope: CoroutineScope,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
-
     private val message = MutableStateFlow<String?>(null)
+
+    /**
+     * 设置写入队列：所有写入按提交顺序串行执行。
+     *
+     * 连续修改不会互相覆盖，队列保证最后一次修改最后落盘；
+     * 队列消费使用应用级作用域，离开设置页后仍在完成写入。
+     */
+    private val writeQueue = SettingsWriteQueue(applicationScope) { error ->
+        message.value = "设置保存失败：${error.message ?: "未知错误"}"
+    }
 
     private val engineLabel = engineProvider.backendLabel
     private val engineDetail = engineProvider.backendDetail
-    private val versionName: String = runCatching {
-        context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "—"
-    }.getOrDefault("—")
+    private val versionName: String = versionNameProvider.versionName()
 
     val uiState: StateFlow<SettingsUiState> = combine(
         settingsRepository.observeSettings(),
@@ -110,14 +117,11 @@ class SettingsViewModel @Inject constructor(
     fun setLongPressSpeedGesture(enabled: Boolean) =
         launchSetting { settingsRepository.setLongPressSpeedGesture(enabled) }
 
-    fun setHapticsEnabled(enabled: Boolean) =
-        launchSetting { settingsRepository.setHapticsEnabled(enabled) }
+    fun setHapticsEnabled(enabled: Boolean) = launchSetting { settingsRepository.setHapticsEnabled(enabled) }
 
-    fun setGenerateThumbnails(enabled: Boolean) =
-        launchSetting { settingsRepository.setGenerateThumbnails(enabled) }
+    fun setGenerateThumbnails(enabled: Boolean) = launchSetting { settingsRepository.setGenerateThumbnails(enabled) }
 
-    fun setDuplicateDetection(enabled: Boolean) =
-        launchSetting { settingsRepository.setDuplicateDetection(enabled) }
+    fun setDuplicateDetection(enabled: Boolean) = launchSetting { settingsRepository.setDuplicateDetection(enabled) }
 
     fun clearThumbnailCache() {
         viewModelScope.launch {
@@ -134,7 +138,7 @@ class SettingsViewModel @Inject constructor(
     }
 
     private fun launchSetting(block: suspend () -> Unit) {
-        viewModelScope.launch { runCatching { block() } }
+        writeQueue.submit(block)
     }
 
     private fun OperationOutcome.text(success: String): String = when (this) {

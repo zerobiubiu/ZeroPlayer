@@ -251,7 +251,7 @@ private fun PlaybackSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 initialValue = playback.defaultSpeed.toString(),
                 unit = "×", minimum = 0.25, maximum = 4.0,
                 rangeLabel = "0.25～4 倍", integerOnly = false,
-                onSave = { viewModel.setDefaultSpeed(it.toFloat()) },
+                onCommit = { viewModel.setDefaultSpeed(it.toFloat()) },
             )
             SettingsDropdownRow(
                 title = "默认画面比例",
@@ -264,14 +264,14 @@ private fun PlaybackSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 initialValue = playback.seekStepSeconds.toString(),
                 unit = "秒", minimum = 5.0, maximum = 60.0,
                 rangeLabel = "5～60 的整数秒", integerOnly = true,
-                onSave = { viewModel.setSeekStep(it.toInt()) },
+                onCommit = { viewModel.setSeekStep(it.toInt()) },
             )
             NumericSettingRow(
                 title = "长按临时倍速",
                 initialValue = playback.longPressSpeed.toString(),
                 unit = "×", minimum = 1.5, maximum = 4.0,
                 rangeLabel = "1.5～4 倍", integerOnly = false,
-                onSave = { viewModel.setLongPressSpeed(it.toFloat()) },
+                onCommit = { viewModel.setLongPressSpeed(it.toFloat()) },
             )
         }
     }
@@ -287,7 +287,7 @@ private fun SubtitleSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 initialValue = (subtitle.fontSizeScale * 100).roundToInt().toString(),
                 unit = "%", minimum = 60.0, maximum = 200.0,
                 rangeLabel = "60～200 的整数百分比", integerOnly = true,
-                onSave = { viewModel.setSubtitleFontScale((it / 100).toFloat()) },
+                onCommit = { viewModel.setSubtitleFontScale((it / 100).toFloat()) },
             )
             SettingsDropdownRow(
                 title = "字幕背景",
@@ -316,7 +316,7 @@ private fun SubtitleSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 initialValue = subtitle.delayStepMs.toString(),
                 unit = "ms", minimum = 50.0, maximum = 1000.0,
                 rangeLabel = "50～1000 的整数毫秒", integerOnly = true,
-                onSave = { viewModel.setSubtitleDelayStep(it.toInt()) },
+                onCommit = { viewModel.setSubtitleDelayStep(it.toInt()) },
             )
             Text(
                 text = "播放器会记住每个视频上次选中的字幕，下次打开自动恢复。",

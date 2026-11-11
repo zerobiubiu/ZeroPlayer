@@ -41,9 +41,9 @@ android {
         applicationId = "com.privateplayer.media"
         minSdk = 26
         targetSdk = 37
-        // 默认值与标签 v1.0.1 的推导值一致（major*10000 + minor*100 + patch），避免本地安装被降级。
-        versionCode = releaseVersionCode ?: 10001
-        versionName = releaseVersionName ?: "1.0.1"
+        // 默认值与标签 v1.0.2 的推导值一致（major*10000 + minor*100 + patch），避免本地安装被降级。
+        versionCode = releaseVersionCode ?: 10002
+        versionName = releaseVersionName ?: "1.0.2"
         ndk {
             abiFilters += "arm64-v8a"
         }

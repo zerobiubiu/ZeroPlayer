@@ -26,4 +26,49 @@ class SettingNumberTest {
         assertNull(parseSettingNumber("5.5", 5.0, 60.0, true))
         assertNull(parseSettingNumber("61", 5.0, 60.0, true))
     }
+
+    @Test
+    fun `合法新值提交写入`() {
+        val edit = resolveNumericEdit("2.5", savedValue = 1.0, lastWrittenValue = null, minimum = 0.25, maximum = 4.0, integerOnly = false)
+        assertEquals(NumericEdit.Commit(2.5), edit)
+    }
+
+    @Test
+    fun `非法值一律拒绝不写入`() {
+        listOf("9", "abc", "", "0.1").forEach { text ->
+            val edit = resolveNumericEdit(text, savedValue = 1.0, lastWrittenValue = null, minimum = 0.25, maximum = 4.0, integerOnly = false)
+            assertEquals(NumericEdit.Reject, edit)
+        }
+    }
+
+    @Test
+    fun `与已保存值相同不再重复写入`() {
+        val edit = resolveNumericEdit("1.0", savedValue = 1.0, lastWrittenValue = null, minimum = 0.25, maximum = 4.0, integerOnly = false)
+        assertEquals(NumericEdit.Unchanged, edit)
+    }
+
+    @Test
+    fun `与本次会话上次写入值相同不再重复写入`() {
+        val edit = resolveNumericEdit("2.5", savedValue = 1.0, lastWrittenValue = 2.5, minimum = 0.25, maximum = 4.0, integerOnly = false)
+        assertEquals(NumericEdit.Unchanged, edit)
+    }
+
+    @Test
+    fun `连续修改时最后一次新值仍会被提交`() {
+        val edits = listOf("1.5", "2", "3")
+            .map { resolveNumericEdit(it, savedValue = 1.0, lastWrittenValue = null, minimum = 0.25, maximum = 4.0, integerOnly = false) }
+        assertEquals(NumericEdit.Commit(3.0), edits.last())
+    }
+
+    @Test
+    fun `整数项拒绝小数并按范围提交`() {
+        assertEquals(
+            NumericEdit.Reject,
+            resolveNumericEdit("5.5", savedValue = null, lastWrittenValue = null, minimum = 5.0, maximum = 60.0, integerOnly = true),
+        )
+        assertEquals(
+            NumericEdit.Commit(30.0),
+            resolveNumericEdit("30", savedValue = 10.0, lastWrittenValue = null, minimum = 5.0, maximum = 60.0, integerOnly = true),
+        )
+    }
 }

@@ -4,8 +4,10 @@ import android.content.ContentValues
 import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
@@ -15,9 +17,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performTextReplacement
 import androidx.lifecycle.SavedStateHandle
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,13 +46,18 @@ import com.privateplayer.domain.repository.StorageRepository
 import com.privateplayer.feature.detail.DetailRouteArgs
 import com.privateplayer.feature.detail.MediaDetailScreen
 import com.privateplayer.feature.detail.MediaDetailViewModel
-import com.privateplayer.feature.settings.SettingsScreen
+import com.privateplayer.feature.settings.AppVersionNameProvider
+import com.privateplayer.feature.settings.SettingsHubScreen
+import com.privateplayer.feature.settings.SettingsSection
+import com.privateplayer.feature.settings.SettingsSectionScreen
 import com.privateplayer.feature.settings.SettingsViewModel
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -217,29 +227,132 @@ class DetailSettingsInstrumentedTest {
                 override val backendDetail = "测试状态"
                 override fun create(): PlaybackEngine = error("设置页不应创建播放引擎")
             },
-            context,
+            AppVersionNameProvider { "1.0.1" },
+            CoroutineScope(Dispatchers.IO + SupervisorJob()),
             Dispatchers.IO,
         )
-        compose.setContent { MaterialTheme { SettingsScreen(viewModel = viewModel) } }
+        val selectedSection = mutableStateOf<SettingsSection?>(null)
+        compose.setContent {
+            MaterialTheme {
+                val section = selectedSection.value
+                if (section == null) {
+                    SettingsHubScreen(
+                        onOpenSection = { selectedSection.value = it },
+                        viewModel = viewModel,
+                    )
+                } else {
+                    SettingsSectionScreen(
+                        section = section,
+                        onBack = { selectedSection.value = null },
+                        viewModel = viewModel,
+                    )
+                }
+            }
+        }
         compose.waitUntil(10_000) { viewModel.uiState.value.usage.mediaCount == 3 }
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("显示"))
-        compose.onNodeWithText("主题").assertExists()
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
-        compose.onAllNodesWithText("网格密度", substring = true).assertCountEquals(0)
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("存储管理"))
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("显示"))
+        compose.onNodeWithText("显示").performClick()
+        compose.onNode(hasText("主题模式") and hasClickAction()).assertExists()
+        compose.onNodeWithText("跟随系统").assertExists()
+        compose.onAllNodesWithText("网格密度", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("返回").performClick()
+
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("存储"))
+        compose.onNodeWithText("存储").performClick()
         compose.onNodeWithText("文件").assertExists()
         compose.onNodeWithText("3 个视频 · 1.5 GiB").assertExists()
         compose.onNodeWithText("2.0 MiB").assertExists()
         compose.onNodeWithText("2.0 GiB").assertExists()
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
+        compose.onNodeWithContentDescription("返回").performClick()
 
         compose.onNode(hasScrollAction()).performScrollToNode(hasText("关于"))
+        compose.onNodeWithText("关于").performClick()
         compose.onNodeWithText("播放引擎").assertExists()
+        compose.onNodeWithText("测试引擎").assertExists()
         compose.onAllNodesWithText("MPV 集成验证", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("播放列表", substring = true).assertCountEquals(0)
         compose.onAllNodesWithContentDescription("MPV 集成验证").assertCountEquals(0)
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun settingsNumericRowsSaveImmediatelyWithoutSaveButton() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+        val repository = PreferencesSettingsRepository(context)
+        val viewModel = SettingsViewModel(
+            repository,
+            object : StorageRepository {
+                override fun observeUsage(): Flow<StorageUsage> = flowOf(StorageUsage(0, 0, 0, 0, 0))
+
+                override suspend fun clearThumbnailCache(): OperationOutcome = error("本测试不清理缓存")
+                override suspend fun clearTemporaryFiles(): OperationOutcome = error("本测试不清理缓存")
+            },
+            object : PlaybackEngineProvider {
+                override val backendLabel = "测试引擎"
+                override val backendDetail = "测试状态"
+                override fun create(): PlaybackEngine = error("设置页不应创建播放引擎")
+            },
+            AppVersionNameProvider { "1.0.1" },
+            CoroutineScope(Dispatchers.IO + SupervisorJob()),
+            Dispatchers.IO,
+        )
+        val selectedSection = mutableStateOf<SettingsSection?>(null)
+        compose.setContent {
+            MaterialTheme {
+                val section = selectedSection.value
+                if (section == null) {
+                    SettingsHubScreen(
+                        onOpenSection = { selectedSection.value = it },
+                        viewModel = viewModel,
+                    )
+                } else {
+                    SettingsSectionScreen(
+                        section = section,
+                        onBack = { selectedSection.value = null },
+                        viewModel = viewModel,
+                    )
+                }
+            }
+        }
+        compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed > 0f }
+
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
+        compose.onNodeWithText("播放").performClick()
+
+        // 页面不再有逐行“保存”按钮
+        compose.onAllNodesWithText("保存", substring = true).assertCountEquals(0)
+
+        // 先归一到一个确定的基线值，后续断言不依赖设备上残留的旧设置
+        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("1")
+        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 1.0f }
+
+        // 非法值不写入并给出提示
+        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("9")
+        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.onNodeWithText("请输入0.25～4 倍").assertExists()
+        assertEquals(1.0f, viewModel.uiState.value.settings.playback.defaultSpeed, 0.0f)
+
+        // 合法值键盘完成即写入，无需点击保存
+        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("2.5")
+        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 2.5f }
+
+        // 快速连续修改，最后一次生效
+        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("3")
+        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 3.0f }
+
+        // 返回一级再进入，值保留
+        compose.onNodeWithContentDescription("返回").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
+        compose.onNodeWithText("播放").performClick()
+        compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 3.0f }
+        compose.onNodeWithTag("setting-默认倍速").assertTextContains("3.0")
     }
 }
 
@@ -258,6 +371,9 @@ private class DetailMediaRepository(private val media: Media) : MediaRepository 
     override suspend fun moveToFolder(ids: List<Long>, folderId: Long?): OperationOutcome = error("详情页不应调用")
     override suspend fun delete(ids: List<Long>): OperationOutcome = error("详情页不应调用")
     override suspend fun recordPlayback(mediaId: Long, positionMs: Long, watchedMs: Long, playIncrement: Int) =
+        error("详情页不应调用")
+
+    override suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?) =
         error("详情页不应调用")
 }
 
