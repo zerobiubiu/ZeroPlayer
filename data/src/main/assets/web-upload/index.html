@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>文件传输 - ZeroPlayer</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">跳转到主要内容</a>
+  <header class="site-header">
+    <div class="header-inner">
+      <div class="brand">
+        <svg class="brand-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-width="1.7"></circle>
+          <path d="M10 8.3v7.4l5.8-3.7L10 8.3Z" fill="currentColor"></path>
+        </svg>
+        <span>ZeroPlayer</span>
+      </div>
+      <span id="connection-status" class="connection-status" role="status" aria-live="polite">正在连接</span>
+    </div>
+  </header>
+
+  <main id="main" class="page">
+    <div class="page-heading">
+      <div>
+        <h1>文件传输</h1>
+        <p>在浏览器和 ZeroPlayer 之间传输、整理文件。</p>
+      </div>
+      <a class="jump-link" href="#transfers">查看传输队列</a>
+    </div>
+
+    <aside class="notice" aria-label="网络提示">
+      <p>所在网络内的设备均可浏览和管理文件。请仅在可信局域网中开启服务；传输使用 HTTP 明文。</p>
+    </aside>
+    <p id="connection-error" class="message message-error" role="alert" hidden>无法连接文件服务。请确认手机上的服务仍在运行，并检查网络，然后重试。</p>
+    <noscript><p class="message message-error">此页面需要启用 JavaScript 才能传输和管理文件。</p></noscript>
+
+    <section class="content-section" aria-labelledby="files-title">
+      <div class="section-heading section-heading-actions">
+        <div>
+          <h2 id="files-title">文件</h2>
+          <p>这里显示的文件夹与 App 首页使用同一位置。</p>
+        </div>
+        <div class="section-actions">
+          <button id="create-folder" class="button button-secondary" type="button" disabled>新建文件夹</button>
+          <button id="refresh-files" class="button button-quiet" type="button">刷新文件</button>
+        </div>
+      </div>
+      <nav aria-label="文件夹路径"><ol id="breadcrumbs" class="breadcrumbs"></ol></nav>
+      <p id="files-state" class="list-state" role="status">正在读取文件…</p>
+      <ul id="files-list" class="entry-list" aria-label="当前文件夹内容"></ul>
+    </section>
+
+    <section id="transfers" class="content-section upload-section" aria-labelledby="upload-title">
+      <div class="section-heading">
+        <h2 id="upload-title">上传文件</h2>
+        <p>所有格式的文件都会保存到选择时所在的文件夹。</p>
+      </div>
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-copy">
+          <strong>选择或拖放文件到这里</strong>
+          <span>可一次添加多个文件，按顺序传输。</span>
+          <span>当前文件夹：<bdi id="upload-path">文件</bdi></span>
+        </div>
+        <button id="choose-files" class="button button-secondary" type="button" disabled>选择文件</button>
+        <input id="file-input" type="file" multiple hidden>
+      </div>
+      <div class="actions">
+        <button id="start-uploads" class="button button-primary" type="button" disabled>开始上传</button>
+        <button id="cancel-upload" class="button button-secondary" type="button" disabled>取消当前传输</button>
+        <button id="clear-pending" class="button button-quiet" type="button" disabled>清空待上传</button>
+      </div>
+      <p id="queue-hint" class="hint">保持此页面和手机服务开启。刷新后，未发送的文件需要重新选择；已接收的任务会尝试恢复查询。</p>
+
+      <div class="queue-heading">
+        <div>
+          <h3>传输队列</h3>
+          <p id="queue-summary">尚未选择文件</p>
+        </div>
+        <button id="clear-finished" class="button button-quiet" type="button" disabled>清除已结束</button>
+      </div>
+      <p id="queue-empty" class="empty-state">选择文件后，可在这里查看传输和处理进度。</p>
+      <ol id="queue-list" class="queue-list"></ol>
+    </section>
+    <p id="announcement" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true"></p>
+  </main>
+
+  <dialog id="action-dialog" aria-labelledby="dialog-title" aria-describedby="dialog-description">
+    <form id="action-form">
+      <h2 id="dialog-title"></h2>
+      <p id="dialog-description" class="dialog-description"></p>
+      <div id="dialog-fields" class="dialog-fields"></div>
+      <p id="dialog-error" class="dialog-error" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="dialog-cancel" class="button button-secondary" type="button">取消</button>
+        <button id="dialog-submit" class="button button-primary" type="submit">确定</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

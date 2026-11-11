@@ -1,0 +1,127 @@
+name: Release
+
+# 推送 vX.Y.Z 标签即在仓库 Release 中发布 ARM64 安装包；
+# 也可手动指定版本号补发（会补建同名标签）。
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版本号（不含 v 前缀），例如 1.0.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: 打包并发布
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - uses: android-actions/setup-android@v3
+
+      - name: 安装 Android SDK 组件
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platform-tools" "build-tools;36.0.0" > /dev/null
+          installed=0
+          for pkg in "platforms;android-37.0" "platforms;android-37"; do
+            if sdkmanager --install "$pkg" > /dev/null 2>&1; then
+              echo "已安装 $pkg"
+              installed=1
+              break
+            fi
+          done
+          if [ "$installed" -ne 1 ]; then
+            echo "::error::无法安装 compileSdk 37 对应的 SDK Platform"
+            exit 1
+          fi
+
+      - name: 解析版本号
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            name="${{ inputs.version }}"
+          else
+            name="${GITHUB_REF_NAME#v}"
+          fi
+          if ! printf '%s' "$name" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::版本号必须是 X.Y.Z，实际为：$name"
+            exit 1
+          fi
+          major=${name%%.*}
+          rest=${name#*.}
+          minor=${rest%%.*}
+          patch=${rest#*.}
+          code=$((major * 10000 + minor * 100 + patch))
+          {
+            echo "name=$name"
+            echo "code=$code"
+          } >> "$GITHUB_OUTPUT"
+          echo "版本 $name，versionCode $code"
+
+      - name: 导入发行签名材料
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ZEROPLAYER_KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.ZEROPLAYER_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ZEROPLAYER_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ZEROPLAYER_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::没有配置发行签名密钥，本次使用调试签名，安装后无法用后续正式密钥覆盖升级。"
+            exit 0
+          fi
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "ZEROPLAYER_STORE_FILE=$RUNNER_TEMP/release.jks"
+            echo "ZEROPLAYER_STORE_PASSWORD=$STORE_PASSWORD"
+            echo "ZEROPLAYER_KEY_ALIAS=$KEY_ALIAS"
+            echo "ZEROPLAYER_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: 构建发行包
+        run: |
+          ./gradlew :app:assembleRelease \
+            -PversionName="${{ steps.version.outputs.name }}" \
+            -PversionCode="${{ steps.version.outputs.code }}" \
+            --stacktrace
+
+      - name: 校验并整理产物
+        run: |
+          set -euo pipefail
+          apk="app/build/outputs/apk/release/app-release.apk"
+          tools="$ANDROID_HOME/build-tools/36.0.0"
+          "$tools/apksigner" verify --print-certs "$apk"
+          "$tools/aapt2" dump badging "$apk" | grep -E '^(package|native-code)'
+          out="ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk"
+          cp "$apk" "$out"
+          sha256sum "$out" > "$out.sha256"
+          cat "$out.sha256"
+
+      - name: 发布到 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v${{ steps.version.outputs.name }}"
+          name: "ZeroPlayer ${{ steps.version.outputs.name }}"
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk
+            ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk.sha256

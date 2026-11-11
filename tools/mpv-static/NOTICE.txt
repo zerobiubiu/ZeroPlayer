@@ -1,0 +1,35 @@
+Android 静态 libmpv 构建与分发说明
+
+JNI 代码来自 jarnedemeulemeester/libmpv-android v1.0.0，提交
+fcf6745703dc1265bca88f12fee8fc355ddf251e，许可文本见
+LICENSE.libmpv-android。该 MIT 许可仅适用于对应 JNI 代码，不适用于整个二进制。
+
+构建使用 mpv 的 -Dgpl=false，FFmpeg 不启用 --enable-gpl、--enable-version3
+或 --enable-nonfree。mpv、FFmpeg、libplacebo 和 FriBidi 含 LGPL 代码；FreeType
+选择 FreeType License；libass、HarfBuzz、Fontconfig、Expat、libunibreak 及
+构建时使用的 glad/Jinja/MarkupSafe/fast_float 各有自己的许可及版权条件。
+上述描述不能代替逐项阅读实际源码中的许可、版权和各文件头。mpv 自身的
+Copyright 明确说明 -Dgpl=false 只是排除其已列出的 GPL 源文件，并不单独构成
+LGPL 授权保证。请阅读生成目录 sources/ 中的原始许可文本以及各源码文件头。
+
+编译脚本在输出目录旁建立 .licenses 目录并保留对应构建工作区。此项目没有将
+libmpv/FFmpeg 作为独立动态库分发，故分发单一静态链接的 libplayer.so 时必须
+评估并满足 LGPL 对相应源码、版权和许可声明、修改披露、接收者替换库和重新
+链接等要求。请保留并按适用条款提供全部对应源码包、构建脚本、修改、目标文件
+以及重新链接所需静态库和步骤；不能只提供许可证或只提供最终 so。不同平台的
+用户安装修改版程序还可能触及其他义务。最终履行方案应由实际分发者审核。
+
+工作区 run-* 含完整经校验源码、具体配置、交叉工具链配置、JNI 对象、各依赖
+静态归档和最终链接产物；downloads/ 含源码压缩包；sources.tsv 记录下载地址与
+SHA-256。请同时归档用于构建的 NDK 版本、JNI 源文件和 tools/mpv-static/build.sh。
+本软件部分基于 FreeType 团队的工作（This software is based in part on the work
+of the FreeType Team）。二进制分发时亦须在产品分发文档中保留该致谢。
+FreeType 要求适当署名；libunibreak 包含 Unicode 数据，须查阅该包的许可和数据
+文件中的声明；glad 生成代码还涉及 Khronos 规范许可。Android NDK 的 libc++ 及
+编译器运行时静态链接时，也须保留和遵守其随 NDK 发布的许可证。
+
+此构建仅支持 ARM64，关闭 FFmpeg 网络协议并保留 ARM64 汇编优化。
+支持 file、pipe、Android content 本地协议；FFmpeg 的限制
+不影响应用自身独立实现的网页上传服务。此构建不宣称支持
+网络媒体、DRM、全部媒体编解码格式或所有设备上的硬件解码。字体从 Android
+/system/fonts 及 /product/fonts 发现，字体覆盖、字幕布局及缓存权限因设备而异。
