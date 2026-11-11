@@ -8,59 +8,78 @@ import org.junit.Test
 
 class SeekGestureCalculationTest {
     @Test
-    fun `短快滑使用配置步长且方向对称`() {
-        val forward = calculateSeekGesture(90_000, 300_000, 48f, 48f, 200, 15)!!
-        val backward = calculateSeekGesture(90_000, 300_000, -48f, 48f, 200, 15)!!
-        assertTrue(forward.isFastSwipe)
-        assertEquals(105_000L, forward.targetMs)
-        assertEquals(15_000L, forward.deltaMs)
-        assertEquals(75_000L, backward.targetMs)
-        assertEquals(-15_000L, backward.deltaMs)
-        // 快滑遵守配置，即使步长大于慢滑的 30 秒限制。
-        assertEquals(150_000L, calculateSeekGesture(90_000, 300_000, 48f, 48f, 200, 60)!!.targetMs)
+    fun `慢滑保持逐秒精准并按位置生效`() {
+        val forward = calculateSeekGesture(90_000, 300_000, 24f, 0.05f)!!
+        val backward = calculateSeekGesture(90_000, 300_000, -24f, 0.05f)!!
+        assertFalse(forward.accelerated)
+        assertEquals(1, forward.tickSeconds)
+        assertEquals(93_000L, forward.targetMs)
+        assertEquals(3_000L, forward.deltaMs)
+        assertEquals(87_000L, backward.targetMs)
+        assertEquals(-3_000L, backward.deltaMs)
+        // 小于半个刻度不动，避免抖动。
+        assertEquals(0L, calculateSeekGesture(90_000, 300_000, 3f, 0.05f)!!.deltaMs)
     }
 
     @Test
-    fun `快滑时间和距离边界精确生效`() {
-        assertTrue(calculateSeekGesture(90_000, 300_000, 72f, 72f, 250, 10)!!.isFastSwipe)
-        assertFalse(calculateSeekGesture(90_000, 300_000, 72f, 72f, 251, 10)!!.isFastSwipe)
-        assertFalse(calculateSeekGesture(90_000, 300_000, 72.1f, 72.1f, 250, 10)!!.isFastSwipe)
-        // 来回滑动曾超过距离阈值，不应在退回后误判为快滑。
-        assertFalse(calculateSeekGesture(90_000, 300_000, 40f, 73f, 200, 10)!!.isFastSwipe)
-        assertEquals(0L, calculateSeekGesture(90_000, 300_000, 0f, 30f, 200, 10)!!.deltaMs)
+    fun `滑动越快刻度与跳幅越大`() {
+        val slow = calculateSeekGesture(0, 3_600_000, 100f, 0.1f)!!
+        val medium = calculateSeekGesture(0, 3_600_000, 100f, 0.3f)!!
+        val fast = calculateSeekGesture(0, 3_600_000, 100f, 0.6f)!!
+        val faster = calculateSeekGesture(0, 3_600_000, 100f, 0.9f)!!
+        val fastest = calculateSeekGesture(0, 3_600_000, 100f, 1.2f)!!
+        assertEquals(listOf(1, 2, 5, 10, 20), listOf(
+            slow.tickSeconds, medium.tickSeconds, fast.tickSeconds,
+            faster.tickSeconds, fastest.tickSeconds,
+        ))
+        assertEquals(13_000L, slow.deltaMs)
+        assertEquals(26_000L, medium.deltaMs)
+        assertEquals(50_000L, fast.deltaMs)
+        assertEquals(100_000L, faster.deltaMs)
+        assertEquals(200_000L, fastest.deltaMs)
+        assertTrue(fastest.accelerated)
+        // 超过最高档仍按 16 倍计算。
+        assertEquals(200_000L, calculateSeekGesture(0, 3_600_000, 100f, 50f)!!.deltaMs)
     }
 
     @Test
-    fun `慢滑按位移逐秒调整且不依赖视频时长`() {
-        val shortVideo = calculateSeekGesture(60_000, 120_000, 24f, 24f, 500, 10)!!
-        val longVideo = calculateSeekGesture(60_000, 100L * 60 * 60 * 1_000, 24f, 24f, 500, 10)!!
-        assertFalse(shortVideo.isFastSwipe)
-        assertEquals(3_000L, shortVideo.deltaMs)
-        assertEquals(shortVideo.deltaMs, longVideo.deltaMs)
-        assertEquals(-3_000L, calculateSeekGesture(60_000, 120_000, -24f, 24f, 500, 10)!!.deltaMs)
-        assertEquals(1_000L, calculateSeekGesture(60_000, 120_000, 4f, 4f, 500, 10)!!.deltaMs)
-        assertEquals(-1_000L, calculateSeekGesture(60_000, 120_000, -4f, 4f, 500, 10)!!.deltaMs)
-        assertEquals(30_000L, calculateSeekGesture(60_000, 120_000, 10_000f, 10_000f, 500, 10)!!.deltaMs)
-        assertEquals(-30_000L, calculateSeekGesture(60_000, 120_000, -10_000f, 10_000f, 500, 10)!!.deltaMs)
+    fun `滑动距离不再有固定上限`() {
+        // 旧实现把慢滑限制在 30 秒；现在按位移线性增长。
+        assertEquals(125_000L, calculateSeekGesture(0, 3_600_000, 1_000f, 0.05f)!!.deltaMs)
+        // 快滑长距离可以跨越大半部影片，只受视频边界限制。
+        val jump = calculateSeekGesture(0, 7_200_000, 300f, 1.5f)!!
+        assertEquals(600_000L, jump.deltaMs)
     }
 
     @Test
     fun `目标和实际增量限制在视频边界内`() {
-        val start = calculateSeekGesture(1_500, 120_000, -20f, 20f, 100, 10)!!
+        val start = calculateSeekGesture(1_500, 120_000, -20f, 0.05f)!!
         assertEquals(0L, start.targetMs)
         assertEquals(-1_500L, start.deltaMs)
-        val end = calculateSeekGesture(119_500, 120_000, 20f, 20f, 100, 10)!!
+        val end = calculateSeekGesture(119_500, 120_000, 20f, 0.05f)!!
         assertEquals(120_000L, end.targetMs)
         assertEquals(500L, end.deltaMs)
-        assertEquals(Long.MAX_VALUE, calculateSeekGesture(Long.MAX_VALUE - 50, Long.MAX_VALUE, 20f, 20f, 100, 60)!!.targetMs)
-        assertEquals(0L, calculateSeekGesture(-10, 120_000, -20f, 20f, 100, 10)!!.targetMs)
+        assertEquals(
+            Long.MAX_VALUE,
+            calculateSeekGesture(Long.MAX_VALUE - 50, Long.MAX_VALUE, 20f, 0.05f)!!.targetMs,
+        )
+        assertEquals(0L, calculateSeekGesture(-10, 120_000, -20f, 0.05f)!!.targetMs)
     }
 
     @Test
-    fun `无时长和无效位移不生成预览`() {
-        assertNull(calculateSeekGesture(0, 0, 20f, 20f, 100, 10))
-        assertNull(calculateSeekGesture(0, -1, 20f, 20f, 100, 10))
-        assertNull(calculateSeekGesture(0, 100_000, Float.NaN, 20f, 100, 10))
-        assertNull(calculateSeekGesture(0, 100_000, 20f, Float.POSITIVE_INFINITY, 100, 10))
+    fun `零位移只返回当前刻度`() {
+        val preview = calculateSeekGesture(90_000, 120_000, 0f, 1.0f)!!
+        assertEquals(90_000L, preview.targetMs)
+        assertEquals(0L, preview.deltaMs)
+        assertEquals(20, preview.tickSeconds)
+        assertTrue(preview.accelerated)
+    }
+
+    @Test
+    fun `无时长和无效输入不生成预览`() {
+        assertNull(calculateSeekGesture(0, 0, 20f, 0.1f))
+        assertNull(calculateSeekGesture(0, -1, 20f, 0.1f))
+        assertNull(calculateSeekGesture(0, 100_000, Float.NaN, 0.1f))
+        assertNull(calculateSeekGesture(0, 100_000, 20f, Float.POSITIVE_INFINITY))
     }
 }

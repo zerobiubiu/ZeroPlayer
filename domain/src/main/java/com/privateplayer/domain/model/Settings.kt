@@ -62,12 +62,13 @@ data class GesturePreferences(
     val volumeGestureEnabled: Boolean = true,
     val seekGestureEnabled: Boolean = true,
     val longPressSpeedEnabled: Boolean = true,
+    /** 滑动进度时是否震动；部分设备没有线性马达或手感较差，允许关闭。 */
+    val hapticsEnabled: Boolean = true,
 )
 
 /** 显示偏好。 */
 data class DisplayPreferences(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
-    val dynamicColor: Boolean = false,
     val gridDensity: GridDensity = GridDensity.DEFAULT,
 )
 

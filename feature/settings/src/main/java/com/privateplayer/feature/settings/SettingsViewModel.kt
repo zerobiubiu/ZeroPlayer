@@ -76,8 +76,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setTheme(mode: ThemeMode) = launchSetting { settingsRepository.setThemeMode(mode) }
 
-    fun setDynamicColor(enabled: Boolean) = launchSetting { settingsRepository.setDynamicColor(enabled) }
-
     fun setAutoPlayNext(enabled: Boolean) = launchSetting { settingsRepository.setAutoPlayNext(enabled) }
 
     fun setRememberProgress(enabled: Boolean) = launchSetting { settingsRepository.setRememberProgress(enabled) }
@@ -111,6 +109,9 @@ class SettingsViewModel @Inject constructor(
 
     fun setLongPressSpeedGesture(enabled: Boolean) =
         launchSetting { settingsRepository.setLongPressSpeedGesture(enabled) }
+
+    fun setHapticsEnabled(enabled: Boolean) =
+        launchSetting { settingsRepository.setHapticsEnabled(enabled) }
 
     fun setGenerateThumbnails(enabled: Boolean) =
         launchSetting { settingsRepository.setGenerateThumbnails(enabled) }

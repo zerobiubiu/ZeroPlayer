@@ -35,6 +35,8 @@ data class Media(
     val playbackPositionMs: Long,
     val playedDurationMs: Long,
     val playCount: Int,
+    /** 上次选中的字幕轨 ID；null 表示未选择过，"off" 表示用户主动关闭。 */
+    val selectedSubtitleTrackId: String? = null,
 ) {
     /** 观看进度 0f..1f。 */
     val progress: Float

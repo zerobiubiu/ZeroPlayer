@@ -205,12 +205,34 @@ class PlayerMediaSessionService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // 用户关闭播放页：主动结束播放并释放引擎，不等待系统回收服务。
+        if (intent?.action == ACTION_CLOSE_PLAYBACK) {
+            closePlayback()
+            return START_NOT_STICKY
+        }
         val result = super.onStartCommand(intent, flags, startId)
         if (intent?.action == ACTION_DISMISS_NOTIFICATION && intent.getStringExtra(EXTRA_DISMISS_KEY) == dismissalKey) {
             val snapshot = playbackEngine?.snapshot?.value
             if (snapshot == null || !requiresPlaybackWakeLock(snapshot)) stopSelf(startId)
         }
         return result
+    }
+
+    /** 释放顺序与服务销毁一致：先会话与适配器，再协调器，最后撤销前台通知。 */
+    private fun closePlayback() {
+        notificationRevision++
+        mediaSession?.release()
+        mediaSession = null
+        player?.release()
+        player = null
+        playbackEngine = null
+        if (acquired) {
+            acquired = false
+            coordinator.release(this)
+        }
+        stopForeground(STOP_FOREGROUND_REMOVE)
+        notificationManager.cancel(DefaultMediaNotificationProvider.DEFAULT_NOTIFICATION_ID)
+        stopSelf()
     }
 
     /** API 35+ 只有顶层应用或前台服务能取得焦点；先占前台，再请求焦点。 */
@@ -356,6 +378,7 @@ internal fun requiresPlaybackWakeLock(snapshot: PlaybackSnapshot): Boolean =
             (snapshot.status == PlaybackStatus.LOADING || snapshot.status == PlaybackStatus.PAUSED))
 
 private const val ACTION_DISMISS_NOTIFICATION = "com.privateplayer.media.playback.DISMISS_NOTIFICATION"
+private const val ACTION_CLOSE_PLAYBACK = "com.privateplayer.media.playback.CLOSE_PLAYBACK"
 private const val EXTRA_DISMISS_KEY = "dismiss_key"
 
 @OptIn(UnstableApi::class)
@@ -381,11 +404,19 @@ object PlaybackServiceModule {
     @Provides
     @Singleton
     fun providePlaybackServiceStarter(@ApplicationContext context: Context): PlaybackServiceStarter =
-        PlaybackServiceStarter {
-            if (context.startService(Intent(context, PlayerMediaSessionService::class.java)) == null) {
-                "系统未能创建播放服务"
-            } else {
-                null
+        object : PlaybackServiceStarter {
+            override fun start(): String? =
+                if (context.startService(Intent(context, PlayerMediaSessionService::class.java)) == null) {
+                    "系统未能创建播放服务"
+                } else {
+                    null
+                }
+
+            override fun stop() {
+                context.startService(
+                    Intent(context, PlayerMediaSessionService::class.java)
+                        .setAction(ACTION_CLOSE_PLAYBACK),
+                )
             }
         }
 }

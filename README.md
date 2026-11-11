@@ -36,9 +36,9 @@ ZeroPlayer 是一款单机 Android 播放器：不扫描系统媒体库、不申
 
 ## 截图
 
-| 文件树 | 播放器 | 系统媒体控制 |
-|---|---|---|
-| ![首页](docs/assets/app-home.png) | ![播放器](docs/assets/app-player.png) | ![控制中心](docs/assets/media3-system-controls.png) |
+| 文件树 | 播放器 | 设置 | 系统媒体控制 |
+|---|---|---|---|
+| ![首页](docs/assets/app-home.png) | ![播放器](docs/assets/app-player.png) | ![设置](docs/assets/app-settings.png) | ![控制中心](docs/assets/media3-system-controls.png) |
 
 ## 安装
 

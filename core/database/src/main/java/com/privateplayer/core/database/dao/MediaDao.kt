@@ -111,6 +111,10 @@ interface MediaDao {
     @Query("UPDATE media SET isFavorite = :favorite, updatedAt = :now WHERE id = :id")
     suspend fun setFavorite(id: Long, favorite: Boolean, now: Long)
 
+    /** 记住单个视频的字幕选择；`off` 表示关闭字幕，null 表示没有偏好。 */
+    @Query("UPDATE media SET selectedSubtitleTrackId = :trackId, updatedAt = :now WHERE id = :id")
+    suspend fun setSelectedSubtitleTrack(id: Long, trackId: String?, now: Long)
+
     @Query(
         """
         UPDATE media

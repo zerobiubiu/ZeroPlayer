@@ -36,9 +36,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** 由应用层实现，从可见页面启动媒体服务。失败时返回可向用户展示的原因。 */
-fun interface PlaybackServiceStarter {
+/** 由应用层实现：从可见页面启动媒体服务，并在关闭播放页时结束它。 */
+interface PlaybackServiceStarter {
+    /** 启动媒体服务；失败时返回可向用户展示的原因。 */
     fun start(): String?
+
+    /** 请求已运行的媒体服务结束播放并释放引擎；服务未运行时什么都不做。 */
+    fun stop()
 }
 
 internal data class PlaybackProgress(
@@ -303,6 +307,16 @@ class PlaybackCoordinator @Inject constructor(
             }
         }
         return true
+    }
+
+    /** 用户关闭播放页时结束本次播放；按主页键退到后台不属于关闭，服务继续播放。 */
+    fun closeFromPlayerUi() {
+        if (active == null) return
+        try {
+            serviceStarter.stop()
+        } catch (exception: Exception) {
+            reportError("无法停止播放：${exception.message ?: "播放服务不可用"}")
+        }
     }
 
     /** 供系统服务 dump 定位请求、装载与真实引擎不一致；只读，不创建或借用新实例。 */

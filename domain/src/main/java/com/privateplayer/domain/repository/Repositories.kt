@@ -47,6 +47,9 @@ interface MediaRepository {
         watchedMs: Long,
         playIncrement: Int,
     )
+
+    /** 记住该视频的字幕选择；`trackId` 为 null 表示关闭字幕，"off" 由播放层写入。 */
+    suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?)
 }
 
 interface FolderRepository {
@@ -92,8 +95,6 @@ interface SettingsRepository {
 
     suspend fun setThemeMode(mode: com.privateplayer.domain.model.ThemeMode)
 
-    suspend fun setDynamicColor(enabled: Boolean)
-
     suspend fun setGridDensity(density: com.privateplayer.domain.model.GridDensity)
 
     suspend fun setAutoPlayNext(enabled: Boolean)
@@ -125,6 +126,8 @@ interface SettingsRepository {
     suspend fun setSeekGesture(enabled: Boolean)
 
     suspend fun setLongPressSpeedGesture(enabled: Boolean)
+
+    suspend fun setHapticsEnabled(enabled: Boolean)
 
     suspend fun setGenerateThumbnails(enabled: Boolean)
 

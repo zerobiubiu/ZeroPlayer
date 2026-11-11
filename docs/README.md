@@ -39,6 +39,7 @@
 | [0005](changes/0005-file-tree-transfer.md) | 私有文件树、任意文件传输、系统分享和播放器交互 |
 | [0006](changes/0006-media3-session.md) | Media3 系统会话、后台播放与 libmpv 单实例生命周期，含系统控制中心和锁屏实景证据 |
 | [0007](changes/0007-open-source-release.md) | 开源发布：新图标、GPL-3.0、标签驱动的 CI/CD 发行流水线与仓库配置 |
+| [0008](changes/0008-player-ui-and-settings.md) | 关闭播放页即结束播放、字幕记忆、播放页重排与异形屏、速度自适应滑动、设置二级页面 |
 
 ### troubleshooting/（长期可复现的问题）
 
@@ -48,6 +49,7 @@
 | [0002](troubleshooting/0002-compose-surface-long-click.md) | Material3 `Surface(onClick)` 不支持长按，需 combinedClickable |
 | [0003](troubleshooting/0003-workmanager-foreground-dataSync.md) | WorkManager 前台导入在 Android 14+ 需要 dataSync 服务类型 |
 | [0004](troubleshooting/0004-module-level-lint-permissions.md) | 模块级 Lint 只看本模块清单，权限与服务类型需在库模块声明 |
+| [0005](troubleshooting/0005-gesture-layer-blocks-buttons.md) | 全屏手势层盖住播放器按钮时，点击事件会被手势识别消费 |
 
 ## 二、文档规范
 

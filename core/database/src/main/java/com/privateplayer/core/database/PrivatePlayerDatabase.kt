@@ -39,7 +39,7 @@ abstract class PrivatePlayerDatabase : RoomDatabase() {
     abstract fun importTaskDao(): ImportTaskDao
 
     companion object {
-        const val VERSION = 1
+        const val VERSION = 2
 
         /** 位于 `databases/` 目录：`databases/media.db`。 */
         const val NAME = "media.db"

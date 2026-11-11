@@ -11,30 +11,31 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.filled.Forward10
+import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.outlined.AspectRatio
+import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material.icons.outlined.ClosedCaption
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.outlined.FastForward
-import androidx.compose.material.icons.outlined.FastRewind
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.LockOpen
 import androidx.compose.material.icons.outlined.MoreVert
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.Speed
-import androidx.compose.material.icons.outlined.VolumeUp
-import androidx.compose.material.icons.outlined.Brightness6
+import androidx.compose.material.icons.outlined.QueueMusic
+import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -60,15 +62,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.privateplayer.core.common.format.formatDuration
-import com.privateplayer.core.playback.PlaybackStatus
-import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.MediaTrack
+import com.privateplayer.core.playback.PlaybackSnapshot
+import com.privateplayer.core.playback.PlaybackStatus
 import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.abs
 
 /** 播放器覆盖层的可读文本色板：固定白色系，不跟随主题。 */
 private val PlayerText = Color.White
 private val PlayerTextSecondary = Color.White.copy(alpha = 0.72f)
+private val PlayerAccent = Color(0xFF4A84FF)
 
 @Composable
 fun PlayerVideoLayer(
@@ -107,12 +110,16 @@ fun PlayerVideoLayer(
     }
 }
 
+/**
+ * 顶部控制条：返回、片名与三个常驻入口。
+ * 安全区只作用于按钮本身，视频画面仍可铺满异形屏的缺口区域。
+ */
 @Composable
 fun PlayerTopBar(
     title: String,
-    locked: Boolean,
     onBack: () -> Unit,
-    onToggleLock: () -> Unit,
+    onOpenAspect: () -> Unit,
+    onOpenSubtitle: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -120,8 +127,11 @@ fun PlayerTopBar(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.65f), Color.Transparent)))
-            .padding(horizontal = 4.dp, vertical = 4.dp),
+            .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.7f), Color.Transparent)))
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+            )
+            .padding(horizontal = 4.dp, vertical = 2.dp),
     ) {
         IconButton(onClick = onBack) {
             Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回", tint = PlayerText)
@@ -136,12 +146,11 @@ fun PlayerTopBar(
                 .weight(1f)
                 .padding(horizontal = 4.dp),
         )
-        IconButton(onClick = onToggleLock) {
-            Icon(
-                imageVector = if (locked) Icons.Outlined.Lock else Icons.Outlined.LockOpen,
-                contentDescription = if (locked) "解锁" else "锁定",
-                tint = PlayerText,
-            )
+        IconButton(onClick = onOpenAspect) {
+            Icon(Icons.Outlined.ScreenRotation, contentDescription = "画面比例与旋转", tint = PlayerText)
+        }
+        IconButton(onClick = onOpenSubtitle) {
+            Icon(Icons.Outlined.ClosedCaption, contentDescription = "字幕", tint = PlayerText)
         }
         IconButton(onClick = onOpenMore) {
             Icon(Icons.Outlined.MoreVert, contentDescription = "更多", tint = PlayerText)
@@ -149,188 +158,156 @@ fun PlayerTopBar(
     }
 }
 
+/**
+ * 底部控制条：时间行、进度条与常用操作。
+ * 与顶部一样只让控件避开安全区，底部渐变可以延伸到手势条后面。
+ */
 @Composable
-fun PlayerCenterControls(
+fun PlayerBottomControls(
     snapshot: PlaybackSnapshot,
-    hasPrevious: Boolean,
-    hasNext: Boolean,
     seekStepSeconds: Int,
-    onPlayPause: () -> Unit,
+    onSeekPreview: (Float) -> Unit,
+    onSeekCommit: (Float) -> Unit,
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
-    onPrevious: () -> Unit,
-    onNext: () -> Unit,
+    onPlayPause: () -> Unit,
+    onOpenSpeed: () -> Unit,
+    onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp),
-        modifier = modifier,
-    ) {
-        PlayerCircleButton(
-            icon = Icons.Outlined.FastRewind,
-            contentDescription = "快退 $seekStepSeconds 秒",
-            onClick = onSeekBack,
-        )
-        PlayerCircleButton(
-            icon = Icons.Filled.SkipPrevious,
-            contentDescription = "上一个",
-            onClick = onPrevious,
-            small = true,
-            enabled = hasPrevious,
-        )
-        PlayerCircleButton(
-            icon = if (snapshot.status == PlaybackStatus.PLAYING) Icons.Outlined.Pause else Icons.Filled.PlayArrow,
-            contentDescription = if (snapshot.status == PlaybackStatus.PLAYING) "暂停" else "播放",
-            onClick = onPlayPause,
-            large = true,
-            loading = snapshot.status == PlaybackStatus.LOADING,
-        )
-        PlayerCircleButton(
-            icon = Icons.Filled.SkipNext,
-            contentDescription = "下一个",
-            onClick = onNext,
-            small = true,
-            enabled = hasNext,
-        )
-        PlayerCircleButton(
-            icon = Icons.Outlined.FastForward,
-            contentDescription = "快进 $seekStepSeconds 秒",
-            onClick = onSeekForward,
-        )
-    }
-}
+    var scrubValue by remember { mutableStateOf<Float?>(null) }
+    val duration = snapshot.durationMs.coerceAtLeast(1L)
+    val sliderValue = scrubValue ?: (snapshot.positionMs.toFloat() / duration).coerceIn(0f, 1f)
+    val shownPosition = (sliderValue * duration).toLong()
+    val remaining = (duration - shownPosition).coerceAtLeast(0L)
 
-@Composable
-private fun PlayerCircleButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    large: Boolean = false,
-    small: Boolean = false,
-    loading: Boolean = false,
-    enabled: Boolean = true,
-) {
-    Surface(
-        color = Color.Black.copy(alpha = 0.42f),
-        shape = androidx.compose.foundation.shape.CircleShape,
-        modifier = Modifier.size(
-            when {
-                large -> 64.dp
-                small -> 38.dp
-                else -> 48.dp
-            },
-        ),
-        onClick = onClick,
-        enabled = enabled,
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))))
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+            )
+            .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 8.dp),
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            if (loading) {
-                CircularProgressIndicator(
-                    color = PlayerText,
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(24.dp),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = "${formatDuration(shownPosition)} / ${formatDuration(duration)}",
+                style = MaterialTheme.typography.labelLarge,
+                color = PlayerText,
+            )
+            Spacer(Modifier.weight(1f))
+            Text(
+                text = "-${formatDuration(remaining)}",
+                style = MaterialTheme.typography.labelLarge,
+                color = PlayerTextSecondary,
+            )
+        }
+        Slider(
+            value = sliderValue,
+            onValueChange = { value ->
+                scrubValue = value
+                onSeekPreview(value)
+            },
+            onValueChangeFinished = {
+                val value = scrubValue ?: sliderValue
+                onSeekCommit(value)
+                scrubValue = null
+            },
+            enabled = snapshot.durationMs > 0L,
+            colors = SliderDefaults.colors(
+                thumbColor = PlayerText,
+                activeTrackColor = PlayerAccent,
+                inactiveTrackColor = PlayerText.copy(alpha = 0.28f),
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .semantics { contentDescription = "播放进度" },
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            PlayerSpeedPill(speed = snapshot.speed, onClick = onOpenSpeed)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(26.dp),
+            ) {
+                PlayerTransportButton(
+                    icon = Icons.Filled.Replay10,
+                    contentDescription = "快退 $seekStepSeconds 秒",
+                    onClick = onSeekBack,
                 )
-            } else {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = contentDescription,
-                    tint = PlayerText.copy(alpha = if (enabled) 1f else 0.35f),
-                    modifier = Modifier.size(if (large) 32.dp else if (small) 18.dp else 22.dp),
+                PlayerTransportButton(
+                    icon = if (snapshot.status == PlaybackStatus.PLAYING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    contentDescription = if (snapshot.status == PlaybackStatus.PLAYING) "暂停" else "播放",
+                    onClick = onPlayPause,
+                    large = true,
+                    loading = snapshot.status == PlaybackStatus.LOADING,
                 )
+                PlayerTransportButton(
+                    icon = Icons.Filled.Forward10,
+                    contentDescription = "快进 $seekStepSeconds 秒",
+                    onClick = onSeekForward,
+                )
+            }
+            IconButton(onClick = onOpenQueue) {
+                Icon(Icons.Outlined.QueueMusic, contentDescription = "播放列表", tint = PlayerText)
             }
         }
     }
 }
 
 @Composable
-fun PlayerBottomControls(
-    snapshot: PlaybackSnapshot,
-    subtitleLabel: String,
-    audioLabel: String,
-    onSeekPreview: (Float) -> Unit,
-    onSeekCommit: (Float) -> Unit,
-    onOpenSpeed: () -> Unit,
-    onOpenSubtitle: () -> Unit,
-    onOpenAudio: () -> Unit,
-    onOpenAspect: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var scrubValue by remember { mutableStateOf<Float?>(null) }
-    val duration = snapshot.durationMs.coerceAtLeast(1L)
-    val sliderValue = scrubValue ?: (snapshot.positionMs.toFloat() / duration).coerceIn(0f, 1f)
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.78f))))
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+private fun PlayerSpeedPill(speed: Float, onClick: () -> Unit) {
+    Surface(
+        color = PlayerText.copy(alpha = 0.14f),
+        shape = RoundedCornerShape(50),
+        onClick = onClick,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = formatDuration((sliderValue * duration).toLong()),
-                style = MaterialTheme.typography.labelMedium,
-                color = PlayerText,
-            )
-            Slider(
-                value = sliderValue,
-                onValueChange = { value ->
-                    scrubValue = value
-                    onSeekPreview(value)
-                },
-                onValueChangeFinished = {
-                    val value = scrubValue ?: sliderValue
-                    onSeekCommit(value)
-                    scrubValue = null
-                },
-                enabled = snapshot.durationMs > 0L,
-                colors = SliderDefaults.colors(
-                    thumbColor = MaterialTheme.colorScheme.primary,
-                    activeTrackColor = MaterialTheme.colorScheme.primary,
-                    inactiveTrackColor = PlayerText.copy(alpha = 0.28f),
-                ),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
-                    .semantics { contentDescription = "播放进度" },
-            )
-            Text(
-                text = formatDuration(duration),
-                style = MaterialTheme.typography.labelMedium,
-                color = PlayerTextSecondary,
-            )
-        }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            PlayerChip(text = "${snapshot.speed}×", icon = Icons.Outlined.Speed, onClick = onOpenSpeed)
-            PlayerChip(text = subtitleLabel, icon = Icons.Outlined.ClosedCaption, onClick = onOpenSubtitle)
-            PlayerChip(text = audioLabel, icon = Icons.Outlined.VolumeUp, onClick = onOpenAudio)
-            PlayerChip(text = snapshot.aspect.label, icon = Icons.Outlined.AspectRatio, onClick = onOpenAspect)
-        }
+        Text(
+            text = "${formatSpeed(speed)}×",
+            style = MaterialTheme.typography.labelLarge,
+            color = PlayerText,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+        )
     }
 }
 
 @Composable
-private fun PlayerChip(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+private fun PlayerTransportButton(
+    icon: ImageVector,
+    contentDescription: String,
     onClick: () -> Unit,
+    large: Boolean = false,
+    loading: Boolean = false,
 ) {
     Surface(
-        color = PlayerText.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(8.dp),
+        color = Color.Transparent,
+        shape = CircleShape,
         onClick = onClick,
+        modifier = Modifier.size(if (large) 56.dp else 44.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-        ) {
-            Icon(icon, contentDescription = null, tint = PlayerTextSecondary, modifier = Modifier.size(14.dp))
-            Spacer(Modifier.width(4.dp))
-            Text(text = text, style = MaterialTheme.typography.labelSmall, color = PlayerText, fontSize = 11.sp)
+        Box(contentAlignment = Alignment.Center) {
+            if (loading) {
+                CircularProgressIndicator(
+                    color = PlayerText,
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(22.dp),
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = PlayerText,
+                    modifier = Modifier.size(if (large) 40.dp else 28.dp),
+                )
+            }
         }
     }
 }
@@ -343,7 +320,7 @@ internal fun PlayerSeekGestureOverlay(
 ) {
     val targetText = if (preview.targetMs == 0L) "00:00" else formatDuration(preview.targetMs)
     val deltaText = formatSeekDelta(preview.deltaMs)
-    val mode = if (preview.isFastSwipe) "快滑" else "微调"
+    val mode = if (preview.accelerated) "加速" else "微调"
     val fraction = (preview.targetMs.toDouble() / preview.durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
 
     Surface(
@@ -353,7 +330,7 @@ internal fun PlayerSeekGestureOverlay(
             .widthIn(max = 380.dp)
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = "预览目标 $targetText，$deltaText，$mode。大范围请使用底部进度条"
+                contentDescription = "预览目标 $targetText，$deltaText，$mode，每格 ${preview.tickSeconds} 秒"
             },
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -388,7 +365,7 @@ internal fun PlayerSeekGestureOverlay(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "$mode · 大范围请使用底部进度条",
+                text = "$mode · 每格 ${preview.tickSeconds} 秒",
                 style = MaterialTheme.typography.labelSmall,
                 color = PlayerTextSecondary,
                 maxLines = 1,
@@ -473,6 +450,11 @@ fun PlayerErrorBanner(message: String, onDismiss: () -> Unit, modifier: Modifier
             TextButton(onClick = onDismiss) { Text("知道了") }
         }
     }
+}
+
+private fun formatSpeed(speed: Float): String {
+    val rounded = (speed * 100).toInt()
+    return if (rounded % 100 == 0) (rounded / 100).toString() else (rounded / 100f).toString().trimEnd('0').trimEnd('.')
 }
 
 private val VideoAspect.label: String

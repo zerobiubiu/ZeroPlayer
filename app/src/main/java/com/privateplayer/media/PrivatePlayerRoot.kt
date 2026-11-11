@@ -44,7 +44,9 @@ import com.privateplayer.feature.home.HomeScreen
 import com.privateplayer.feature.importer.ImportViewModel
 import com.privateplayer.feature.importer.WifiImportSheet
 import com.privateplayer.feature.player.PlayerScreen
-import com.privateplayer.feature.settings.SettingsScreen
+import com.privateplayer.feature.settings.SettingsHubScreen
+import com.privateplayer.feature.settings.SettingsSection
+import com.privateplayer.feature.settings.SettingsSectionScreen
 
 /** 首页和设置是唯一的一级导航，详情及播放器是二级页面。 */
 @Composable
@@ -79,7 +81,7 @@ fun PrivatePlayerRoot(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    PrivatePlayerTheme(darkTheme = darkTheme, dynamicColor = settings.display.dynamicColor) {
+    PrivatePlayerTheme(darkTheme = darkTheme) {
         val navController = rememberNavController()
         val entry by navController.currentBackStackEntryAsState()
         val currentRoute = entry?.destination?.route
@@ -159,7 +161,21 @@ fun PrivatePlayerRoot(
                         onShareFile = fileTransfers::share,
                     )
                 }
-                composable(Routes.SETTINGS) { SettingsScreen() }
+                composable(Routes.SETTINGS) {
+                    SettingsHubScreen(
+                        onOpenSection = { section ->
+                            navController.navigate(Routes.settingsSection(section.id)) { launchSingleTop = true }
+                        },
+                    )
+                }
+                composable(
+                    route = Routes.SETTINGS_SECTION,
+                    arguments = listOf(navArgument("section") { type = NavType.StringType }),
+                ) { entry ->
+                    val section = SettingsSection.fromId(entry.arguments?.getString("section"))
+                        ?: SettingsSection.PLAYBACK
+                    SettingsSectionScreen(section = section, onBack = { navController.popBackStack() })
+                }
                 composable(
                     route = Routes.DETAIL,
                     arguments = listOf(navArgument("mediaId") { type = NavType.StringType }),

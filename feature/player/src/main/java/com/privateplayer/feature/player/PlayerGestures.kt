@@ -29,7 +29,6 @@ sealed interface PlayerGesture {
         val dxDp: Float,
         val dyDp: Float,
         val dyFraction: Float,
-        val maxAbsDxDp: Float,
         val elapsedMs: Long,
     ) : PlayerGesture
 
@@ -71,15 +70,12 @@ fun Modifier.playerGestures(
             var longPressFired = false
             var totalDx = 0f
             var totalDy = 0f
-            var maxAbsDx = 0f
             var finished: PointerInputChange? = null
-            var quickPreviewJob: kotlinx.coroutines.Job? = null
 
             fun dragEvent(elapsedMs: Long) = PlayerGesture.Drag(
                 dxDp = totalDx / density,
                 dyDp = totalDy / density,
                 dyFraction = totalDy / size.height.coerceAtLeast(1),
-                maxAbsDxDp = maxAbsDx / density,
                 elapsedMs = elapsedMs,
             )
 
@@ -102,7 +98,6 @@ fun Modifier.playerGestures(
                     val delta = change.position - down.position
                     totalDx = delta.x
                     totalDy = delta.y
-                    maxAbsDx = maxOf(maxAbsDx, abs(totalDx))
                     val elapsedMs = (change.uptimeMillis - down.uptimeMillis).coerceAtLeast(0L)
 
                     if (!dragging && !longPressFired &&
@@ -114,15 +109,6 @@ fun Modifier.playerGestures(
                         pendingTapJob = null
                         lastTapAt = 0L
                         currentOnGesture(PlayerGesture.DragStart(down.position, size.toSize()))
-                        if (elapsedMs <= FAST_SWIPE_MAX_MS) {
-                            // 手指停住超过快滑窗口时，也要及时显示改为微调后的目标。
-                            quickPreviewJob = scope.launch {
-                                delay(FAST_SWIPE_MAX_MS - elapsedMs + 1L)
-                                if (dragging && finished == null) {
-                                    currentOnGesture(dragEvent(FAST_SWIPE_MAX_MS + 1L))
-                                }
-                            }
-                        }
                     }
                     if (dragging) {
                         change.consume()
@@ -135,7 +121,6 @@ fun Modifier.playerGestures(
                 }
             } finally {
                 longPressJob.cancel()
-                quickPreviewJob?.cancel()
                 if (longPressFired) {
                     currentOnGesture(PlayerGesture.LongPressEnd)
                 } else if (dragging && finished == null) {

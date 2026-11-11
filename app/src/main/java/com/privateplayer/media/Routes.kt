@@ -6,6 +6,9 @@ object Routes {
 
     const val SETTINGS = "settings"
 
+    const val SETTINGS_SECTION = "settings/{section}"
+    fun settingsSection(section: String): String = "settings/$section"
+
     const val DETAIL = "detail/{mediaId}"
     fun detail(mediaId: Long): String = "detail/$mediaId"
 

@@ -72,6 +72,12 @@ class MediaRepositoryImpl @Inject constructor(
             OperationOutcome.Success
         }
 
+    override suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?) {
+        withContext(ioDispatcher) {
+            mediaDao.setSelectedSubtitleTrack(mediaId, trackId, System.currentTimeMillis())
+        }
+    }
+
     override suspend fun setFavorite(ids: List<Long>, favorite: Boolean): OperationOutcome =
         withContext(ioDispatcher) {
             val now = System.currentTimeMillis()

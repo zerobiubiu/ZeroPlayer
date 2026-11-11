@@ -40,6 +40,9 @@ object PlayerRouteArgs {
     const val ARG_MEDIA_ID = "mediaId"
 }
 
+/** 媒体记录中表示“用户主动关闭字幕”的哨兵值；轨道 ID 均为数字，不会冲突。 */
+internal const val SUBTITLE_OFF = "off"
+
 /** 播放模式。 */
 enum class PlayMode(val label: String) {
     SEQUENTIAL("顺序播放"),
@@ -97,6 +100,8 @@ internal class PlaybackSession(
     private val ioDispatcher: CoroutineDispatcher,
 ) {
     @Volatile private var currentMedia: Media? = null
+    /** 本次装载是否已按媒体记录恢复过字幕选择。 */
+    private var subtitleSelectionRestored = false
     private var requestedMediaId: Long? = null
     private var loadJob: Job? = null
     @Volatile private var loadStage = "尚未装载"
@@ -300,6 +305,7 @@ internal class PlaybackSession(
                         selectedSubtitleTrackId = tracks.firstOrNull { track -> track.isDefault }?.id,
                     )
                 }
+                restoreSubtitleSelection(tracks)
             }
         }
         scope.launch {
@@ -420,6 +426,7 @@ internal class PlaybackSession(
             artworkData = artwork,
         )
         currentMedia = media
+        subtitleSelectionRestored = false
         watchedDeltaMs = 0L
         lastTickPosition = startPosition
         if (!retry) {
@@ -594,7 +601,31 @@ internal class PlaybackSession(
 
     fun selectAudioTrack(trackId: String?) = onCurrentMedia { engine.selectAudioTrack(trackId) }
 
-    fun selectSubtitleTrack(trackId: String?) = onCurrentMedia { engine.selectSubtitleTrack(trackId) }
+    /** 用户切换字幕时记住选择：具体轨道 ID 或 off（关闭），下次打开同一视频自动恢复。 */
+    fun selectSubtitleTrack(trackId: String?) {
+        onCurrentMedia {
+            engine.selectSubtitleTrack(trackId)
+            val mediaId = currentMedia?.id ?: return@onCurrentMedia
+            val remembered = trackId ?: SUBTITLE_OFF
+            scope.launch {
+                runCatching { mediaRepository.setSelectedSubtitleTrack(mediaId, remembered) }
+                    .onFailure { error -> reportError("无法保存字幕选择：${error.message ?: "未知错误"}") }
+            }
+        }
+    }
+
+    /** 首次拿到字幕轨时恢复该视频上次的选择；轨道已不存在则保持文件默认。 */
+    private fun restoreSubtitleSelection(tracks: List<MediaTrack>) {
+        if (subtitleSelectionRestored || tracks.isEmpty()) return
+        val media = currentMedia ?: return
+        subtitleSelectionRestored = true
+        val remembered = media.selectedSubtitleTrackId ?: return
+        if (remembered == SUBTITLE_OFF) {
+            engine.selectSubtitleTrack(null)
+        } else if (tracks.any { it.id == remembered }) {
+            engine.selectSubtitleTrack(remembered)
+        }
+    }
 
     fun adjustSubtitleDelay(deltaMs: Long) {
         state.update { it.copy(subtitleDelayMs = (it.subtitleDelayMs + deltaMs).coerceIn(-60_000L, 60_000L)) }

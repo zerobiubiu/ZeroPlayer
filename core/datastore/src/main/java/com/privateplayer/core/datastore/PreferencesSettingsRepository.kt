@@ -70,10 +70,10 @@ class PreferencesSettingsRepository @Inject constructor(
                     volumeGestureEnabled = prefs[Keys.GESTURE_VOLUME] ?: true,
                     seekGestureEnabled = prefs[Keys.GESTURE_SEEK] ?: true,
                     longPressSpeedEnabled = prefs[Keys.GESTURE_LONG_PRESS_SPEED] ?: true,
+                    hapticsEnabled = prefs[Keys.GESTURE_HAPTICS] ?: true,
                 ),
                 display = DisplayPreferences(
                     themeMode = prefs[Keys.THEME_MODE].toEnum(ThemeMode.SYSTEM),
-                    dynamicColor = prefs[Keys.DYNAMIC_COLOR] ?: false,
                     gridDensity = prefs[Keys.GRID_DENSITY].toEnum(GridDensity.DEFAULT),
                 ),
                 import = ImportPreferences(
@@ -86,10 +86,6 @@ class PreferencesSettingsRepository @Inject constructor(
 
     override suspend fun setThemeMode(mode: ThemeMode) {
         store.edit { it[Keys.THEME_MODE] = mode.name }
-    }
-
-    override suspend fun setDynamicColor(enabled: Boolean) {
-        store.edit { it[Keys.DYNAMIC_COLOR] = enabled }
     }
 
     override suspend fun setGridDensity(density: GridDensity) {
@@ -156,6 +152,10 @@ class PreferencesSettingsRepository @Inject constructor(
         store.edit { it[Keys.GESTURE_LONG_PRESS_SPEED] = enabled }
     }
 
+    override suspend fun setHapticsEnabled(enabled: Boolean) {
+        store.edit { it[Keys.GESTURE_HAPTICS] = enabled }
+    }
+
     override suspend fun setGenerateThumbnails(enabled: Boolean) {
         store.edit { it[Keys.IMPORT_THUMBNAILS] = enabled }
     }
@@ -191,6 +191,7 @@ class PreferencesSettingsRepository @Inject constructor(
         val GESTURE_VOLUME = booleanPreferencesKey("gesture_volume")
         val GESTURE_SEEK = booleanPreferencesKey("gesture_seek")
         val GESTURE_LONG_PRESS_SPEED = booleanPreferencesKey("gesture_long_press_speed")
+        val GESTURE_HAPTICS = booleanPreferencesKey("gesture_haptics")
 
         val IMPORT_THUMBNAILS = booleanPreferencesKey("import_generate_thumbnails")
         val IMPORT_DUPLICATE_DETECTION = booleanPreferencesKey("import_duplicate_detection")

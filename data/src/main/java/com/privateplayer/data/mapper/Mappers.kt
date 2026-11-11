@@ -38,6 +38,7 @@ fun MediaEntity.toDomain(folderName: String?): Media = Media(
     playbackPositionMs = playbackPositionMs,
     playedDurationMs = playedDurationMs,
     playCount = playCount,
+    selectedSubtitleTrackId = selectedSubtitleTrackId,
 )
 
 fun FolderSummary.toDomain(): Folder = Folder(

@@ -45,4 +45,7 @@ class PlayerViewModel @Inject constructor(
     fun beginTemporarySpeed(speed: Float) = coordinator.beginTemporarySpeed(speed)
     fun endTemporarySpeed() = coordinator.endTemporarySpeed()
     fun consumeError() = coordinator.consumeError()
+
+    /** 关闭播放页：结束引擎与会话，避免离开页面后继续出声。 */
+    fun closePlayback() = coordinator.closeFromPlayerUi()
 }

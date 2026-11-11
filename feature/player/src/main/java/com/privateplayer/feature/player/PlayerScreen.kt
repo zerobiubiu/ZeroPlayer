@@ -5,15 +5,18 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
+import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
+import android.view.WindowManager
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,8 +27,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.ScreenRotation
+import androidx.compose.material.icons.outlined.SkipNext
+import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -93,6 +102,7 @@ fun PlayerScreen(
     var baseVolume by remember { mutableIntStateOf(volume) }
     var baseSeekMs by remember { mutableLongStateOf(0L) }
     var baseSeekMediaId by remember { mutableLongStateOf(0L) }
+    var seekPeakVelocity by remember { mutableFloatStateOf(0f) }
     var seekPreview by remember { mutableStateOf<SeekGesturePreview?>(null) }
     var seekActive by remember { mutableStateOf(false) }
     var lastSeekHapticTarget by remember { mutableStateOf<Long?>(null) }
@@ -104,12 +114,33 @@ fun PlayerScreen(
     var showAudioSheet by remember { mutableStateOf(false) }
     var showAspectSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
+    var showQueueSheet by remember { mutableStateOf(false) }
 
-    // 沉浸式：隐藏系统栏 + 常亮；离开页面时恢复。
+    // 关闭播放页即结束播放；按主页键退到桌面不触发返回，后台播放保留。
+    val closePlayer = remember(viewModel, onBack) {
+        {
+            viewModel.closePlayback()
+            onBack()
+        }
+    }
+    BackHandler(onBack = closePlayer)
+
+    // 沉浸式：隐藏系统栏 + 常亮 + 允许画面进入缺口；离开页面时恢复。
     DisposableEffect(Unit) {
         val window = activity?.window
         val controller = window?.let { WindowCompat.getInsetsController(it, view) }
         val originalOrientation = activity?.requestedOrientation
+        var originalCutout: Int? = null
+        if (window != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            originalCutout = window.attributes.layoutInDisplayCutoutMode
+            window.attributes = window.attributes.apply {
+                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                } else {
+                    WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                }
+            }
+        }
         controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(WindowInsetsCompat.Type.systemBars())
         window?.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -117,6 +148,10 @@ fun PlayerScreen(
             controller?.show(WindowInsetsCompat.Type.systemBars())
             window?.clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             if (originalOrientation != null) activity?.requestedOrientation = originalOrientation
+            val restoreCutout = originalCutout
+            if (window != null && restoreCutout != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                window.attributes = window.attributes.apply { layoutInDisplayCutoutMode = restoreCutout }
+            }
         }
     }
 
@@ -201,11 +236,8 @@ fun PlayerScreen(
         if (state.error != null) viewModel.setControlsVisible(true)
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .playerGestures(enabled = !state.locked) { gesture ->
-                when (gesture) {
+    val handleGesture: (PlayerGesture) -> Unit = { gesture ->
+        when (gesture) {
                     PlayerGesture.SingleTap -> viewModel.toggleControls()
 
                     is PlayerGesture.DoubleTap -> {
@@ -232,6 +264,7 @@ fun PlayerScreen(
                         baseSeekMediaId = state.mediaId
                         seekPreview = null
                         seekActive = false
+                        seekPeakVelocity = 0f
                         lastSeekHapticTarget = null
                         lastSeekHapticAt = 0L
                     }
@@ -253,20 +286,25 @@ fun PlayerScreen(
                                 if (!state.locked && state.gesturePrefs.seekGestureEnabled &&
                                     state.playback.durationMs > 0L && state.mediaId == baseSeekMediaId
                                 ) {
+                                    val velocity = if (gesture.elapsedMs > 0L) {
+                                        abs(gesture.dxDp) / gesture.elapsedMs
+                                    } else {
+                                        0f
+                                    }
+                                    if (velocity > seekPeakVelocity) seekPeakVelocity = velocity
                                     val preview = calculateSeekGesture(
                                         positionMs = baseSeekMs,
                                         durationMs = state.playback.durationMs,
                                         dxDp = gesture.dxDp,
-                                        maxAbsDxDp = gesture.maxAbsDxDp,
-                                        elapsedMs = gesture.elapsedMs,
-                                        stepSeconds = state.playbackPrefs.seekStepSeconds,
+                                        peakVelocityDpPerMs = seekPeakVelocity,
                                     )
                                     if (preview != null) {
                                         seekPreview = preview
                                         seekActive = true
                                         gestureMessage = null
                                         val now = SystemClock.uptimeMillis()
-                                        if (lastSeekHapticTarget != preview.targetMs &&
+                                        if (state.gesturePrefs.hapticsEnabled &&
+                                            lastSeekHapticTarget != preview.targetMs &&
                                             (lastSeekHapticTarget == null || now - lastSeekHapticAt >= 70L)
                                         ) {
                                             view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
@@ -330,78 +368,55 @@ fun PlayerScreen(
                         viewModel.endTemporarySpeed()
                     }
                 }
-            },
-    ) {
-        PlayerVideoLayer(
-            onSurfaceCreated = { viewModel.attachSurface(surfaceOwner, it) },
-            onSurfaceChanged = { surface, width, height -> viewModel.resizeSurface(surfaceOwner, surface, width, height) },
-            onSurfaceDestroyed = { viewModel.detachSurface(surfaceOwner, it) },
-        )
+    }
 
-        if (state.isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 手势只盖在视频画面上：按钮所在的控件层在它之上，不会被滑动识别抢走点击。
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .playerGestures(enabled = !state.locked) { gesture ->
+                    handleGesture(gesture)
+                },
+        ) {
+            PlayerVideoLayer(
+                onSurfaceCreated = { viewModel.attachSurface(surfaceOwner, it) },
+                onSurfaceChanged = { surface, width, height -> viewModel.resizeSurface(surfaceOwner, surface, width, height) },
+                onSurfaceDestroyed = { viewModel.detachSurface(surfaceOwner, it) },
+            )
+
+            if (state.isLoading) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    androidx.compose.material3.CircularProgressIndicator(color = Color.White)
+                }
             }
         }
 
-        // 手势反馈占用独立空间，不覆盖真实进度条和中心操作。
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        // 控件层独立：顶部、底部与浮层按钮优先接收触摸。
+        Box(modifier = Modifier.fillMaxSize()) {
             val controlsVisible = state.controlsVisible && !state.locked
-            val hasFeedback = seekPreview != null || gestureMessage != null
-            val feedbackBesideControls = maxHeight < 320.dp && maxWidth >= 440.dp && hasFeedback
-            val feedbackWidth = (maxWidth - 300.dp).coerceIn(140.dp, 220.dp)
 
             Column(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
                     PlayerTopBar(
                         title = state.title,
-                        locked = state.locked,
-                        onBack = onBack,
-                        onToggleLock = viewModel::toggleLock,
+                        onBack = closePlayer,
+                        onOpenAspect = { showAspectSheet = true },
+                        onOpenSubtitle = { showSubtitleSheet = true },
                         onOpenMore = { showMoreSheet = true },
                     )
                 }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                ) {
-                    Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                        androidx.compose.animation.AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
-                            PlayerCenterControls(
-                                snapshot = state.playback,
-                                hasPrevious = state.queueIndex > 0,
-                                hasNext = state.hasNext,
-                                seekStepSeconds = state.playbackPrefs.seekStepSeconds,
-                                onPlayPause = viewModel::playPause,
-                                onSeekBack = { viewModel.seekBy(-state.playbackPrefs.seekStepSeconds * 1_000L) },
-                                onSeekForward = { viewModel.seekBy(state.playbackPrefs.seekStepSeconds * 1_000L) },
-                                onPrevious = viewModel::playPrevious,
-                                onNext = viewModel::playNext,
-                            )
-                        }
-                    }
-                    if (feedbackBesideControls) {
-                        PlayerGestureFeedback(
-                            preview = seekPreview,
-                            message = gestureMessage,
-                            modifier = Modifier.width(feedbackWidth)
-                                .padding(horizontal = 8.dp),
-                        )
-                    }
-                }
-                if (!feedbackBesideControls) {
-                    PlayerGestureFeedback(
-                        preview = seekPreview,
-                        message = gestureMessage,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                            .padding(horizontal = 16.dp, vertical = 4.dp),
-                    )
-                }
+                Spacer(Modifier.weight(1f))
+                PlayerGestureFeedback(
+                    preview = seekPreview,
+                    message = gestureMessage,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                        .padding(horizontal = 16.dp, vertical = 4.dp),
+                )
                 AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
                     PlayerBottomControls(
                         snapshot = state.playback,
-                        subtitleLabel = subtitleLabel(state),
-                        audioLabel = audioLabel(state),
+                        seekStepSeconds = state.playbackPrefs.seekStepSeconds,
                         onSeekPreview = { fraction ->
                             val duration = state.playback.durationMs
                             if (duration > 0) {
@@ -414,10 +429,11 @@ fun PlayerScreen(
                             val duration = state.playback.durationMs
                             if (duration > 0) viewModel.seekTo((fraction * duration).toLong())
                         },
+                        onSeekBack = { viewModel.seekBy(-state.playbackPrefs.seekStepSeconds * 1_000L) },
+                        onSeekForward = { viewModel.seekBy(state.playbackPrefs.seekStepSeconds * 1_000L) },
+                        onPlayPause = viewModel::playPause,
                         onOpenSpeed = { showSpeedSheet = true },
-                        onOpenSubtitle = { showSubtitleSheet = true },
-                        onOpenAudio = { showAudioSheet = true },
-                        onOpenAspect = { showAspectSheet = true },
+                        onOpenQueue = { showQueueSheet = true },
                     )
                 }
             }
@@ -526,6 +542,33 @@ fun PlayerScreen(
             title = state.title,
             actions = listOf(
                 SheetAction(
+                    label = "锁定屏幕",
+                    icon = Icons.Outlined.Lock,
+                    supportingText = "隐藏控制，避免误触",
+                    onClick = {
+                        viewModel.toggleLock()
+                        showMoreSheet = false
+                    },
+                ),
+                SheetAction(
+                    label = "音轨",
+                    icon = Icons.Outlined.VolumeUp,
+                    supportingText = audioLabel(state),
+                    onClick = {
+                        showMoreSheet = false
+                        showAudioSheet = true
+                    },
+                ),
+                SheetAction(
+                    label = "画面比例",
+                    icon = Icons.Outlined.AspectRatio,
+                    supportingText = state.playback.aspect.labelText,
+                    onClick = {
+                        showMoreSheet = false
+                        showAspectSheet = true
+                    },
+                ),
+                SheetAction(
                     label = "旋转屏幕",
                     icon = Icons.Outlined.ScreenRotation,
                     supportingText = "切换横屏 / 竖屏",
@@ -543,6 +586,49 @@ fun PlayerScreen(
                 ),
             ),
             onDismiss = { showMoreSheet = false },
+        )
+    }
+
+    if (showQueueSheet) {
+        ActionSheet(
+            title = "播放列表 · ${(state.queueIndex + 1).coerceAtLeast(1)}/${state.queue.size.coerceAtLeast(1)}",
+            actions = buildList {
+                add(
+                    SheetAction(
+                        label = "上一集",
+                        icon = Icons.Outlined.SkipPrevious,
+                        enabled = state.queueIndex > 0,
+                        onClick = {
+                            viewModel.playPrevious()
+                            showQueueSheet = false
+                        },
+                    ),
+                )
+                add(
+                    SheetAction(
+                        label = "下一集",
+                        icon = Icons.Outlined.SkipNext,
+                        enabled = state.hasNext,
+                        onClick = {
+                            viewModel.playNext()
+                            showQueueSheet = false
+                        },
+                    ),
+                )
+                PlayMode.entries.forEach { mode ->
+                    add(
+                        SheetAction(
+                            label = if (mode == state.playMode) "${mode.label}（当前）" else mode.label,
+                            icon = Icons.Outlined.Repeat,
+                            onClick = {
+                                viewModel.setPlayMode(mode)
+                                showQueueSheet = false
+                            },
+                        ),
+                    )
+                }
+            },
+            onDismiss = { showQueueSheet = false },
         )
     }
 
@@ -567,16 +653,6 @@ private fun PlayerGestureFeedback(
         PlayerSeekGestureOverlay(preview = preview, modifier = modifier)
     } else {
         PlayerGestureOverlay(message = message, modifier = modifier)
-    }
-}
-
-private fun subtitleLabel(state: PlayerUiState): String {
-    val track = state.subtitleTracks.firstOrNull { it.id == state.selectedSubtitleTrackId }
-    return when {
-        track != null -> track.label
-        state.subtitleFileNames.isNotEmpty() -> "字幕"
-        state.playback.durationMs > 0 && state.subtitleTracks.isNotEmpty() -> "字幕"
-        else -> "字幕"
     }
 }
 
