@@ -70,6 +70,7 @@ Windows 11 x64；Android 17 / x86_64 模拟器（`-read-only`，ARM64 转译）�
 ### 本机
 
 - 图标替换后 `:app:assembleDebug` `BUILD SUCCESSFUL`；安装到模拟器后桌面图标显示新的白色丝带标记（截图见下文限制）。
+- 本机以 `-PversionName=1.0.0 -PversionCode=10000` 执行 `:app:assembleRelease` 通过（2m 3s，545 个任务），产物 `app-release.apk` 43.9 MiB，`aapt2 dump badging` 为 `versionCode='10000' versionName='1.0.0'`、`native-code: 'arm64-v8a'`，`apksigner verify --print-certs` 的证书为 `CN=ZeroPlayer, O=ZeroPlayer, C=CN`、SHA-256 `d18d02ab…1358cb`。
 - 自适应图标合成预览（深色底 + 主题单色着色）确认图形居中、无裁切，单色层为实心遮罩且播放负空间正确。
 - `git ls-files` 与远端递归树均为 276 个文件，体积 31.53 MiB，最大文件 `core/playback/src/main/jniLibs/arm64-v8a/libplayer.so`（25.7 MiB）。
 - 暂存区 diff 级扫描未发现令牌、私钥或真实口令；`local.properties`、`.markindex/`、`build/`、`keystore.properties` 均被忽略。

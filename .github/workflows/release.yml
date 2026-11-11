@@ -54,10 +54,12 @@ jobs:
 
       - name: 解析版本号
         id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
           if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            name="${{ inputs.version }}"
+            name="$INPUT_VERSION"
           else
             name="${GITHUB_REF_NAME#v}"
           fi

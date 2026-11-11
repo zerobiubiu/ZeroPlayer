@@ -75,6 +75,6 @@
 4. 网页服务是按要求无认证的临时 HTTP 服务；不可信网络中的其他设备可访问、修改及删除文件。
 5. 系统回收复制中的临时 URI 授权后必须重新选择来源；网页传输中断未完整接收的文件需要重新上传。
 6. 文件树无分页，极大目录的启动及滚动性能尚需专项评估。
-7. 对外分发静态链接产物前须完成第三方许可、源码及重新链接义务的实际审查。
+7. 已按 GPL-3.0-only 开源并提供第三方声明与重新链接材料说明（见 [开源发布变更](../changes/0007-open-source-release.md)）；静态链接 LGPL 组件的实际履约仍由分发者按 [THIRD_PARTY_NOTICES.md](../../THIRD_PARTY_NOTICES.md) 审核。
 
-本轮执行命令、实际结果与残余限制分别记录于 [文件树与传输变更](../changes/0005-file-tree-transfer.md) 和 [Media3 会话变更](../changes/0006-media3-session.md)。
+本轮执行命令、实际结果与残余限制分别记录于 [文件树与传输变更](../changes/0005-file-tree-transfer.md)、[Media3 会话变更](../changes/0006-media3-session.md) 与 [开源发布变更](../changes/0007-open-source-release.md)。

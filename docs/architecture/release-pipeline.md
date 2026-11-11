@@ -64,6 +64,9 @@ base64 -w0 release.jks   # 写入 ZEROPLAYER_KEYSTORE_BASE64
 - `ZeroPlayer-<版本>-arm64-v8a.apk`：签名发行包，仅含 `arm64-v8a` 原生库；
 - `ZeroPlayer-<版本>-arm64-v8a.apk.sha256`：SHA-256 校验值。
 
+当前发行证书：`CN=ZeroPlayer, O=ZeroPlayer, C=CN`，证书 SHA-256 摘要
+`d18d02ab458741b3b9cda763ff8c7771988cd6378681ac7777e8b71d0e1358cb`。签名指纹应与该值一致，否则不是本仓库发布的安装包。
+
 ```bash
 sha256sum -c ZeroPlayer-1.0.0-arm64-v8a.apk.sha256
 apksigner verify --print-certs ZeroPlayer-1.0.0-arm64-v8a.apk   # 需要 build-tools
