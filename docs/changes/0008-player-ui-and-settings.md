@@ -79,3 +79,8 @@ Windows 11 x64；Android 17 / x86_64 模拟器（`-read-only`，ARM64 转译）�
   - 播放页控件（暂停、字幕、更多、进度条）点击生效；此前手势层盖在控件之上导致按钮点不动的问题已通过把手势限定在视频层修复。
   - 震动开关：开启时一次滑动在 `dumpsys vibrator_manager` 新增 `performHapticFeedback(constant=4)` 的 TICK 记录 22 条；关闭后同样滑动不再新增，一级页摘要同步显示「震动关」。
 - 已知限制：模拟器没有异形屏与线性马达，缺口避让与震动手感需真机确认；手势速度按 `input swipe` 的合成节奏取样，真手指的加速度分布可能略有差异。
+
+### 发行
+
+- main 的 CI 运行 `43024794219` 通过；`v1.0.1` 标签触发 Release 运行 `43025416115`，创建 [v1.0.1](https://github.com/zerobiubiu/ZeroPlayer/releases/tag/v1.0.1)。
+- 产物 `ZeroPlayer-1.0.1-arm64-v8a.apk`：SHA-256 `624619ba7cb3f4c23c5f3261e093630917b8331bf7070c9e1f7ca99f94c707f6`，与随附 `.sha256` 一致；`aapt2 dump badging` 为 `versionCode='10001' versionName='1.0.1'`、`native-code: 'arm64-v8a'`；签名证书仍是 `CN=ZeroPlayer`、SHA-256 `d18d02ab…1358cb`，可直接覆盖升级 1.0.0。
