@@ -30,15 +30,15 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      - uses: android-actions/setup-android@v3
-
       - name: 安装 Android SDK 组件
         run: |
           set -euo pipefail
-          sdkmanager --install "platform-tools" "build-tools;36.0.0" > /dev/null
+          sdkmanager="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/cmdline-tools/*/bin/sdkmanager | tail -1)"
+          yes | "$sdkmanager" --licenses > /dev/null
+          "$sdkmanager" --install "platform-tools" "build-tools;36.0.0" > /dev/null
           installed=0
           for pkg in "platforms;android-37.0" "platforms;android-37"; do
-            if sdkmanager --install "$pkg" > /dev/null 2>&1; then
+            if "$sdkmanager" --install "$pkg" > /dev/null 2>&1; then
               echo "已安装 $pkg"
               installed=1
               break
@@ -48,6 +48,7 @@ jobs:
             echo "::error::无法安装 compileSdk 37 对应的 SDK Platform"
             exit 1
           fi
+          "$sdkmanager" --list_installed | grep -E 'platforms;|build-tools;' || true
 
       - name: 单元测试
         run: ./gradlew testDebugUnitTest --stacktrace
