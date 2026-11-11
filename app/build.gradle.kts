@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,10 +17,11 @@ plugins {
 val releaseVersionName = providers.gradleProperty("versionName").orNull
 val releaseVersionCode = providers.gradleProperty("versionCode").orNull?.toIntOrNull()
 
-val signingProperties = java.util.Properties().apply {
-    val file = rootProject.file("keystore.properties")
-    if (file.exists()) file.inputStream().use(::load)
-}
+val signingProperties = Properties()
+rootProject.file("keystore.properties")
+    .takeIf { it.exists() }
+    ?.inputStream()
+    ?.use { signingProperties.load(it) }
 
 fun signingValue(property: String, environment: String): String? =
     signingProperties.getProperty(property) ?: System.getenv(environment)
