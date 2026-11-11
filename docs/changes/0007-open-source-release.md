@@ -78,11 +78,15 @@ Windows 11 x64；Android 17 / x86_64 模拟器（`-read-only`，ARM64 转译）�
 ### GitHub
 
 - 仓库 `zerobiubiu/ZeroPlayer` 为 public，默认分支 `main`，描述与主题已设置。
-- 首次提交 `76b01c1` 推送成功；随后两次修正流水线（`setup-android` 的 `tools` 包失败、`yes | sdkmanager --licenses` 管道退出码）与一次 `gradlew` 可执行权限修正。
-- 发行 Secrets：`ZEROPLAYER_KEYSTORE_BASE64`、`ZEROPLAYER_STORE_PASSWORD`、`ZEROPLAYER_KEY_ALIAS`、`ZEROPLAYER_KEY_PASSWORD` 已写入。
-- `v1.0.0` 标签触发 Release 工作流，CI 工作流在同一提交上运行。
+- 首次提交 `76b01c1` 推送成功；随后修正流水线：`setup-android` 的 `tools` 包失败、`yes | sdkmanager --licenses` 管道退出码、`gradlew` 可执行权限、构建脚本 `java.util.Properties` 解析、`:data` 模块清单缺少权限与前台服务类型。模块级 Lint 陷阱记录在 [0004](../troubleshooting/0004-module-level-lint-permissions.md)。
+- 发行 Secrets：`ZEROPLAYER_KEYSTORE_BASE64`、`ZEROPLAYER_STORE_PASSWORD`、`ZEROPLAYER_KEY_ALIAS`、`ZEROPLAYER_KEY_PASSWORD` 已写入；`gh secret list` 可见四项。
+- CI 运行 `43015055350`（提交「修复模块级 Lint 报错并补充发布证据」）：单元测试、Lint、`:app:assembleDebug` 与报告归档全部成功。
+- Release 运行 `43013715539`：5 分 2 秒完成，创建 [v1.0.0](https://github.com/zerobiubiu/ZeroPlayer/releases/tag/v1.0.0)，资产为 `ZeroPlayer-1.0.0-arm64-v8a.apk`（43,925,428 字节）与 `.sha256`。
+- 下载发行包复核：文件 SHA-256 `379a015a3dce9a3afef93b4532a93c1ebaa9e681151404410deec05a7e84dcaf`，与随附 `.sha256` 一致；`apksigner` 证书 `CN=ZeroPlayer, O=ZeroPlayer, C=CN`、SHA-256 `d18d02ab…1358cb`，与本地密钥相同，说明 CI 使用的是仓库 Secrets 中的发行密钥而非调试签名；`aapt2 dump badging` 为 `versionCode='10000' versionName='1.0.0'`、`native-code: 'arm64-v8a'`。
 
 ### 结论与限制
 
-- 图标与构建已在本机验证；实体 ARM 设备上的启动图标、主题图标与硬解仍需真机确认。
+- 图标、版本号推导、发行签名与标签触发的自动发布均已端到端验证。
+- 发行说明原为 GitHub 自动生成的空 diff，首个版本已手工改写为安装、能力、限制与许可摘要；后续版本由工作流自动生成提交列表。
+- 实体 ARM 设备上的启动图标、主题图标与硬解仍需真机确认。
 - 首次开源提交含完整历史起点，没有引入旧工程未提交内容。

@@ -47,6 +47,7 @@
 | [0001](troubleshooting/0001-agp9-builtin-kotlin-traps.md) | AGP 9 内置 Kotlin 与 KSP / 第三方依赖元数据冲突 |
 | [0002](troubleshooting/0002-compose-surface-long-click.md) | Material3 `Surface(onClick)` 不支持长按，需 combinedClickable |
 | [0003](troubleshooting/0003-workmanager-foreground-dataSync.md) | WorkManager 前台导入在 Android 14+ 需要 dataSync 服务类型 |
+| [0004](troubleshooting/0004-module-level-lint-permissions.md) | 模块级 Lint 只看本模块清单，权限与服务类型需在库模块声明 |
 
 ## 二、文档规范
 
