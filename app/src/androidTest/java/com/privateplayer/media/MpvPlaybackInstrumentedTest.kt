@@ -355,7 +355,10 @@ class MpvPlaybackInstrumentedTest {
                 settings,
                 provider,
                 SavePlaybackProgressUseCase(mediaRepository, history, settings),
-                PlaybackServiceStarter { null },
+                object : PlaybackServiceStarter {
+                    override fun start(): String? = null
+                    override fun stop() = Unit
+                },
                 applicationScope,
                 Dispatchers.IO,
             )

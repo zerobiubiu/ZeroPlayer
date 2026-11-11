@@ -130,7 +130,7 @@ class MediaSessionLifecycleInstrumentedTest {
             compose.waitUntil(20_000) { compose.onAllNodesWithText(file.name).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText(file.name).performClick()
 
-            val remote = connect(context)
+            var remote = connect(context)
             controller = remote
             awaitController(
                 remote,
@@ -215,15 +215,48 @@ class MediaSessionLifecycleInstrumentedTest {
             activity.recreate()
             awaitController(remote, "Activity 重建保留同一媒体与进度") { isPlaying && currentMediaItem?.mediaId == id.toString() && currentPosition >= beforeRecreate }
 
-            // 返回文件树后服务继续，重新打开同一视频不能从头装载或重复计数。
+            // 1.0.1 契约：返回文件树会停止服务；重开创建新会话并从断点续播。
+            onMain { remote.pause() }
+            awaitController(remote, "关闭前暂停") {
+                currentMediaItem?.mediaId == id.toString() && playbackState == Player.STATE_READY && !isPlaying && !playWhenReady
+            }
+            onMain { remote.seekTo(8_000L) }
+            awaitController(remote, "关闭前定位到 8 秒") {
+                currentMediaItem?.mediaId == id.toString() && abs(currentPosition - 8_000L) < 500L
+            }
+            awaitSystemState(
+                context,
+                "关闭前断点已持久化",
+                diagnostics = { "真实媒体记录：${mediaRepository.findById(id)}\n${controllerState(remote)}" },
+            ) {
+                val saved = mediaRepository.findById(id)
+                saved != null && abs(saved.playbackPositionMs - 8_000L) < 1_000L
+            }
+            val checkpoint = onMain { remote.currentPosition }
             activity.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.waitUntil(15_000) { compose.onAllNodesWithText(file.name).fetchSemanticsNodes().isNotEmpty() }
-            val beforeReopen = onMain { remote.currentPosition }
+            awaitSystemState(context, "返回文件树后播放服务停止", diagnostics = {
+                "isServiceRunning=${isServiceRunning(context)}"
+            }) { !isServiceRunning(context) }
+            awaitSystemState(context, "旧控制器随会话断开", diagnostics = {
+                controllerState(remote)
+            }) { !onMain { remote.isConnected } }
+            runCatching { onMain { remote.release() } }
+            controller = null
+
             compose.onNodeWithText(file.name).performClick()
-            // 控制器原本就在播放同一媒体，不能用其状态冒充新导航项已经启动。
             compose.waitForIdle()
             compose.onNodeWithContentDescription("视频画面").assertIsDisplayed()
-            awaitController(remote, "退出页面后重开不重载") { isPlaying && currentMediaItem?.mediaId == id.toString() && currentPosition >= beforeReopen }
+            awaitSystemState(context, "重开后播放服务启动", diagnostics = {
+                "isServiceRunning=${isServiceRunning(context)}"
+            }) { isServiceRunning(context) }
+            remote = connect(context)
+            controller = remote
+            awaitController(remote, "重开创建新会话并从断点续播") {
+                isConnected && isPlaying && currentMediaItem?.mediaId == id.toString() &&
+                    currentPosition >= (checkpoint - 1_500L).coerceAtLeast(0L)
+            }
+            awaitWakeLock(context, true, "重开会话真实播放持有 CPU 锁")
             onMain { remote.pause() }
             awaitController(remote, "重开后控制器暂停") {
                 currentMediaItem?.mediaId == id.toString() && playbackState == Player.STATE_READY && !isPlaying && !playWhenReady
@@ -231,11 +264,11 @@ class MediaSessionLifecycleInstrumentedTest {
             awaitWakeLock(context, false, "重开后暂停释放 CPU 锁")
             awaitSystemState(
                 context,
-                "第一次暂停持久化：播放次数为 1 且进度大于 0",
+                "重开后暂停持久化：播放次数为 2 且进度大于 0",
                 diagnostics = { "真实媒体记录：${mediaRepository.findById(id)}\n${controllerState(remote)}" },
             ) {
                 val saved = mediaRepository.findById(id)
-                saved != null && saved.playCount == 1 && saved.playbackPositionMs > 0
+                saved != null && saved.playCount == 2 && saved.playbackPositionMs > 0
             }
             // 在后台结束第一段：真实目录队列应自动切到第二段，并提交第一段最终进度。
             val firstDuration = onMain { remote.duration }
@@ -247,11 +280,11 @@ class MediaSessionLifecycleInstrumentedTest {
             awaitWakeLock(context, true, "后台切到第二段保持 CPU 锁")
             awaitSystemState(
                 context,
-                "第一段结束持久化：播放次数为 1 且进度达到 98%",
+                "第一段结束持久化：播放次数为 2 且进度达到 98%",
                 diagnostics = { "期望时长=$firstDuration，真实媒体记录：${mediaRepository.findById(id)}\n${controllerState(remote)}" },
             ) {
                 val saved = mediaRepository.findById(id)
-                saved != null && saved.playCount == 1 && saved.playbackPositionMs >= firstDuration * 0.98
+                saved != null && saved.playCount == 2 && saved.playbackPositionMs >= firstDuration * 0.98
             }
             val secondPositionBeforeForeground = onMain { remote.currentPosition }
             val secondSpeedBeforeForeground = onMain { remote.playbackParameters.speed }
@@ -285,9 +318,20 @@ class MediaSessionLifecycleInstrumentedTest {
             awaitWakeLock(context, false, "系统重播后暂停释放 CPU 锁")
             activity.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.waitUntil(15_000) { compose.onAllNodesWithText(secondFile.name).fetchSemanticsNodes().isNotEmpty() }
+            awaitSystemState(context, "关闭第二段后播放服务停止", diagnostics = {
+                "isServiceRunning=${isServiceRunning(context)}"
+            }) { !isServiceRunning(context) }
+            awaitSystemState(context, "第二段旧控制器随会话断开", diagnostics = {
+                controllerState(remote)
+            }) { !onMain { remote.isConnected } }
+            runCatching { onMain { remote.release() } }
+            controller = null
             compose.onNodeWithText(brokenDirectory.name).performClick()
             compose.waitUntil(15_000) { compose.onAllNodesWithText(brokenFile.name).fetchSemanticsNodes().isNotEmpty() }
             compose.onNodeWithText(brokenFile.name).performClick()
+            // 错误媒体可能很快释放前台服务；直接绑定会话控制器等待真实错误。
+            remote = connect(context)
+            controller = remote
             awaitController(remote, "损坏文件暴露真实错误") { playerError != null }
             awaitWakeLock(context, false, "损坏媒体错误释放 CPU 锁")
 

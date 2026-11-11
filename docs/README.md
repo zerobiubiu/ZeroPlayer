@@ -40,6 +40,9 @@
 | [0006](changes/0006-media3-session.md) | Media3 系统会话、后台播放与 libmpv 单实例生命周期，含系统控制中心和锁屏实景证据 |
 | [0007](changes/0007-open-source-release.md) | 开源发布：新图标、GPL-3.0、标签驱动的 CI/CD 发行流水线与仓库配置 |
 | [0008](changes/0008-player-ui-and-settings.md) | 关闭播放页即结束播放、字幕记忆、播放页重排与异形屏、速度自适应滑动、设置二级页面 |
+| [0009](changes/0009-instrumentation-test-compile-fix.md) | 修复 B-01 仪器化测试编译：设置二级页测试、字幕接口替身、服务启动器构造 |
+| [0010](changes/0010-media-session-test-contract.md) | 更新 MediaSessionLifecycle 测试契约：关闭停服、重开新会话、断点与 playCount |
+| [0011](changes/0011-settings-immediate-save.md) | 设置保存模型统一为即时生效：删除逐行“保存”按钮、非法值不落库、写入串行保序 |
 
 ### troubleshooting/（长期可复现的问题）
 

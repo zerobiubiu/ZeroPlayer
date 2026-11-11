@@ -120,7 +120,11 @@ class PlaybackReleaseBarrierInstrumentedTest {
                 isolated, repository, tree, StorageMediaFileLocator(storage),
                 LocalSubtitleStore(storage, SafDocuments(context)), settings, provider,
                 SavePlaybackProgressUseCase(repository, history, settings),
-                PlaybackServiceStarter { null }, applicationScope, Dispatchers.IO,
+                object : PlaybackServiceStarter {
+                    override fun start(): String? = null
+                    override fun stop() = Unit
+                },
+                applicationScope, Dispatchers.IO,
             )
             coordinator = playback
             onMain {
