@@ -34,7 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           sdkmanager="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/cmdline-tools/*/bin/sdkmanager | tail -1)"
-          yes | "$sdkmanager" --licenses > /dev/null
+          yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
           "$sdkmanager" --install "platform-tools" "build-tools;36.0.0" > /dev/null
           installed=0
           for pkg in "platforms;android-37.0" "platforms;android-37"; do
