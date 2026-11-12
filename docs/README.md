@@ -47,6 +47,7 @@
 | [0013](changes/0013-player-entries-queue.md) | 播放器入口归位与真实播放队列：顶栏比例/旋转分离、播放队列渲染与受控跳转 |
 | [0014](changes/0014-ui-menu-and-detail-actions.md) | 菜单分组与详情页文件操作：信息/传输/管理/危险分组、详情更多菜单五项操作、播放安全停止 |
 | [0015](changes/0015-copy-layer-terminology-wifi-risk.md) | 术语统一、模块文案资源层与门禁、Wi-Fi 无鉴权风险独立警示块（阶段 1E：F-10/F-14/F-09） |
+| [0016](changes/0016-landscape-verification.md) | 横屏渲染验证：F-27 模拟器不复现，以证据关闭并标注真机残余风险（阶段 1F） |
 
 ### troubleshooting/（长期可复现的问题）
 

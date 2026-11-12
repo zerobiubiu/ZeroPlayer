@@ -474,3 +474,32 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 - F-10/F-14/F-09 验收标准由门禁单测、仪器化测试与实机截图覆盖。
 - 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未新增 i18n 框架（仅中文资源化）。
 - **阶段 1E 通过验收；自动进入阶段 1F（F-27 横屏验证）。**
+
+### 15.6 提交与最终复核
+
+- 10 张 1E 截图逐张读图核验后，删除临时取证脚本；在最终 APK 上重跑完整 `connectedDebugAndroidTest`：**63/63 通过**（与提交 APK 一致）。
+- 本地提交：`c09bb1f 文案资源层与术语统一及 Wi-Fi 风险提示（阶段 1E：F-10/F-14/F-09）`（未推送）。
+
+---
+
+## 十六、阶段 1F：横屏渲染验证与处置（F-27）
+
+- 时间：2026-11-13
+- 对应任务：T-27
+- 变更记录：[changes/0016-landscape-verification.md](../../changes/0016-landscape-verification.md)
+
+### 16.1 方法
+
+- 仅模拟器（API 37 headless，命令行已取证），真实 libmpv 播放 `playback-regression.mkv`（彩条+烧录时间码，16 秒）；客户机静音（stream 3 索引 0），取证后 force-stop。
+- 竖屏播放 → 旋转横屏（rotation=1）→ 播放中截帧（4s/14.9s）→ 横屏进度跳转 → 旋转回竖屏（rotation=0）→ 返回退出；`uiautomator dump`/`dumpsys` 交叉验证。
+
+### 16.2 结果
+
+- 横屏渲染两帧均无撕裂（彩条边缘整齐、时间码清晰）；控件/安全区/进度跳转/系统栏隐藏/方向切换/返回停服全部正常；`dumpsys activity services` 无残留。
+- **F-27 不复现**，以模拟器证据关闭；未改任何渲染代码。限制：转译+SwiftShader，实体 ARM/硬解与 ≥5 分钟长时横屏未验证（阶段 4 残余风险）。
+- 证据：`evidence/player-portrait-1f.png`、`player-landscape-1f.png`、`player-landscape-2-1f.png`、`player-landscape-seek-1f.png`，索引 `evidence/README-1F.md`。
+
+### 16.3 阶段结论
+
+- 纯验证与文档，无代码变更，不升版本（保持 1.0.6）。
+- **阶段 1F 通过验收；自动进入阶段 2A（F-18/F-26/F-29）。**
