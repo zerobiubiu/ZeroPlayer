@@ -156,7 +156,7 @@ class WifiRiskAndImportTermsInstrumentedTest {
         compose.setContent {
             MaterialTheme {
                 SettingsSectionScreen(
-                    section = SettingsSection.IMPORT,
+                    section = SettingsSection.DATA,
                     onBack = {},
                     viewModel = viewModel,
                 )

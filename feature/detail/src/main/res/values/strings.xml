@@ -7,7 +7,12 @@
     <string name="detail_play">播放</string>
     <string name="detail_progress_format">观看进度 %1$s · 上次播放 %2$s</string>
     <string name="detail_no_progress">暂无播放进度</string>
+    <string name="detail_group_file">文件</string>
+    <string name="detail_group_video">视频</string>
+    <string name="detail_group_audio">音频</string>
+    <string name="detail_group_playback">播放记录</string>
     <string name="detail_video_info">视频信息</string>
+    <string name="detail_probe_source">导入时探测</string>
     <string name="detail_file_name">文件名</string>
     <string name="detail_size">大小</string>
     <string name="detail_duration">时长</string>

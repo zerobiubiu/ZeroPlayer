@@ -503,3 +503,73 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - 纯验证与文档，无代码变更，不升版本（保持 1.0.6）。
 - **阶段 1F 通过验收；自动进入阶段 2A（F-18/F-26/F-29）。**
+
+---
+
+## 十七、阶段 2A：设置信息架构重组与数值表单紧凑化（F-18 / F-26 / F-29）
+
+- 时间：2026-11-13
+- 对应任务：T-18、T-26、T-29
+- 变更记录：[changes/0017-settings-ia-numeric-forms.md](../../changes/0017-settings-ia-numeric-forms.md)
+
+### 17.1 实施
+
+- **F-18**：一级 7→5 入口（播放与字幕/手势与反馈/外观/数据与存储/关于）；`SettingsSection.fromId` 旧路由重定向（display→appearance、import/storage→data、subtitle→playback）；二级页按新分组渲染；摘要同步。
+- **F-26**：`NumericSettingRow` 改紧凑行（≥56dp）+ `NumericEditDialog`（预填全选、键盘完成/确定即生效、非法不写入、取消放弃）；沿用 `resolveNumericEdit` 与 SettingsWriteQueue。
+- **F-29**：范围提示仅在对话框聚焦或出错时显示，紧凑行默认隐藏。
+
+### 17.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10007 / versionName=1.0.7 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 121 tests，2 skipped，0 failure（原 118，新增路由 3） |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 17.3 |
+
+### 17.3 仪器化与截图
+
+- `DetailSettingsInstrumentedTest` 导航断言改外观/数据与存储；数值用例改对话框交互（紧凑行无范围提示→开对话框→聚焦显示范围→非法不写入→合法即写→返回重进保留）。
+- `WifiRiskAndImportTermsInstrumentedTest` 设置·导入断言改用 `SettingsSection.DATA`。
+- 截图索引见 `evidence/README-2A.md`。
+
+### 17.4 阶段结论
+
+- F-18/F-26/F-29 验收由路由单测、仪器化交互与截图覆盖；F-37 保存语义不变。
+- **阶段 2A 通过验收；自动进入阶段 2B（F-01/F-24/F-30/F-23/F-04）。**
+
+---
+
+## 十八、阶段 2B：首页头部去重与统一顶栏、目录行与移动路径（F-01 / F-24 / F-30 / F-23 / F-04）
+
+- 时间：2026-11-13
+- 对应任务：T-01、T-24、T-30、T-23、T-04
+- 变更记录：[changes/0018-home-header-rows-move-path.md](../../changes/0018-home-header-rows-move-path.md)
+
+### 18.1 实施
+
+- **F-30**：AppTopBar 增 `titleContent` 插槽；首页 HomeTopBar 改用 AppTopBar，删自建 TopAppBar。
+- **F-01**：标题=当前文件夹名（根目录“文件”）；面包屑只含祖先；纯逻辑 `homeTitle`/`breadcrumbSegments`（HomeHeader.kt）。
+- **F-24**：面包屑并入顶栏标题区，删独立面包屑行；祖先紧凑 Text+clickable，热区 ≥48dp。
+- **F-23**：目录行 supportingContent=null 单行；文件行保留大小。
+- **F-04**：移动对话框根目录“当前位置：根目录”，子目录真实相对路径。
+
+### 18.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10008 / versionName=1.0.8 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 125 tests，2 skipped，0 failure（原 121，新增 HomeHeader 4） |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 18.3 |
+
+### 18.3 仪器化与截图
+
+- `HomeHeaderTest` 4 例（根/一级/多级标题与面包屑、末段不重复）。
+- 数值对话框用例修复：焦点改 onGloballyPositioned 请求、行/对话框/值三套 testTag 区分（setting-/setting-edit-/setting-value-，值断言用 useUnmergedTree）。
+- 截图索引见 `evidence/README-2B.md`。
+
+### 18.4 阶段结论
+
+- F-01/F-24/F-30/F-23/F-04 验收由头部单测、仪器化回归与截图覆盖。
+- **阶段 2B 通过验收；自动进入阶段 2C（F-25/F-06/F-07/F-15）。**

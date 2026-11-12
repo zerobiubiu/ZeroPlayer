@@ -218,15 +218,6 @@ fun MediaDetailScreen(
                             overflow = TextOverflow.Ellipsis,
                         )
                         Spacer(Modifier.height(Spacing.sm))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                            verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                        ) {
-                            MetaChip(media.resolutionLabel)
-                            MetaChip(formatDuration(media.durationMs))
-                            MetaChip(formatBytes(media.sizeBytes))
-                        }
-                        Spacer(Modifier.height(Spacing.sm))
                         Text(
                             text = if (media.hasProgress) {
                                 stringResource(R.string.detail_progress_format, formatPercent(media.progress), formatDateTime(media.lastPlayedAt))
@@ -241,12 +232,27 @@ fun MediaDetailScreen(
 
                 item {
                     Spacer(Modifier.height(Spacing.lg))
-                    SectionHeader(title = stringResource(R.string.detail_video_info))
+                    SectionHeader(title = stringResource(R.string.detail_group_file))
                 }
                 item {
                     Column {
                         InfoRow(stringResource(R.string.detail_file_name), media.fileName)
                         InfoRow(stringResource(R.string.detail_size), formatBytes(media.sizeBytes))
+                        InfoRow(stringResource(R.string.detail_added_at), formatDateTime(media.addedAt))
+                        state.fileInfo?.let { info ->
+                            InfoRow(
+                                stringResource(R.string.detail_file_status),
+                                stringResource(if (info.exists) R.string.detail_file_status_ok else R.string.detail_file_status_missing),
+                            )
+                        }
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(Spacing.lg))
+                    SectionHeader(title = stringResource(R.string.detail_group_video))
+                }
+                item {
+                    Column {
                         InfoRow(stringResource(R.string.detail_duration), formatDuration(media.durationMs))
                         InfoRow(
                             label = stringResource(R.string.detail_resolution),
@@ -257,25 +263,29 @@ fun MediaDetailScreen(
                             },
                         )
                         InfoRow(stringResource(R.string.detail_video_codec), media.videoCodec ?: stringResource(R.string.detail_unknown))
-                        InfoRow(stringResource(R.string.detail_audio_codec), media.audioCodec ?: stringResource(R.string.detail_unknown))
                         InfoRow(
                             label = stringResource(R.string.detail_bitrate),
-                            value = media.bitrate?.let { stringResource(R.string.detail_bitrate_bps, it) } ?: stringResource(R.string.detail_unknown),
+                            value = formatBitrate(media.bitrate) ?: stringResource(R.string.detail_unknown),
                         )
-                        InfoRow(stringResource(R.string.detail_audio_tracks_probe), "${media.audioTrackCount}")
-                        InfoRow(
-                            stringResource(R.string.detail_subtitle_tracks_probe),
-                            if (media.subtitleTrackCount == 0) stringResource(R.string.detail_subtitle_tracks_unknown) else "${media.subtitleTrackCount}",
-                        )
-                        InfoRow(stringResource(R.string.detail_added_at), formatDateTime(media.addedAt))
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(Spacing.lg))
+                    SectionHeader(title = stringResource(R.string.detail_group_audio))
+                }
+                item {
+                    Column {
+                        InfoRow(stringResource(R.string.detail_audio_codec), media.audioCodec ?: stringResource(R.string.detail_unknown))
+                    }
+                }
+                item {
+                    Spacer(Modifier.height(Spacing.lg))
+                    SectionHeader(title = stringResource(R.string.detail_group_playback))
+                }
+                item {
+                    Column {
                         InfoRow(stringResource(R.string.detail_last_played), formatDateTime(media.lastPlayedAt))
                         InfoRow(stringResource(R.string.detail_play_count), "${media.playCount}")
-                        state.fileInfo?.let { info ->
-                            InfoRow(
-                                stringResource(R.string.detail_file_status),
-                                stringResource(if (info.exists) R.string.detail_file_status_ok else R.string.detail_file_status_missing),
-                            )
-                        }
                     }
                 }
 
@@ -381,6 +391,13 @@ fun MediaDetailScreen(
                 add(stringResource(R.string.detail_info_disk_size) to formatBytes(state.fileInfo?.sizeBytes ?: 0L))
                 add(stringResource(R.string.detail_info_mime) to (media.mimeType ?: stringResource(R.string.detail_unknown)))
                 add(stringResource(R.string.detail_info_thumbnail) to (media.thumbnailPath ?: stringResource(R.string.detail_info_thumbnail_none)))
+                // F-06：导入探测的轨道数移入文件信息并注明来源，主表不再展示。
+                add(stringResource(R.string.detail_audio_tracks_probe) to "${media.audioTrackCount}")
+                add(
+                    stringResource(R.string.detail_subtitle_tracks_probe) to
+                        if (media.subtitleTrackCount == 0) stringResource(R.string.detail_subtitle_tracks_unknown) else "${media.subtitleTrackCount}",
+                )
+                add(stringResource(R.string.detail_probe_source) to stringResource(R.string.detail_added_at) + " " + formatDateTime(media.addedAt))
             },
             onDismiss = { viewModel.setShowFileInfo(false) },
         )

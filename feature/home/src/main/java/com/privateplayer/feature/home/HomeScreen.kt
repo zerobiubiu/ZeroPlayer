@@ -1,6 +1,7 @@
 package com.privateplayer.feature.home
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,19 +13,18 @@ import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,8 +32,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -47,9 +45,11 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.design.components.EmptyState
+import com.privateplayer.core.design.components.AppTopBar
 import com.privateplayer.core.design.components.DeleteDialog
 import com.privateplayer.core.design.components.MoveDialog
 import com.privateplayer.core.design.components.NameDialog
@@ -93,9 +93,10 @@ fun HomeScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             HomeTopBar(
-                canGoBack = state.currentDirectory.isNotEmpty(),
+                currentDirectory = state.currentDirectory,
                 enabled = !state.isWorking,
                 onBack = viewModel::navigateUp,
+                onNavigate = viewModel::openDirectory,
                 onCreateDirectory = { dialog = HomeDialog.CreateDirectory(state.currentDirectory) },
                 onLocalImport = { onOpenLocalImport(state.currentDirectory) },
                 onWifiImport = { onOpenWifiImport(state.currentDirectory) },
@@ -106,10 +107,6 @@ fun HomeScreen(
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
         ) {
-            DirectoryBreadcrumbs(
-                path = state.currentDirectory,
-                onNavigate = viewModel::openDirectory,
-            )
             when {
                 state.isLoading -> Box(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -215,23 +212,36 @@ fun HomeScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/**
+ * 首页顶栏（F-30）：复用 AppTopBar，标题为当前文件夹名（根目录为“文件”），
+ * 副标题为祖先路径面包屑（F-01 去重、F-24 紧凑且可点 ≥48dp）。
+ */
 @Composable
 private fun HomeTopBar(
-    canGoBack: Boolean,
+    currentDirectory: String,
     enabled: Boolean,
     onBack: () -> Unit,
+    onNavigate: (String) -> Unit,
     onCreateDirectory: () -> Unit,
     onLocalImport: () -> Unit,
     onWifiImport: () -> Unit,
 ) {
     var importMenuExpanded by remember { mutableStateOf(false) }
-    TopAppBar(
-        title = { Text(stringResource(R.string.home_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        navigationIcon = {
-            if (canGoBack) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.home_back_description))
+    val rootLabel = stringResource(R.string.home_title)
+    val title = homeTitle(currentDirectory, rootLabel)
+    AppTopBar(
+        title = title,
+        onBack = if (currentDirectory.isNotEmpty()) onBack else null,
+        titleContent = {
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                if (currentDirectory.isNotEmpty()) {
+                    DirectoryBreadcrumbs(path = currentDirectory, onNavigate = onNavigate)
                 }
             }
         },
@@ -258,24 +268,18 @@ private fun HomeTopBar(
     )
 }
 
+/**
+ * 祖先路径面包屑（F-24）：紧凑文本行，祖先可点击且热区 ≥48dp；
+ * 不含当前文件夹（当前文件夹已是标题，F-01 去重）。根段为“文件”。
+ */
 @Composable
 private fun DirectoryBreadcrumbs(path: String, onNavigate: (String) -> Unit) {
     val rootLabel = stringResource(R.string.home_title)
-    val segments = remember(path, rootLabel) {
-        val parts = path.split('/').filter(String::isNotEmpty)
-        buildList {
-            add(rootLabel to "")
-            var current = ""
-            parts.forEach { part ->
-                current = if (current.isEmpty()) part else "$current/$part"
-                add(part to current)
-            }
-        }
-    }
+    val segments = remember(path, rootLabel) { breadcrumbSegments(path, rootLabel) }
     val scroll = rememberScrollState()
     LaunchedEffect(path, scroll.maxValue) { scroll.scrollTo(scroll.maxValue) }
     Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll).padding(horizontal = Spacing.sm),
+        modifier = Modifier.fillMaxWidth().horizontalScroll(scroll),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Start,
     ) {
@@ -283,20 +287,21 @@ private fun DirectoryBreadcrumbs(path: String, onNavigate: (String) -> Unit) {
             if (index > 0) {
                 Text(
                     text = "/",
-                    style = MaterialTheme.typography.labelLarge,
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            if (index == segments.lastIndex) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.md),
-                )
-            } else {
-                TextButton(onClick = { onNavigate(directory) }) { Text(name, maxLines = 1) }
-            }
+            Text(
+                text = name,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .defaultMinSize(minHeight = 48.dp)
+                    .clickable { onNavigate(directory) }
+                    .padding(horizontal = Spacing.xs),
+            )
         }
     }
 }

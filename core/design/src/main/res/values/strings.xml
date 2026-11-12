@@ -16,8 +16,8 @@
     <string name="design_delete_file_message">将永久删除“%1$s”，此操作无法撤销。</string>
     <string name="design_move_title">移动“%1$s”</string>
     <string name="design_move_pick_target">选择目标文件夹</string>
-    <string name="design_move_current_root">当前位置：文件</string>
-    <string name="design_move_current_path">当前位置：文件/%1$s</string>
+    <string name="design_move_current_root">当前位置：根目录</string>
+    <string name="design_move_current_path">当前位置：%1$s</string>
     <string name="design_move_up">返回上级文件夹</string>
     <string name="design_move_loading">正在读取文件夹…</string>
     <string name="design_move_error">无法读取此文件夹，请重试。</string>

@@ -60,7 +60,7 @@ import com.privateplayer.domain.model.ThemeMode
 import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.roundToInt
 
-/** 设置二级页面；一级只显示分组入口与当前摘要。文案全部来自模块资源。 */
+/** 设置二级页面；一级按任务分组（播放与字幕 / 手势与反馈 / 外观 / 数据与存储 / 关于）。文案全部来自模块资源。 */
 enum class SettingsSection(
     val id: String,
     @StringRes val titleRes: Int,
@@ -68,16 +68,20 @@ enum class SettingsSection(
     val icon: ImageVector,
 ) {
     PLAYBACK("playback", R.string.settings_section_playback, R.string.settings_section_playback_summary, Icons.Outlined.PlayCircle),
-    SUBTITLE("subtitle", R.string.settings_section_subtitle, R.string.settings_section_subtitle_summary, Icons.Outlined.ClosedCaption),
     GESTURE("gesture", R.string.settings_section_gesture, R.string.settings_section_gesture_summary, Icons.Outlined.TouchApp),
-    DISPLAY("display", R.string.settings_section_display, R.string.settings_section_display_summary, Icons.Outlined.Palette),
-    IMPORT("import", R.string.settings_section_import, R.string.settings_section_import_summary, Icons.Outlined.FileDownload),
-    STORAGE("storage", R.string.settings_section_storage, R.string.settings_section_storage_summary, Icons.Outlined.Storage),
+    APPEARANCE("appearance", R.string.settings_section_appearance, R.string.settings_section_appearance_summary, Icons.Outlined.Palette),
+    DATA("data", R.string.settings_section_data, R.string.settings_section_data_summary, Icons.Outlined.Storage),
     ABOUT("about", R.string.settings_section_about, R.string.settings_section_about_summary, Icons.Outlined.Info),
     ;
 
     companion object {
-        fun fromId(id: String?): SettingsSection? = entries.firstOrNull { it.id == id }
+        /** 旧路由兼容：display→appearance，import/storage→data，subtitle→playback。 */
+        fun fromId(id: String?): SettingsSection? = when (id) {
+            "display" -> APPEARANCE
+            "import", "storage" -> DATA
+            "subtitle" -> PLAYBACK
+            else -> entries.firstOrNull { it.id == id }
+        }
     }
 }
 
@@ -209,12 +213,16 @@ fun SettingsSectionScreen(
                     .padding(bottom = Spacing.contentBottom),
             ) {
                 when (section) {
-                    SettingsSection.PLAYBACK -> PlaybackSettings(state, viewModel)
-                    SettingsSection.SUBTITLE -> SubtitleSettings(state, viewModel)
+                    SettingsSection.PLAYBACK -> {
+                        PlaybackSettings(state, viewModel)
+                        SubtitleSettings(state, viewModel)
+                    }
                     SettingsSection.GESTURE -> GestureSettings(state, viewModel)
-                    SettingsSection.DISPLAY -> DisplaySettings(state, viewModel)
-                    SettingsSection.IMPORT -> ImportSettings(state, viewModel)
-                    SettingsSection.STORAGE -> StorageSettings(state, viewModel)
+                    SettingsSection.APPEARANCE -> DisplaySettings(state, viewModel)
+                    SettingsSection.DATA -> {
+                        ImportSettings(state, viewModel)
+                        StorageSettings(state, viewModel)
+                    }
                     SettingsSection.ABOUT -> AboutSettings(state)
                 }
             }
@@ -506,23 +514,14 @@ private fun sectionDetail(section: SettingsSection, state: SettingsUiState): Str
     SettingsSection.PLAYBACK -> listOf(
         stringResource(if (state.settings.playback.autoResume) R.string.settings_detail_auto_resume else R.string.settings_detail_from_start),
         stringResource(R.string.settings_detail_speed_format, state.settings.playback.defaultSpeed.toString()),
-        stringResource(state.settings.playback.defaultAspect.labelRes),
-    ).joinToString(" · ")
-    SettingsSection.SUBTITLE -> listOf(
         stringResource(R.string.settings_detail_font_scale_format, (state.settings.subtitle.fontSizeScale * 100).roundToInt()),
-        stringResource(state.settings.subtitle.textColor.labelRes),
-        stringResource(R.string.settings_detail_delay_step_format, state.settings.subtitle.delayStepMs),
     ).joinToString(" · ")
     SettingsSection.GESTURE -> listOf(
         stringResource(if (state.settings.gesture.seekGestureEnabled) R.string.settings_detail_seek_on else R.string.settings_detail_seek_off),
         stringResource(if (state.settings.gesture.hapticsEnabled) R.string.settings_detail_haptics_on else R.string.settings_detail_haptics_off),
     ).joinToString(" · ")
-    SettingsSection.DISPLAY -> stringResource(state.settings.display.themeMode.labelRes)
-    SettingsSection.IMPORT -> listOf(
-        stringResource(if (state.settings.import.generateThumbnails) R.string.settings_detail_thumbnails_on else R.string.settings_detail_thumbnails_off),
-        stringResource(if (state.settings.import.duplicateDetection) R.string.settings_detail_duplicate_on else R.string.settings_detail_duplicate_off),
-    ).joinToString(" · ")
-    SettingsSection.STORAGE -> stringResource(
+    SettingsSection.APPEARANCE -> stringResource(state.settings.display.themeMode.labelRes)
+    SettingsSection.DATA -> stringResource(
         R.string.settings_detail_video_usage_format, state.usage.mediaCount, formatBytes(state.usage.mediaBytes),
     )
     SettingsSection.ABOUT -> stringResource(R.string.settings_detail_version_format, state.versionName, state.engineLabel)

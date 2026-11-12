@@ -6,8 +6,11 @@ import android.provider.MediaStore
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasScrollAction
@@ -261,16 +264,16 @@ class DetailSettingsInstrumentedTest {
         compose.waitUntil(10_000) { viewModel.uiState.value.usage.mediaCount == 3 }
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("显示"))
-        compose.onNodeWithText("显示").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("外观"))
+        compose.onNodeWithText("外观").performClick()
         compose.onNode(hasText("主题模式") and hasClickAction()).assertExists()
         compose.onNodeWithText("跟随系统").assertExists()
         compose.onAllNodesWithText("网格密度", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("返回").performClick()
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("存储"))
-        compose.onNodeWithText("存储").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("数据与存储"))
+        compose.onNodeWithText("数据与存储").performClick()
         compose.onNodeWithText("文件").assertExists()
         compose.onNodeWithText("3 个视频 · 1.5 GiB").assertExists()
         compose.onNodeWithText("2.0 MiB").assertExists()
@@ -329,39 +332,56 @@ class DetailSettingsInstrumentedTest {
         }
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed > 0f }
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
-        compose.onNodeWithText("播放").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放与字幕"))
+        compose.onNodeWithText("播放与字幕").performClick()
 
         // 页面不再有逐行“保存”按钮
         compose.onAllNodesWithText("保存", substring = true).assertCountEquals(0)
 
+        // 紧凑行：默认不显示范围提示（F-29）
+        compose.onNodeWithText("允许范围：0.25～4 倍").assertDoesNotExist()
+
+        // 点击紧凑行打开编辑对话框，预填当前值
+        compose.onNodeWithTag("setting-默认倍速").performClick()
+        compose.onNodeWithText("编辑默认倍速").assertExists()
+        // 聚焦后显示范围提示（F-29）；requestFocus 异步，等待焦点生效
+        compose.waitUntil(10_000) {
+            compose.onAllNodesWithText("允许范围：0.25～4 倍").fetchSemanticsNodes().isNotEmpty()
+        }
+
         // 先归一到一个确定的基线值，后续断言不依赖设备上残留的旧设置
-        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("1")
-        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.onNodeWithTag("setting-edit-默认倍速").performTextReplacement("1")
+        compose.onNodeWithTag("setting-edit-默认倍速").performImeAction()
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 1.0f }
 
-        // 非法值不写入并给出提示
-        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("9")
-        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        // 非法值不写入并给出提示，对话框不关闭
+        compose.onNodeWithTag("setting-默认倍速").performClick()
+        compose.onNodeWithTag("setting-edit-默认倍速").performTextReplacement("9")
+        compose.onNodeWithTag("setting-edit-默认倍速").performImeAction()
         compose.onNodeWithText("请输入0.25～4 倍").assertExists()
         assertEquals(1.0f, viewModel.uiState.value.settings.playback.defaultSpeed, 0.0f)
 
-        // 合法值键盘完成即写入，无需点击保存
-        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("2.5")
-        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        // 合法值键盘完成即写入，无需点击保存（对话框仍开着，直接改值）
+        compose.onNodeWithTag("setting-edit-默认倍速").performTextReplacement("2.5")
+        compose.onNodeWithTag("setting-edit-默认倍速").performImeAction()
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 2.5f }
 
         // 快速连续修改，最后一次生效
-        compose.onNodeWithTag("setting-默认倍速").performTextReplacement("3")
-        compose.onNodeWithTag("setting-默认倍速").performImeAction()
+        compose.onNodeWithTag("setting-默认倍速").performClick()
+        compose.onNodeWithTag("setting-edit-默认倍速").performTextReplacement("3")
+        compose.onNodeWithTag("setting-edit-默认倍速").performImeAction()
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 3.0f }
 
         // 返回一级再进入，值保留
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
-        compose.onNodeWithText("播放").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放与字幕"))
+        compose.onNodeWithText("播放与字幕").performClick()
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 3.0f }
-        compose.onNodeWithTag("setting-默认倍速").assertTextContains("3.0")
+        compose.onNodeWithTag("setting-value-默认倍速", useUnmergedTree = true)
+            .assert(SemanticsMatcher("值含 3.0") { node ->
+                node.config.getOrElseNullable(SemanticsProperties.Text) { null }
+                    ?.any { it.text.contains("3.0") } == true
+            })
     }
 }
 

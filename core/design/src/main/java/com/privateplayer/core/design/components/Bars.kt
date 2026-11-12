@@ -27,7 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.core.design.R
 
-/** 标准顶部导航栏：返回按钮 + 标题 + 操作区。 */
+/** 标准顶部导航栏：返回按钮 + 标题 + 操作区。titleContent 可自定义标题区（如首页标题+面包屑）。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppTopBar(
@@ -35,10 +35,11 @@ fun AppTopBar(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
+    titleContent: (@Composable () -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     TopAppBar(
-        title = {
+        title = titleContent ?: {
             Column {
                 Text(
                     text = title,

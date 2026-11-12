@@ -65,14 +65,8 @@ internal fun FileTreeRow(
         headlineContent = {
             Text(entry.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
-        supportingContent = {
-            Text(
-                if (entry.isDirectory) {
-                    stringResource(R.string.home_folder_row_label)
-                } else {
-                    stringResource(R.string.home_file_row_format, formatBytes(entry.sizeBytes))
-                },
-            )
+        supportingContent = if (entry.isDirectory) null else {
+            { Text(stringResource(R.string.home_file_row_format, formatBytes(entry.sizeBytes))) }
         },
         trailingContent = {
             Box {

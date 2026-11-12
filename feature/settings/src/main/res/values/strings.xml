@@ -4,19 +4,15 @@
     <string name="settings_title">设置</string>
     <string name="settings_group_preferences">偏好设置</string>
 
-    <!-- 一级入口与摘要 -->
-    <string name="settings_section_playback">播放</string>
-    <string name="settings_section_playback_summary">续播、倍速与画面比例</string>
-    <string name="settings_section_subtitle">字幕</string>
-    <string name="settings_section_subtitle_summary">字号、颜色与延迟</string>
-    <string name="settings_section_gesture">手势</string>
+    <!-- 一级入口与摘要（按任务分组：播放与字幕 / 手势与反馈 / 外观 / 数据与存储 / 关于） -->
+    <string name="settings_section_playback">播放与字幕</string>
+    <string name="settings_section_playback_summary">续播、倍速、比例与字幕样式</string>
+    <string name="settings_section_gesture">手势与反馈</string>
     <string name="settings_section_gesture_summary">亮度、音量、进度与震动</string>
-    <string name="settings_section_display">显示</string>
-    <string name="settings_section_display_summary">主题模式</string>
-    <string name="settings_section_import">导入</string>
-    <string name="settings_section_import_summary">缩略图与重复检测</string>
-    <string name="settings_section_storage">存储</string>
-    <string name="settings_section_storage_summary">用量统计与缓存清理</string>
+    <string name="settings_section_appearance">外观</string>
+    <string name="settings_section_appearance_summary">主题模式</string>
+    <string name="settings_section_data">数据与存储</string>
+    <string name="settings_section_data_summary">导入选项、用量与缓存清理</string>
     <string name="settings_section_about">关于</string>
     <string name="settings_section_about_summary">版本、播放引擎与许可</string>
     <string name="settings_enter_section">进入%1$s设置</string>
@@ -24,16 +20,10 @@
     <string name="settings_detail_from_start">从头播放</string>
     <string name="settings_detail_speed_format">%1$s×</string>
     <string name="settings_detail_font_scale_format">字号 %1$d%%</string>
-    <string name="settings_detail_delay_step_format">步长 %1$d ms</string>
     <string name="settings_detail_seek_on">滑动调速</string>
     <string name="settings_detail_seek_off">滑动已关闭</string>
     <string name="settings_detail_haptics_on">震动开</string>
     <string name="settings_detail_haptics_off">震动关</string>
-    <string name="settings_detail_thumbnails_on">生成缩略图</string>
-    <string name="settings_detail_thumbnails_off">不生成缩略图</string>
-    <string name="settings_detail_duplicate_on">查重开</string>
-    <string name="settings_detail_duplicate_off">查重关</string>
-    <string name="settings_detail_video_count_format">%1$d 个视频</string>
     <string name="settings_detail_video_usage_format">%1$d 个视频 · %2$s</string>
     <string name="settings_detail_version_format">版本 %1$s · %2$s</string>
 
@@ -114,6 +104,8 @@
     <string name="settings_thumbnails_cleared">缩略图缓存已清理</string>
     <string name="settings_temp_cleared">临时文件已清理</string>
     <string name="settings_expand_options">展开%1$s选项</string>
+    <string name="settings_numeric_edit_value">编辑%1$s</string>
+    <string name="settings_numeric_confirm">确定</string>
     <string name="settings_unit_times">×</string>
     <string name="settings_unit_seconds">秒</string>
     <string name="settings_unit_percent">%</string>

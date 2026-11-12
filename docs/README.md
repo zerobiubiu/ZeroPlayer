@@ -48,6 +48,8 @@
 | [0014](changes/0014-ui-menu-and-detail-actions.md) | 菜单分组与详情页文件操作：信息/传输/管理/危险分组、详情更多菜单五项操作、播放安全停止 |
 | [0015](changes/0015-copy-layer-terminology-wifi-risk.md) | 术语统一、模块文案资源层与门禁、Wi-Fi 无鉴权风险独立警示块（阶段 1E：F-10/F-14/F-09） |
 | [0016](changes/0016-landscape-verification.md) | 横屏渲染验证：F-27 模拟器不复现，以证据关闭并标注真机残余风险（阶段 1F） |
+| [0017](changes/0017-settings-ia-numeric-forms.md) | 设置一级按任务重组为 5 入口、数值紧凑行+编辑对话框、范围提示按需显示（阶段 2A：F-18/F-26/F-29） |
+| [0018](changes/0018-home-header-rows-move-path.md) | 首页标题/面包屑去重并入统一顶栏、目录行单行、移动路径根目录文案（阶段 2B：F-01/F-24/F-30/F-23/F-04） |
 
 ### troubleshooting/（长期可复现的问题）
 

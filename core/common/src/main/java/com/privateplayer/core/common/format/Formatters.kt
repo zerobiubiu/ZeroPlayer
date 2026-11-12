@@ -29,6 +29,27 @@ fun formatBytes(bytes: Long): String {
 }
 
 /**
+ * 人类可读的码率，例如 `3.1 Mbps`（F-07）。
+ * 按 1000 进制换算（bps→Kbps→Mbps→Gbps），保留 1 位小数；
+ * 未知（null）或 <=0 返回 null，由界面显示“未知”。
+ */
+fun formatBitrate(bps: Long?): String? {
+    if (bps == null || bps <= 0L) return null
+    var value = bps.toDouble()
+    var unitIndex = 0
+    val units = arrayOf("bps", "Kbps", "Mbps", "Gbps")
+    while (value >= 1000.0 && unitIndex < units.lastIndex) {
+        value /= 1000.0
+        unitIndex++
+    }
+    return if (unitIndex == 0) {
+        "${value.toLong()} ${units[unitIndex]}"
+    } else {
+        String.format(Locale.US, "%.1f %s", value, units[unitIndex])
+    }
+}
+
+/**
  * 播放时长，例如 `1:02:03`、`02:03`。
  * 时长未知（<= 0）时返回 `--:--`。
  */
