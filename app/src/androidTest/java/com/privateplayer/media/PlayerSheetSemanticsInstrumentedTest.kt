@@ -171,7 +171,6 @@ class PlayerSheetSemanticsInstrumentedTest {
                         SheetAction("锁定屏幕", Icons.Outlined.Lock, {}, kind = SheetActionKind.Action),
                         SheetAction("音轨", Icons.Outlined.VolumeUp, {}, kind = SheetActionKind.Navigation),
                         SheetAction("画面比例", Icons.Outlined.AspectRatio, {}, kind = SheetActionKind.Navigation),
-                        SheetAction("旋转屏幕", Icons.Outlined.AspectRatio, {}, kind = SheetActionKind.Action),
                     ),
                     onDismiss = {},
                 )
@@ -184,6 +183,8 @@ class PlayerSheetSemanticsInstrumentedTest {
         // F-17：技术诊断不再占据面板；引擎信息在设置·关于中查看
         compose.onAllNodesWithText("播放引擎", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("libmpv", substring = true).assertCountEquals(0)
+        // F-19：旋转已提为顶栏独立按钮，“更多”不再保留第二入口
+        compose.onAllNodesWithText("旋转屏幕").assertCountEquals(0)
     }
 
     @Test

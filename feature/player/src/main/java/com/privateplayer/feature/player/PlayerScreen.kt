@@ -16,15 +16,22 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -32,6 +39,7 @@ import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PlaylistPlay
+import androidx.compose.material.icons.outlined.QueueMusic
 import androidx.compose.material.icons.outlined.Repeat
 import androidx.compose.material.icons.outlined.RepeatOne
 import androidx.compose.material.icons.outlined.ScreenRotation
@@ -64,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,9 +86,12 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.design.components.ActionSheet
+import com.privateplayer.core.design.components.EmptyState
 import com.privateplayer.core.design.components.ImmersiveSheetWindowEffect
 import com.privateplayer.core.design.components.SheetAction
 import com.privateplayer.core.design.components.SheetActionKind
+import com.privateplayer.core.design.theme.Radius
+import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.core.playback.PlaybackStatus
 import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.abs
@@ -409,6 +421,7 @@ fun PlayerScreen(
                         title = state.title,
                         onBack = closePlayer,
                         onOpenAspect = { showAspectSheet = true },
+                        onRotate = { activity?.toggleOrientation() },
                         onOpenSubtitle = { showSubtitleSheet = true },
                         onOpenMore = { showMoreSheet = true },
                     )
@@ -512,18 +525,13 @@ fun PlayerScreen(
         ActionSheet(
             title = "画面比例",
             immersive = true,
-            actions = VideoAspect.entries.map { aspect ->
-                SheetAction(
-                    label = aspect.labelText,
-                    icon = Icons.Outlined.AspectRatio,
-                    kind = SheetActionKind.SingleChoice,
-                    selected = aspect == state.playback.aspect,
-                    onClick = {
-                        viewModel.setAspect(aspect)
-                        showAspectSheet = false
-                    },
-                )
-            },
+            actions = aspectSheetActions(
+                current = state.playback.aspect,
+                onPick = { aspect ->
+                    viewModel.setAspect(aspect)
+                    showAspectSheet = false
+                },
+            ),
             onDismiss = { showAspectSheet = false },
         )
     }
@@ -565,95 +573,40 @@ fun PlayerScreen(
         ActionSheet(
             title = state.title,
             immersive = true,
-            actions = listOf(
-                SheetAction(
-                    label = "锁定屏幕",
-                    icon = Icons.Outlined.Lock,
-                    kind = SheetActionKind.Action,
-                    supportingText = "隐藏控制，避免误触",
-                    onClick = {
-                        viewModel.toggleLock()
-                        showMoreSheet = false
-                    },
-                ),
-                SheetAction(
-                    label = "音轨",
-                    icon = Icons.Outlined.VolumeUp,
-                    kind = SheetActionKind.Navigation,
-                    supportingText = audioLabel(state),
-                    onClick = {
-                        showMoreSheet = false
-                        showAudioSheet = true
-                    },
-                ),
-                SheetAction(
-                    label = "画面比例",
-                    icon = Icons.Outlined.AspectRatio,
-                    kind = SheetActionKind.Navigation,
-                    supportingText = state.playback.aspect.labelText,
-                    onClick = {
-                        showMoreSheet = false
-                        showAspectSheet = true
-                    },
-                ),
-                SheetAction(
-                    label = "旋转屏幕",
-                    icon = Icons.Outlined.ScreenRotation,
-                    kind = SheetActionKind.Action,
-                    supportingText = "切换横屏 / 竖屏",
-                    onClick = {
-                        activity?.toggleOrientation()
-                        showMoreSheet = false
-                    },
-                ),
+            actions = moreSheetActions(
+                state = state,
+                onLock = {
+                    viewModel.toggleLock()
+                    showMoreSheet = false
+                },
+                onOpenAudio = {
+                    showMoreSheet = false
+                    showAudioSheet = true
+                },
+                onOpenAspect = {
+                    showMoreSheet = false
+                    showAspectSheet = true
+                },
             ),
             onDismiss = { showMoreSheet = false },
         )
     }
 
     if (showQueueSheet) {
-        ActionSheet(
-            title = "播放列表 · ${(state.queueIndex + 1).coerceAtLeast(1)}/${state.queue.size.coerceAtLeast(1)}",
-            immersive = true,
-            actions = buildList {
-                add(
-                    SheetAction(
-                        label = "上一集",
-                        icon = Icons.Outlined.SkipPrevious,
-                        kind = SheetActionKind.Action,
-                        enabled = state.queueIndex > 0,
-                        onClick = {
-                            viewModel.playPrevious()
-                            showQueueSheet = false
-                        },
-                    ),
-                )
-                add(
-                    SheetAction(
-                        label = "下一集",
-                        icon = Icons.Outlined.SkipNext,
-                        kind = SheetActionKind.Action,
-                        enabled = state.hasNext,
-                        onClick = {
-                            viewModel.playNext()
-                            showQueueSheet = false
-                        },
-                    ),
-                )
-                PlayMode.entries.forEach { mode ->
-                    add(
-                        SheetAction(
-                            label = mode.label,
-                            icon = mode.icon,
-                            kind = SheetActionKind.SingleChoice,
-                            selected = mode == state.playMode,
-                            onClick = {
-                                viewModel.setPlayMode(mode)
-                                showQueueSheet = false
-                            },
-                        ),
-                    )
-                }
+        PlaybackQueueSheet(
+            state = state,
+            onSelectItem = viewModel::playQueueItem,
+            onPlayPrevious = {
+                viewModel.playPrevious()
+                showQueueSheet = false
+            },
+            onPlayNext = {
+                viewModel.playNext()
+                showQueueSheet = false
+            },
+            onSelectMode = { mode ->
+                viewModel.setPlayMode(mode)
+                showQueueSheet = false
             },
             onDismiss = { showQueueSheet = false },
         )
@@ -706,6 +659,55 @@ private val VideoAspect.labelText: String
         VideoAspect.RATIO_4_3 -> "4:3"
     }
 
+/**
+ * “画面比例”面板的条目（F-19：与“旋转屏幕”完全分离）。
+ * 抽成共享构建器，保证页面与仪器化测试断言同一份内容。
+ */
+fun aspectSheetActions(current: VideoAspect, onPick: (VideoAspect) -> Unit): List<SheetAction> =
+    VideoAspect.entries.map { aspect ->
+        SheetAction(
+            label = aspect.labelText,
+            icon = Icons.Outlined.AspectRatio,
+            kind = SheetActionKind.SingleChoice,
+            selected = aspect == current,
+            onClick = { onPick(aspect) },
+        )
+    }
+
+/**
+ * “更多”面板的条目：锁定屏幕、音轨与画面比例导航。
+ * 旋转屏幕已提为顶栏独立按钮（F-19），此处不再保留第二入口；
+ * “播放引擎”技术行已在 F-17 移除。
+ */
+fun moreSheetActions(
+    state: PlayerUiState,
+    onLock: () -> Unit,
+    onOpenAudio: () -> Unit,
+    onOpenAspect: () -> Unit,
+): List<SheetAction> = listOf(
+    SheetAction(
+        label = "锁定屏幕",
+        icon = Icons.Outlined.Lock,
+        kind = SheetActionKind.Action,
+        supportingText = "隐藏控制，避免误触",
+        onClick = onLock,
+    ),
+    SheetAction(
+        label = "音轨",
+        icon = Icons.Outlined.VolumeUp,
+        kind = SheetActionKind.Navigation,
+        supportingText = audioLabel(state),
+        onClick = onOpenAudio,
+    ),
+    SheetAction(
+        label = "画面比例",
+        icon = Icons.Outlined.AspectRatio,
+        kind = SheetActionKind.Navigation,
+        supportingText = state.playback.aspect.labelText,
+        onClick = onOpenAspect,
+    ),
+)
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SubtitleSheet(
@@ -728,13 +730,13 @@ private fun SubtitleSheet(
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
-            SubtitleRow(
+            SelectionRow(
                 label = "关闭字幕",
                 selected = state.selectedSubtitleTrackId == null,
                 onClick = { onSelectTrack(null) },
             )
             state.subtitleTracks.forEach { track ->
-                SubtitleRow(
+                SelectionRow(
                     label = track.label,
                     selected = track.id == state.selectedSubtitleTrackId,
                     onClick = { onSelectTrack(track.id) },
@@ -782,13 +784,13 @@ private fun SubtitleSheet(
 }
 
 /**
- * 字幕轨选项行。
+ * 单选行：字幕轨、播放队列条目与播放模式共用。
  *
  * 当前项显示勾选并用容器色高亮，读屏播报“已选中”，与其它面板的
- * 单选语义保持一致。
+ * 单选语义保持一致（F-16）。
  */
 @Composable
-private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun SelectionRow(label: String, selected: Boolean, onClick: () -> Unit) {
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
     } else {
@@ -807,7 +809,7 @@ private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
         ) {
             Text(
                 text = label,
@@ -824,6 +826,131 @@ private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
             }
+        }
+    }
+}
+
+/**
+ * 播放队列面板（F-20）。
+ *
+ * 上半部渲染真实队列：仅当前播放项高亮并带勾选（沿用 F-16 单选语义），
+ * 点击其它条目只表达跳转意图，受理与执行由播放会话负责（[PlayerViewModel.playQueueItem]）。
+ * 下半部保留上一集/下一集与播放模式。队列限高懒加载，打开或当前项变化时定位到当前项。
+ * 面板窗口复用 [ImmersiveSheetWindowEffect] 保持沉浸式（F-38）。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PlaybackQueueSheet(
+    state: PlayerUiState,
+    onSelectItem: (Int) -> Unit,
+    onPlayPrevious: () -> Unit,
+    onPlayNext: () -> Unit,
+    onSelectMode: (PlayMode) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val listState = rememberLazyListState()
+    LaunchedEffect(state.queueIndex) {
+        if (state.queueIndex in state.queue.indices) {
+            listState.scrollToItem(state.queueIndex)
+        }
+    }
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = sheetState,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        ImmersiveSheetWindowEffect()
+        Column(modifier = Modifier.navigationBarsPadding().padding(bottom = Spacing.lg)) {
+            Text(
+                text = "播放队列 · ${(state.queueIndex + 1).coerceAtLeast(1)}/${state.queue.size.coerceAtLeast(1)}",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            )
+            if (state.queue.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Outlined.QueueMusic,
+                    title = "队列为空",
+                    message = "当前没有可播放的队列条目。",
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 320.dp)
+                        .fillMaxHeight(0.5f)
+                        .testTag("播放队列列表"),
+                ) {
+                    itemsIndexed(state.queue, key = { index, item -> "${item.mediaId}:${item.path}:$index" }) { index, item ->
+                        // 隐私：只展示文件名，不展示完整路径。
+                        SelectionRow(
+                            label = item.path.substringAfterLast('/').ifBlank { item.path },
+                            selected = index == state.queueIndex,
+                            onClick = { onSelectItem(index) },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = Spacing.lg),
+            ) {
+                QueueActionButton(
+                    label = "上一集",
+                    icon = Icons.Outlined.SkipPrevious,
+                    enabled = state.queueIndex > 0,
+                    onClick = onPlayPrevious,
+                    modifier = Modifier.weight(1f),
+                )
+                QueueActionButton(
+                    label = "下一集",
+                    icon = Icons.Outlined.SkipNext,
+                    enabled = state.hasNext,
+                    onClick = onPlayNext,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            Spacer(Modifier.height(Spacing.sm))
+            PlayMode.entries.forEach { mode ->
+                SelectionRow(
+                    label = mode.label,
+                    selected = mode == state.playMode,
+                    onClick = { onSelectMode(mode) },
+                )
+            }
+        }
+    }
+}
+
+/** 队列面板中的上一集/下一集动作行：是动作不是选择，不带任何勾选标记。 */
+@Composable
+private fun QueueActionButton(
+    label: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(Radius.thumbnail),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        modifier = modifier.heightIn(min = Spacing.xxxl),
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.md),
+        ) {
+            Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(Spacing.sm))
+            Text(text = label, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }

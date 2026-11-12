@@ -44,6 +44,7 @@
 | [0010](changes/0010-media-session-test-contract.md) | 更新 MediaSessionLifecycle 测试契约：关闭停服、重开新会话、断点与 playCount |
 | [0011](changes/0011-settings-immediate-save.md) | 设置保存模型统一为即时生效：删除逐行“保存”按钮、非法值不落库、写入串行保序 |
 | [0012](changes/0012-player-panels.md) | 播放器面板语义与沉浸式：单选/动作/导航/状态区分、面板窗口隐藏系统栏、移除技术行 |
+| [0013](changes/0013-player-entries-queue.md) | 播放器入口归位与真实播放队列：顶栏比例/旋转分离、播放队列渲染与受控跳转 |
 
 ### troubleshooting/（长期可复现的问题）
 

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
@@ -111,7 +112,8 @@ fun PlayerVideoLayer(
 }
 
 /**
- * 顶部控制条：返回、片名与三个常驻入口。
+ * 顶部控制条：返回、片名与四个常驻入口（画面比例、旋转屏幕、字幕、更多）。
+ * 画面比例与旋转是两个独立动作：前者打开比例面板，后者直接切换横竖屏。
  * 安全区只作用于按钮本身，视频画面仍可铺满异形屏的缺口区域。
  */
 @Composable
@@ -119,6 +121,7 @@ fun PlayerTopBar(
     title: String,
     onBack: () -> Unit,
     onOpenAspect: () -> Unit,
+    onRotate: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onOpenMore: () -> Unit,
     modifier: Modifier = Modifier,
@@ -147,7 +150,10 @@ fun PlayerTopBar(
                 .padding(horizontal = 4.dp),
         )
         IconButton(onClick = onOpenAspect) {
-            Icon(Icons.Outlined.ScreenRotation, contentDescription = "画面比例与旋转", tint = PlayerText)
+            Icon(Icons.Outlined.AspectRatio, contentDescription = "画面比例", tint = PlayerText)
+        }
+        IconButton(onClick = onRotate) {
+            Icon(Icons.Outlined.ScreenRotation, contentDescription = "旋转屏幕", tint = PlayerText)
         }
         IconButton(onClick = onOpenSubtitle) {
             Icon(Icons.Outlined.ClosedCaption, contentDescription = "字幕", tint = PlayerText)
@@ -257,7 +263,7 @@ fun PlayerBottomControls(
                 )
             }
             IconButton(onClick = onOpenQueue) {
-                Icon(Icons.Outlined.QueueMusic, contentDescription = "播放列表", tint = PlayerText)
+                Icon(Icons.Outlined.QueueMusic, contentDescription = "播放队列", tint = PlayerText)
             }
         }
     }

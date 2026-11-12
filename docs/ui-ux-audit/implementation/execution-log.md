@@ -343,3 +343,44 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 - 未提前实施 F-19/F-20；顶栏图标与队列渲染保持原样。
 - 手势导航/厂商差异、横屏/深色/1.3 字号复拍与 TalkBack 手测列为后续验证。
 - **阶段 1B 通过验收；不自动进入阶段 1C。**
+
+---
+
+## 十三、阶段 1C：播放器入口归位与真实播放队列（F-19 / F-20）
+
+- 时间：2026-11-12
+- 对应任务：T-19、T-20（含阶段 0 决策 D3 的受控跳转 API）
+- 变更记录：[changes/0013-player-entries-queue.md](../../changes/0013-player-entries-queue.md)
+
+### 13.1 根因与决策
+
+- **F-19**：顶栏把“画面比例”画成旋转图标，旋转动作藏在“更多”。修复：比例入口改 `AspectRatio` 图标（描述“画面比例”）；旋转提为顶栏独立按钮（描述“旋转屏幕”），复用既有 `toggleOrientation()`；“更多”删除旋转行，全应用仅一个旋转入口。比例（Fit/Fill/裁剪）与屏幕方向严格区分。
+- **F-20**：队列面板从未渲染 `state.queue`，且 `playQueueIndex` 私有无 UI 入口。修复：入口/面板更名“播放队列”；自定义 `PlaybackQueueSheet`（同字幕面板模式，复用 `ImmersiveSheetWindowEffect`）渲染队列、当前项高亮带勾、限高懒加载、打开/当前项变化定位、空队列 `EmptyState`；保留上一集/下一集与播放模式。
+- **受控跳转 API**：新增 `QueueSelection.shouldAccept` 纯逻辑受理判定 + `PlaybackSession.playQueueItem(index)`（主线程同步判定，受理后经与 playNext/playPrevious 相同的 `transitionMutex` 切源门执行），逐层委托 Coordinator/ViewModel；不暴露可变 `queueIndex`。空队列/越界/重复目标/切换中连点均为无操作。MediaSession 生命周期契约不变。
+- 队列条目标题取文件名（隐私），当前项以 `queueIndex` 判定；队列顺序始终为目录列举顺序，播放模式只影响“下一集”/自动连播选取。
+
+### 13.2 测试
+
+| 层 | 文件 | 用例数 |
+|---|---|---|
+| JVM 单测 | `feature/player/.../QueueSelectionTest.kt` | 10（空队列/越界/重复/陈旧/连点） |
+| 仪器化 F-19 | `app/.../PlayerEntriesInstrumentedTest.kt` | 4 |
+| 仪器化 F-20 | `app/.../PlayerQueueInstrumentedTest.kt` | 4（含真实 libmpv 沙箱跳转） |
+
+旋转测试用 debug 宿主 `RotationTestActivity`（configChanges 同 MainActivity）；真实播放测试沿用 MpvPlayback 沙箱，Surface 与面板共用同一宿主，快速连点用切源门保证并发确定性。
+
+### 13.3 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；aapt2 确认 versionCode=10004 / versionName=1.0.4，仅 arm64-v8a |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest` | 102 tests，2 skipped，0 failure（原 92，+10） |
+| 完整 `connectedDebugAndroidTest`（headless） | **50/50 通过，0 failure / 0 error / 0 skipped**（原 42，新增 F-19 4 例 + F-20 4 例） |
+
+### 13.4 阶段结论
+
+- F-19/F-20 验收标准由新增单测、仪器化测试与实机截图覆盖。
+- 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未实施播放列表 CRUD/持久化/拖拽排序（不在 1C 范围）。
+- 证据索引见 `evidence/README-1C.md`。
+- **阶段 1C 通过验收；不自动进入阶段 1D。**

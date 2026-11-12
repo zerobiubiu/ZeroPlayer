@@ -42,6 +42,8 @@ class PlayerViewModel @Inject constructor(
     fun setPlayMode(mode: PlayMode) = coordinator.setPlayMode(mode)
     fun playNext() = coordinator.playNext()
     fun playPrevious() = coordinator.playPrevious()
+    /** 队列面板点击跳转：UI 只表达意图，受理与执行由播放会话负责。 */
+    fun playQueueItem(index: Int) = coordinator.playQueueItem(index)
     fun beginTemporarySpeed(speed: Float) = coordinator.beginTemporarySpeed(speed)
     fun endTemporarySpeed() = coordinator.endTemporarySpeed()
     fun consumeError() = coordinator.consumeError()

@@ -106,6 +106,8 @@ internal class PlaybackSession(
     private var loadJob: Job? = null
     @Volatile private var loadStage = "尚未装载"
     private val transitionMutex = Mutex()
+    /** UI 请求的队列跳转是否在执行；受理判定在主线程，执行在切源门内。 */
+    private var queueSwitchInFlight = false
     private var handlingEnd = false
     private var watchedDeltaMs = 0L
     private var lastTickPosition = 0L
@@ -189,6 +191,8 @@ internal class PlaybackSession(
                 reportError(error.message ?: "无法打开文件")
             }
         }
+        // 外部重新装载可能顶掉尚未执行的队列跳转，同步清除受理标记。
+        queueSwitchInFlight = false
     }
 
     /** 与切源共用门：旧媒体命令不能越过新的 load 作用于新媒体。 */
@@ -201,6 +205,9 @@ internal class PlaybackSession(
                 true
             }
         }
+
+    /** 持有切源门执行动作；供测试串行化并发的切源请求，不改变门的语义。 */
+    suspend fun <T> withTransitionGate(action: suspend () -> T): T = transitionMutex.withLock { action() }
 
     fun registerCommand(command: Int): Long = synchronized(speedLock) {
         (++nextTicket).also { commandTickets[command] = it }
@@ -523,7 +530,7 @@ internal class PlaybackSession(
             }
         }
         val media = mediaRepository.findById(mediaId) ?: run {
-            reportError("下一文件不存在或已被删除")
+            reportError("文件不存在或已被删除")
             return false
         }
         state.update { it.copy(queueIndex = index) }
@@ -680,6 +687,38 @@ internal class PlaybackSession(
                 val settings = settingsRepository.observeSettings().first()
                 if (state.value.queueIndex > 0) playQueueIndex(state.value.queueIndex - 1, settings)
                 Unit
+            }
+        }
+    }
+
+    /**
+     * UI 请求播放队列中的指定条目（受控跳转入口）。
+     *
+     * 只表达意图：受理判定在主线程同步完成（空队列/越界/重复目标/切换中均为
+     * 无操作），真实切换经与 playNext/playPrevious 相同的切源门执行，
+     * 不向 UI 暴露可变的 queueIndex。
+     */
+    fun playQueueItem(index: Int) {
+        val snapshot = state.value
+        val target = snapshot.queue.getOrNull(index) ?: return
+        if (!QueueSelection.shouldAccept(
+                index = index,
+                queueSize = snapshot.queue.size,
+                currentIndex = snapshot.queueIndex,
+                targetMediaId = target.mediaId,
+                currentMediaId = snapshot.mediaId,
+                switchInFlight = queueSwitchInFlight,
+            )
+        ) return
+        queueSwitchInFlight = true
+        scope.launch {
+            try {
+                transitionMutex.withLock {
+                    val settings = settingsRepository.observeSettings().first()
+                    playQueueIndex(index, settings)
+                }
+            } finally {
+                queueSwitchInFlight = false
             }
         }
     }

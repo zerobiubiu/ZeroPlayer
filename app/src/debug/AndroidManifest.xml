@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- 仅 debug 测试包：旋转测试宿主，配置变更策略与 MainActivity 一致。 -->
+    <application>
+        <activity
+            android:name="com.privateplayer.media.RotationTestActivity"
+            android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize|uiMode"
+            android:exported="false"
+            android:theme="@style/Theme.PrivatePlayer" />
+    </application>
+
+</manifest>

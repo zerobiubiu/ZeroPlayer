@@ -63,6 +63,7 @@ data class PlaybackLease(
     val engine: PlaybackEngine,
     val media: StateFlow<SessionMedia?>,
     val executeForMedia: suspend (Long, () -> Unit) -> Boolean,
+    val withTransitionGate: suspend (suspend () -> Unit) -> Unit,
     val registerCommand: (Int) -> Long,
     val isCommandCurrent: (Int, Long) -> Boolean,
     val registerSpeedRequest: (Float) -> Long,
@@ -197,6 +198,7 @@ class PlaybackCoordinator @Inject constructor(
         engine = session.engine,
         media = session.media,
         executeForMedia = session::executeForMedia,
+        withTransitionGate = { action -> session.withTransitionGate(action) },
         registerCommand = session::registerCommand,
         isCommandCurrent = session::isCommandCurrent,
         registerSpeedRequest = session::registerSpeedRequest,
@@ -392,6 +394,7 @@ class PlaybackCoordinator @Inject constructor(
     fun setPlayMode(mode: PlayMode) { active?.session?.setPlayMode(mode) }
     fun playNext() { active?.session?.playNext() }
     fun playPrevious() { active?.session?.playPrevious() }
+    fun playQueueItem(index: Int) { active?.session?.playQueueItem(index) }
     fun beginTemporarySpeed(speed: Float) { active?.session?.beginTemporarySpeed(speed) }
     fun endTemporarySpeed() { active?.session?.endTemporarySpeed() }
     fun consumeError() {
