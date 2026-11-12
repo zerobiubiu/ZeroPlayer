@@ -5,6 +5,8 @@
     <string name="design_back">返回</string>
     <string name="design_retry">重试</string>
     <string name="design_loading">加载中…</string>
+    <string name="design_error_title">无法读取</string>
+    <string name="design_back_parent">返回上级</string>
     <string name="design_name_label">名称</string>
     <string name="design_name_error_blank">请输入名称</string>
     <string name="design_name_error_dot">名称不能是 . 或 ..</string>

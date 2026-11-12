@@ -8,6 +8,7 @@ import com.privateplayer.core.common.files.withSameExtension
 import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.common.format.formatRemaining
+import com.privateplayer.core.common.format.formatBitrate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -103,5 +104,16 @@ class FormattersTest {
     fun `remaining clamps at zero`() {
         assertEquals("00:30", formatRemaining(30_000, 60_000))
         assertEquals("00:00", formatRemaining(70_000, 60_000))
+    }
+
+    @Test
+    fun `bitrate uses decimal units and one decimal`() {
+        assertNull(formatBitrate(null))
+        assertNull(formatBitrate(0))
+        assertNull(formatBitrate(-1))
+        assertEquals("999 bps", formatBitrate(999))
+        assertEquals("1.0 Kbps", formatBitrate(1000))
+        assertEquals("3.2 Mbps", formatBitrate(3_205_365))
+        assertEquals("1.0 Gbps", formatBitrate(1_000_000_000))
     }
 }

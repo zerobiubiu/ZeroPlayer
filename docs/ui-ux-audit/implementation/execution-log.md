@@ -573,3 +573,38 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-01/F-24/F-30/F-23/F-04 验收由头部单测、仪器化回归与截图覆盖。
 - **阶段 2B 通过验收；自动进入阶段 2C（F-25/F-06/F-07/F-15）。**
+
+---
+
+## 十九、阶段 2C：详情信息分组、轨道来源、码率与 chips 去重（F-25 / F-06 / F-07 / F-15）
+
+- 时间：2026-11-13
+- 对应任务：T-25、T-06、T-07、T-15
+- 变更记录：[changes/0019-detail-info-grouping-bitrate.md](../../changes/0019-detail-info-grouping-bitrate.md)
+
+### 19.1 实施
+
+- **F-25**：主表按 文件/视频/音频/播放记录 四组，组间 SectionHeader+间距。
+- **F-06**：主表移除两行探测数据，移入文件信息浮层并新增“导入时探测”来源行。
+- **F-07**：新增 `formatBitrate`（1000 进制，1 位小数），null/<=0→“未知”；单测覆盖边界。
+- **F-15**：删除首屏 3 个重复 chips，保留标题+进度+播放。
+
+### 19.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10009 / versionName=1.0.9 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 126 tests，2 skipped，0 failure（原 125，新增 formatBitrate 1） |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 19.3 |
+
+### 19.3 仪器化与截图
+
+- `FormattersTest` +1（formatBitrate 边界）。
+- 既有详情用例回归（信息表/文件信息）。
+- 截图索引见 `evidence/README-2C.md`。
+
+### 19.4 阶段结论
+
+- F-25/F-06/F-07/F-15 验收由单测、仪器化回归与截图覆盖。
+- **阶段 2C 通过验收；自动进入阶段 2D（F-08/F-12/F-39）。**

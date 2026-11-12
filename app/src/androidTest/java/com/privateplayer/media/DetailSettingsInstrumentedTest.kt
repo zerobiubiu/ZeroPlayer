@@ -156,12 +156,16 @@ class DetailSettingsInstrumentedTest {
 
             compose.onNodeWithContentDescription("文件信息").performClick()
             compose.onNodeWithText("相对路径").assertIsDisplayed()
-            pressBack()
-            compose.onNode(hasScrollAction()).performScrollToNode(hasText("音轨数量（导入探测）"))
-            compose.onNodeWithText("视频编码").assertExists()
-            compose.onNodeWithText("音频编码").assertExists()
+            // F-06：探测轨道数在文件信息浮层并注明来源
             compose.onNodeWithText("音轨数量（导入探测）").assertExists()
             compose.onNodeWithText("内嵌字幕轨（导入探测）").assertExists()
+            compose.onNodeWithText("导入时探测").assertExists()
+            pressBack()
+            // F-25：主表按四组呈现；F-06：主表不再含探测行
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText("视频编码"))
+            compose.onNodeWithText("视频编码").assertExists()
+            compose.onNodeWithText("音频编码").assertExists()
+            compose.onAllNodesWithText("音轨数量（导入探测）").assertCountEquals(0)
             compose.waitUntil(10_000) {
                 viewModel.uiState.value.subtitles.size == 1 &&
                     viewModel.uiState.value.sameDirectorySubtitles.size == 1

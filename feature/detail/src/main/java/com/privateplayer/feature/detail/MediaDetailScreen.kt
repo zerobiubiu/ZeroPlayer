@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -55,6 +54,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.res.stringResource
 import com.privateplayer.core.common.format.formatBytes
+import com.privateplayer.core.common.format.formatBitrate
 import com.privateplayer.core.common.format.formatDateTime
 import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.common.format.formatPercent
@@ -66,7 +66,6 @@ import com.privateplayer.core.design.components.FileActionMenuContent
 import com.privateplayer.core.design.components.InfoRow
 import com.privateplayer.core.design.components.LoadingState
 import com.privateplayer.core.design.components.MediaThumbnail
-import com.privateplayer.core.design.components.MetaChip
 import com.privateplayer.core.design.components.MoveDialog
 import com.privateplayer.core.design.components.NameDialog
 import com.privateplayer.core.design.components.SectionHeader
