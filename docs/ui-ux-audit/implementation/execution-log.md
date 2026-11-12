@@ -779,3 +779,32 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-02/F-03/F-05/F-11/F-28/F-35 验收由单测、仪器化回归与截图覆盖。
 - **阶段 3 通过验收；自动进入阶段 4（全量回归与交付）。**
+
+---
+
+## 二十五、阶段 4：完整回归与交付
+
+- 时间：2026-11-13
+- 交付报告：[final-regression-report.md](final-regression-report.md)
+
+### 25.1 最终门禁（最终 APK 1.0.14/10014）
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；aapt2 确认 1.0.14/10014，仅 arm64-v8a |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 136 tests，2 skipped，0 failure / 0 error |
+| 完整 `connectedDebugAndroidTest`（headless） | 63/63 通过，0 failure / 0 error / 0 skipped |
+| 文案门禁 | CopyResourceGateTest 通过 |
+
+### 25.2 交付物
+
+- 41 项问题全部处置（40 修复 + F-27 模拟器证据关闭）；findings.md 状态列全部回填。
+- 变更记录 0011～0024；feature-status.md、design-system.md 更新；CHANGELOG 1.0.2～1.0.14。
+- 证据索引 README-1B～README-3 及各阶段截图；最终回归报告 final-regression-report.md。
+- 残余风险书面列出（真机/硬解/长时压测/2.0 字号/折叠屏/TalkBack 手测/SAF 云端）。
+
+### 25.3 阶段结论
+
+- 全部阶段通过验收；保留项与核心契约未破坏；无 P0/P1 新增问题。
+- **UI/UX 整改交付完成。**

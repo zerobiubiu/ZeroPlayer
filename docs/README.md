@@ -67,6 +67,14 @@
 | [0004](troubleshooting/0004-module-level-lint-permissions.md) | 模块级 Lint 只看本模块清单，权限与服务类型需在库模块声明 |
 | [0005](troubleshooting/0005-gesture-layer-blocks-buttons.md) | 全屏手势层盖住播放器按钮时，点击事件会被手势识别消费 |
 
+### ui-ux-audit/（UI/UX 审计与整改）
+
+| 文档 | 内容 |
+|---|---|
+| [ui-ux-audit/README.md](ui-ux-audit/README.md) | 审计报告入口（41 项问题、11 页面、设计系统） |
+| [ui-ux-audit/implementation/final-regression-report.md](ui-ux-audit/implementation/final-regression-report.md) | 阶段 4 完整回归与交付报告（41 项处置、门禁、残余风险） |
+| [ui-ux-audit/implementation/execution-log.md](ui-ux-audit/implementation/execution-log.md) | 各阶段实施记录（0～4） |
+
 ## 二、文档规范
 
 - 类型由目录体现：`architecture/` 现状、`decisions/` 决策、`changes/` 变更、`troubleshooting/` 排查。
