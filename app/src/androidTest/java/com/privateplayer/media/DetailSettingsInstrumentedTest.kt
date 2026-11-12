@@ -43,6 +43,7 @@ import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaRepository
 import com.privateplayer.domain.repository.StorageRepository
+import com.privateplayer.domain.usecase.NoOpPlaybackStopper
 import com.privateplayer.feature.detail.DetailRouteArgs
 import com.privateplayer.feature.detail.MediaDetailScreen
 import com.privateplayer.feature.detail.MediaDetailViewModel
@@ -120,13 +121,20 @@ class DetailSettingsInstrumentedTest {
             fileTree,
             LocalSubtitleStore(storage, SafDocuments(context)),
             StorageMediaFileLocator(storage),
+            NoOpPlaybackStopper,
             Dispatchers.IO,
         )
         val playedId = AtomicLong()
         try {
             compose.setContent {
                 MaterialTheme {
-                    MediaDetailScreen(onBack = {}, onPlay = { playedId.set(it) }, viewModel = viewModel)
+                    MediaDetailScreen(
+                        onBack = {},
+                        onPlay = { playedId.set(it) },
+                        onExportFile = { _, _ -> },
+                        onShareFile = {},
+                        viewModel = viewModel,
+                    )
                 }
             }
             compose.waitUntil(10_000) {

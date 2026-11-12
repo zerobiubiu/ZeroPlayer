@@ -141,6 +141,9 @@ internal class PlaybackSession(
             "relativePath=${currentMedia?.relativePath}, thumbnailPath=${currentMedia?.thumbnailPath}, " +
             "loadActive=${loadJob?.isActive}, loadStage=$loadStage"
 
+    /** 当前装载媒体相对文件树根的路径；供文件操作前判定播放引用，未装载时为 null。 */
+    fun currentTreePath(): String? = currentMedia?.relativePath?.removePrefix("media/")
+
     init {
         observeEngine()
         scope.launch(ioDispatcher) {

@@ -49,6 +49,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.design.components.EmptyState
+import com.privateplayer.core.design.components.DeleteDialog
+import com.privateplayer.core.design.components.MoveDialog
+import com.privateplayer.core.design.components.NameDialog
 import com.privateplayer.core.design.components.ErrorState
 import com.privateplayer.core.design.components.LoadingState
 import com.privateplayer.core.design.theme.Spacing

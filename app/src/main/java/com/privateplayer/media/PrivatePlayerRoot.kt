@@ -76,6 +76,26 @@ fun PrivatePlayerRoot(
         fileTransfers.exportTo(if (result.resultCode == Activity.RESULT_OK) result.data?.data else null)
     }
 
+    // 导出走唯一的 SAF 路径：首页与详情页共用同一回调与启动器，不重复实现。
+    val exportFile: (path: String, name: String) -> Unit = { path, name ->
+        if (transfer.exporting) {
+            fileTransfers.reportError("已有文件正在导出，请等待完成")
+        } else {
+            fileTransfers.prepareExport(path)
+            val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                addCategory(Intent.CATEGORY_OPENABLE)
+                type = mimeForName(name)
+                putExtra(Intent.EXTRA_TITLE, name)
+            }
+            try {
+                exporter.launch(intent)
+            } catch (error: Exception) {
+                fileTransfers.exportTo(null)
+                fileTransfers.reportError("无法选择导出位置：${error.message ?: "没有可用的文档应用"}")
+            }
+        }
+    }
+
     val darkTheme = when (settings.display.themeMode) {
         ThemeMode.SYSTEM -> isSystemInDarkTheme()
         ThemeMode.LIGHT -> false
@@ -140,24 +160,7 @@ fun PrivatePlayerRoot(
                             }
                         },
                         onOpenWifiImport = { directory -> wifiDirectory = directory },
-                        onExportFile = { path, name ->
-                            if (transfer.exporting) {
-                                fileTransfers.reportError("已有文件正在导出，请等待完成")
-                            } else {
-                                fileTransfers.prepareExport(path)
-                                val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                                    addCategory(Intent.CATEGORY_OPENABLE)
-                                    type = mimeForName(name)
-                                    putExtra(Intent.EXTRA_TITLE, name)
-                                }
-                                try {
-                                    exporter.launch(intent)
-                                } catch (error: Exception) {
-                                    fileTransfers.exportTo(null)
-                                    fileTransfers.reportError("无法选择导出位置：${error.message ?: "没有可用的文档应用"}")
-                                }
-                            }
-                        },
+                        onExportFile = exportFile,
                         onShareFile = fileTransfers::share,
                     )
                 }
@@ -183,6 +186,8 @@ fun PrivatePlayerRoot(
                     MediaDetailScreen(
                         onBack = { navController.popBackStack() },
                         onPlay = { navController.navigate(Routes.player(it)) },
+                        onExportFile = exportFile,
+                        onShareFile = fileTransfers::share,
                     )
                 }
                 composable(

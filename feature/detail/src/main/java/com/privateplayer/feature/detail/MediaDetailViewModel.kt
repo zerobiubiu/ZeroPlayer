@@ -12,6 +12,8 @@ import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaFileLocator
 import com.privateplayer.domain.repository.MediaRepository
 import com.privateplayer.domain.repository.SubtitleStore
+import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.usecase.PlaybackStopper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import javax.inject.Inject
@@ -33,6 +35,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 object DetailRouteArgs {
     const val ARG_MEDIA_ID = "mediaId"
@@ -48,6 +51,8 @@ data class MediaDetailUiState(
     val sameDirectorySubtitleError: String? = null,
     val message: String? = null,
     val showFileInfo: Boolean = false,
+    /** 文件操作进行中：禁用更多菜单，避免并发操作同一文件。 */
+    val isWorking: Boolean = false,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -55,9 +60,10 @@ data class MediaDetailUiState(
 class MediaDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     mediaRepository: MediaRepository,
-    fileTreeRepository: FileTreeRepository,
+    private val fileTreeRepository: FileTreeRepository,
     private val subtitleStore: SubtitleStore,
     private val fileLocator: MediaFileLocator,
+    private val playbackStopper: PlaybackStopper,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
@@ -67,6 +73,7 @@ class MediaDetailViewModel @Inject constructor(
         val message: String? = null,
         val showFileInfo: Boolean = false,
         val subtitles: List<SubtitleFile> = emptyList(),
+        val isWorking: Boolean = false,
     )
 
     private data class SameDirectorySubtitles(
@@ -128,6 +135,7 @@ class MediaDetailViewModel @Inject constructor(
             sameDirectorySubtitleError = matches?.error,
             message = localState.message,
             showFileInfo = localState.showFileInfo,
+            isWorking = localState.isWorking,
         )
     }
         .flowOn(ioDispatcher)
@@ -139,6 +147,85 @@ class MediaDetailViewModel @Inject constructor(
 
     fun setShowFileInfo(show: Boolean) {
         local.update { it.copy(showFileInfo = show) }
+    }
+
+    /** 当前媒体在文件树中的条目；文件操作对话框与首页共用同一模型。 */
+    fun treeEntry(): FileTreeEntry? {
+        val media = uiState.value.media ?: return null
+        return FileTreeEntry(
+            name = media.fileName,
+            path = media.relativePath.removePrefix("media/"),
+            isDirectory = false,
+            sizeBytes = media.sizeBytes,
+            modifiedAt = media.addedAt,
+            mediaId = media.id,
+            isVideo = true,
+            thumbnailPath = media.thumbnailPath,
+            durationMs = media.durationMs,
+            playbackPositionMs = media.playbackPositionMs,
+        )
+    }
+
+    fun rename(name: String) {
+        val entry = treeEntry() ?: return
+        performFileOperation(
+            failureMessage = "重命名失败，请检查名称是否有效或已存在。",
+            successMessage = "已重命名",
+        ) {
+            playbackStopper.stopIfAffected(entry.path)
+            fileTreeRepository.rename(entry.path, name)
+        }
+    }
+
+    fun move(destination: String) {
+        val entry = treeEntry() ?: return
+        performFileOperation(
+            failureMessage = "移动失败，请检查目标目录是否可用且没有同名项目。",
+            successMessage = "已移动",
+        ) {
+            playbackStopper.stopIfAffected(entry.path)
+            fileTreeRepository.move(entry.path, destination)
+        }
+    }
+
+    fun delete() {
+        val entry = treeEntry() ?: return
+        performFileOperation(
+            failureMessage = "删除失败，请确认文件仍然存在后重试。",
+            successMessage = "已删除",
+        ) {
+            playbackStopper.stopIfAffected(entry.path)
+            fileTreeRepository.delete(entry.path)
+        }
+    }
+
+    /** 移动目标选择器与首页同一规则：只列真实目录，排除自身及其子树。 */
+    suspend fun directoriesForMove(path: String, entry: FileTreeEntry): List<FileTreeEntry> =
+        withContext(ioDispatcher) {
+            fileTreeRepository.list(path)
+                .filter { it.isDirectory && (it.path != entry.path && !it.path.startsWith("${entry.path}/")) }
+                .sortedWith(compareBy<FileTreeEntry> { it.name.lowercase() }.thenBy { it.name })
+        }
+
+    /** 文件操作统一入口：串行执行、先停播放再动文件；结果经消息反馈，媒体记录由观察流自动同步。 */
+    private fun performFileOperation(
+        failureMessage: String,
+        successMessage: String,
+        action: suspend () -> Unit,
+    ) {
+        if (local.value.isWorking) return
+        local.update { it.copy(isWorking = true) }
+        viewModelScope.launch(ioDispatcher) {
+            val message = try {
+                action()
+                successMessage
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                failureMessage
+            }
+            local.update { it.copy(isWorking = false, message = message) }
+        }
     }
 
     private fun refreshSubtitles() {

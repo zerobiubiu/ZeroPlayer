@@ -1,8 +1,10 @@
 package com.privateplayer.feature.home
 
+import com.privateplayer.core.design.components.canConfirmName
 import com.privateplayer.domain.repository.FileTreeEntry
-import com.privateplayer.domain.repository.FileTreeRepository
 import java.io.File
+import com.privateplayer.domain.repository.FileTreeRepository
+import com.privateplayer.domain.usecase.NoOpPlaybackStopper
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -55,7 +57,7 @@ class HomeViewModelTest {
             directories["片段"] = listOf(directory("片段/2026"))
             directories["片段/2026"] = listOf(file("片段/2026/电影.mp4", video = true))
         }
-        val model = HomeViewModel(repository, dispatcher)
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.uiState.collect {} }
         runCurrent()
 
@@ -81,7 +83,7 @@ class HomeViewModelTest {
     @Test
     fun `视频按需创建记录并复用已有记录 普通文件不播放`() = runTest(dispatcher) {
         val repository = FakeFileTreeRepository()
-        val model = HomeViewModel(repository, dispatcher)
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
         val played = mutableListOf<Long>()
         val messages = mutableListOf<String>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }
@@ -110,7 +112,7 @@ class HomeViewModelTest {
         val repository = FakeFileTreeRepository().apply {
             directories[""] = listOf(source, directory("目标"), file("文本.txt"))
         }
-        val model = HomeViewModel(repository, dispatcher)
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
 
         assertEquals(listOf("目标"), model.directoriesForMove("", source).map { it.name })
     }
@@ -121,7 +123,7 @@ class HomeViewModelTest {
             directories[""] = listOf(directory("旧目录"))
             directories["旧目录"] = listOf(file("旧目录/视频.mp4", video = true))
         }
-        val model = HomeViewModel(repository, dispatcher)
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.uiState.collect {} }
         runCurrent()
         model.openDirectory("旧目录")
@@ -144,7 +146,7 @@ class HomeViewModelTest {
     @Test
     fun `读取失败可重试 操作失败有反馈`() = runTest(dispatcher) {
         val repository = FakeFileTreeRepository().apply { failedDirectories += "" }
-        val model = HomeViewModel(repository, dispatcher)
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
         val messages = mutableListOf<String>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.uiState.collect {} }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }

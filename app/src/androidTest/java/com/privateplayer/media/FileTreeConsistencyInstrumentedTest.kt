@@ -2,10 +2,12 @@ package com.privateplayer.media
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.view.Surface
 import androidx.room.Room
 import androidx.room.withTransaction
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.privateplayer.core.database.PrivatePlayerDatabase
 import com.privateplayer.core.database.dao.MediaDao
 import com.privateplayer.core.database.entity.ImportTaskEntity
@@ -13,15 +15,36 @@ import com.privateplayer.core.database.entity.MediaEntity
 import com.privateplayer.core.database.entity.PlaybackHistoryEntity
 import com.privateplayer.core.database.entity.PlaylistEntity
 import com.privateplayer.core.database.entity.PlaylistItemEntity
+import com.privateplayer.core.datastore.PreferencesSettingsRepository
+import com.privateplayer.core.playback.EngineMediaInfo
+import com.privateplayer.core.playback.MediaTrack
+import com.privateplayer.core.playback.PlaybackDiagnostics
+import com.privateplayer.core.playback.PlaybackEngine
+import com.privateplayer.core.playback.PlaybackEngineProvider
+import com.privateplayer.core.playback.PlaybackEvent
+import com.privateplayer.core.playback.PlaybackSnapshot
+import com.privateplayer.core.playback.PlaybackSource
+import com.privateplayer.core.playback.PlaybackStatus
+import com.privateplayer.core.storage.LocalSubtitleStore
 import com.privateplayer.core.storage.MediaProbe
 import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.core.storage.SafDocuments
+import com.privateplayer.core.storage.StorageMediaFileLocator
 import com.privateplayer.data.importer.ImportCommitJournal
 import com.privateplayer.data.importer.ImportWorkScheduler
 import com.privateplayer.data.repository.FileTreeRepositoryImpl
 import com.privateplayer.data.repository.ImportRepositoryImpl
+import com.privateplayer.data.repository.MediaRepositoryImpl
+import com.privateplayer.data.repository.PlaybackHistoryRepositoryImpl
 import com.privateplayer.data.repository.StorageRepositoryImpl
+import com.privateplayer.domain.model.AppSettings
 import com.privateplayer.domain.model.OperationOutcome
+import com.privateplayer.domain.model.SubtitlePreferences
+import com.privateplayer.domain.model.VideoAspect
+import com.privateplayer.domain.repository.SettingsRepository
+import com.privateplayer.domain.usecase.SavePlaybackProgressUseCase
+import com.privateplayer.feature.player.PlaybackCoordinator
+import com.privateplayer.feature.player.PlaybackServiceStarter
 import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
@@ -31,11 +54,21 @@ import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -600,6 +633,250 @@ class FileTreeConsistencyInstrumentedTest {
         assertEquals("正式内容", original.readText())
         assertEquals("其他任务", other.readText())
         assertFalse(File(storage.mediaRoot, "新文件.bin").exists())
+    }
+
+    // ------------------------------------------------------------ 阶段 1D：详情页操作与播放安全
+
+    @Test
+    fun `详情页与首页共用同一仓库的文件操作结果一致`() = runBlocking {
+        // 详情页 VM 与首页 VM 都调用 FileTreeRepository 的同一组方法；
+        // 这里按详情页的调用序列执行，断言与首页路径完全相同的 DB/磁盘结果。
+        val video = mediaFile("详情一致.mp4", "视频内容")
+        val id = insertMedia("详情一致.mp4", "详情一致", duration = 9_000L, position = 3_000L)
+        database.playbackHistoryDao().insert(
+            PlaybackHistoryEntity(mediaId = id, playedAt = 1L, positionMs = 3_000L, durationMs = 9_000L),
+        )
+        val identity = storage.fileIdentity(video)
+
+        // 重命名：磁盘改名 + 媒体记录同步，播放断点保留
+        repository.rename("详情一致.mp4", "改名后.mp4")
+        assertFalse(video.exists())
+        val renamed = File(storage.mediaRoot, "改名后.mp4")
+        assertEquals(identity, storage.fileIdentity(renamed))
+        assertEquals("media/改名后.mp4", database.mediaDao().findById(id)?.relativePath)
+        assertEquals(3_000L, database.mediaDao().findById(id)?.playbackPositionMs)
+
+        // 移动：进入子目录，记录路径同步
+        check(File(storage.mediaRoot, "目标").mkdir())
+        repository.move("改名后.mp4", "目标")
+        assertFalse(renamed.exists())
+        assertEquals("media/目标/改名后.mp4", database.mediaDao().findById(id)?.relativePath)
+        assertTrue(File(storage.mediaRoot, "目标/改名后.mp4").isFile)
+
+        // 删除：媒体、播放历史一并清除，磁盘文件消失
+        repository.delete("目标/改名后.mp4")
+        assertNull(database.mediaDao().findById(id))
+        assertTrue(database.playbackHistoryDao().findForMedia(id).isEmpty())
+        assertFalse(File(storage.mediaRoot, "目标/改名后.mp4").exists())
+    }
+
+    @Test
+    fun `删除正在播放的媒体先停止会话再删文件且队列不残留`() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val video = mediaFile("播放中.mp4", "视频内容")
+        val sibling = mediaFile("同目录.mp4", "另一视频")
+        val id = insertMedia("播放中.mp4", "播放中")
+        val siblingId = insertMedia("同目录.mp4", "同目录")
+
+        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val mediaRepository = MediaRepositoryImpl(
+            database.mediaDao(), database.folderDao(), storage, repository, Dispatchers.IO,
+        )
+        val history = PlaybackHistoryRepositoryImpl(database.playbackHistoryDao(), Dispatchers.IO)
+        val settings = object : SettingsRepository by PreferencesSettingsRepository(context) {
+            override fun observeSettings() = flowOf(AppSettings())
+        }
+        val stopRequests = AtomicInteger()
+        val provider = object : PlaybackEngineProvider {
+            override val backendLabel = "受控测试引擎"
+            override val backendDetail = "文件操作安全测试"
+            override fun create(): PlaybackEngine = SafetyEngine()
+        }
+        val serviceOwner = Any()
+        val coordinatorRef = AtomicReference<PlaybackCoordinator>()
+        val coordinator = PlaybackCoordinator(
+            context, mediaRepository, repository, StorageMediaFileLocator(storage),
+            LocalSubtitleStore(storage, SafDocuments(context)), settings, provider,
+            SavePlaybackProgressUseCase(mediaRepository, history, settings),
+            object : PlaybackServiceStarter {
+                override fun start(): String? = null
+                override fun stop() {
+                    stopRequests.incrementAndGet()
+                    // 真实服务经 ACTION_CLOSE_PLAYBACK 异步释放会话；stop() 在主线程被调用，
+                    // 这里投递到主队列稍后执行同一释放路径，避免在主线程内同步等待自己。
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        coordinatorRef.get().release(serviceOwner)
+                    }
+                }
+            },
+            applicationScope, Dispatchers.IO,
+        )
+        coordinatorRef.set(coordinator)
+        try {
+            instrumentation.runOnMainSync {
+                coordinator.acquire(serviceOwner)
+                check(coordinator.openFromVisibleUi(id, requestMedia = true))
+            }
+            // 等待会话装载当前媒体并建立同目录队列
+            withTimeout(15_000) {
+                while (coordinator.uiState.value.queue.isEmpty() ||
+                    coordinator.uiState.value.mediaId != id
+                ) delay(50)
+            }
+            assertEquals(2, coordinator.uiState.value.queue.size)
+
+            // 删除当前播放媒体：先停服，再删文件
+            coordinator.stopForFileOperation("播放中.mp4")
+            assertEquals("应请求停服一次", 1, stopRequests.get())
+            repository.delete("播放中.mp4")
+            assertFalse(video.exists())
+            assertNull(database.mediaDao().findById(id))
+
+            // 会话已释放：队列与当前媒体引用不残留
+            withTimeout(10_000) {
+                while (coordinator.uiState.value.queue.isNotEmpty()) {
+                    delay(50)
+                }
+            }
+            assertEquals("释放后媒体引用应清空", 0L, coordinator.uiState.value.mediaId)
+            assertTrue(sibling.isFile)
+            assertNotNull(database.mediaDao().findById(siblingId))
+
+            // 未命中会话引用的文件操作不打断播放：重新装载兄弟视频后删除无关文件
+            instrumentation.runOnMainSync {
+                coordinator.acquire(serviceOwner)
+                check(coordinator.openFromVisibleUi(siblingId, requestMedia = true))
+            }
+            withTimeout(15_000) {
+                while (coordinator.uiState.value.mediaId != siblingId) delay(50)
+            }
+            val unrelated = mediaFile("无关.txt", "文本")
+            coordinator.stopForFileOperation("无关.txt")
+            assertEquals(1, stopRequests.get())
+            repository.delete("无关.txt")
+            assertFalse(unrelated.exists())
+        } finally {
+            val cleanup = AtomicReference<Deferred<Unit>?>()
+            instrumentation.runOnMainSync { cleanup.set(coordinator.release(serviceOwner)) }
+            cleanup.get()?.await()
+            applicationScope.cancel()
+        }
+    }
+
+    @Test
+    fun `移动正在播放的媒体先停止会话且重开后队列按新目录重建`() = runBlocking {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val video = mediaFile("移动播放.mp4", "视频内容")
+        val id = insertMedia("移动播放.mp4", "移动播放")
+        check(File(storage.mediaRoot, "新位置").mkdir())
+
+        val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val mediaRepository = MediaRepositoryImpl(
+            database.mediaDao(), database.folderDao(), storage, repository, Dispatchers.IO,
+        )
+        val history = PlaybackHistoryRepositoryImpl(database.playbackHistoryDao(), Dispatchers.IO)
+        val settings = object : SettingsRepository by PreferencesSettingsRepository(context) {
+            override fun observeSettings() = flowOf(AppSettings())
+        }
+        val stopRequests = AtomicInteger()
+        val provider = object : PlaybackEngineProvider {
+            override val backendLabel = "受控测试引擎"
+            override val backendDetail = "文件操作安全测试"
+            override fun create(): PlaybackEngine = SafetyEngine()
+        }
+        val serviceOwner = Any()
+        val coordinatorRef = AtomicReference<PlaybackCoordinator>()
+        val coordinator = PlaybackCoordinator(
+            context, mediaRepository, repository, StorageMediaFileLocator(storage),
+            LocalSubtitleStore(storage, SafDocuments(context)), settings, provider,
+            SavePlaybackProgressUseCase(mediaRepository, history, settings),
+            object : PlaybackServiceStarter {
+                override fun start(): String? = null
+                override fun stop() {
+                    stopRequests.incrementAndGet()
+                    // 与真实服务一致：stop() 在主线程被调用，释放投递到主队列异步执行。
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        coordinatorRef.get().release(serviceOwner)
+                    }
+                }
+            },
+            applicationScope, Dispatchers.IO,
+        )
+        coordinatorRef.set(coordinator)
+        try {
+            instrumentation.runOnMainSync {
+                coordinator.acquire(serviceOwner)
+                check(coordinator.openFromVisibleUi(id, requestMedia = true))
+            }
+            withTimeout(15_000) {
+                while (coordinator.uiState.value.mediaId != id) delay(50)
+            }
+
+            coordinator.stopForFileOperation("移动播放.mp4")
+            assertEquals(1, stopRequests.get())
+            repository.move("移动播放.mp4", "新位置")
+            assertFalse(video.exists())
+            assertTrue(File(storage.mediaRoot, "新位置/移动播放.mp4").isFile)
+            assertEquals("media/新位置/移动播放.mp4", database.mediaDao().findById(id)?.relativePath)
+            withTimeout(10_000) { while (coordinator.uiState.value.queue.isNotEmpty()) delay(50) }
+
+            // 重开：新会话按新路径装载，队列不含旧路径引用
+            instrumentation.runOnMainSync {
+                coordinator.acquire(serviceOwner)
+                check(coordinator.openFromVisibleUi(id, requestMedia = true))
+            }
+            withTimeout(15_000) {
+                while (coordinator.uiState.value.mediaId != id ||
+                    coordinator.uiState.value.queue.isEmpty()
+                ) delay(50)
+            }
+            assertTrue(coordinator.uiState.value.queue.all { it.path.startsWith("新位置/") })
+        } finally {
+            val cleanup = AtomicReference<Deferred<Unit>?>()
+            instrumentation.runOnMainSync { cleanup.set(coordinator.release(serviceOwner)) }
+            cleanup.get()?.await()
+            applicationScope.cancel()
+        }
+    }
+
+    /** 只驱动状态机的受控引擎：不触碰真实解码，供文件操作安全测试使用。 */
+    private class SafetyEngine : PlaybackEngine {
+        override val snapshot = MutableStateFlow(PlaybackSnapshot())
+        override val audioTracks = MutableStateFlow<List<MediaTrack>>(emptyList())
+        override val subtitleTracks = MutableStateFlow<List<MediaTrack>>(emptyList())
+        override val events = emptyFlow<PlaybackEvent>()
+        override val backendLabel = "受控测试引擎"
+
+        override suspend fun initialize() = Unit
+        override suspend fun load(source: PlaybackSource, startPositionMs: Long, autoPlay: Boolean) {
+            snapshot.value = PlaybackSnapshot(
+                status = if (autoPlay) PlaybackStatus.PLAYING else PlaybackStatus.PAUSED,
+                mediaId = source.mediaId,
+                durationMs = source.durationHintMs,
+                positionMs = startPositionMs,
+                playWhenReady = autoPlay,
+            )
+        }
+        override suspend fun release() {
+            snapshot.value = PlaybackSnapshot()
+        }
+        override fun attachSurface(surface: Surface?) = Unit
+        override fun resizeSurface(width: Int, height: Int) = Unit
+        override fun diagnostics() = PlaybackDiagnostics()
+        override fun play() { snapshot.value = snapshot.value.copy(status = PlaybackStatus.PLAYING) }
+        override fun pause() { snapshot.value = snapshot.value.copy(status = PlaybackStatus.PAUSED) }
+        override suspend fun stop() { snapshot.value = PlaybackSnapshot() }
+        override fun seekTo(positionMs: Long) { snapshot.value = snapshot.value.copy(positionMs = positionMs) }
+        override fun setSpeed(speed: Float) = Unit
+        override fun setVolume(volume: Float) = Unit
+        override fun selectAudioTrack(trackId: String?) = Unit
+        override fun selectSubtitleTrack(trackId: String?) = Unit
+        override fun setSubtitleDelay(delayMs: Long) = Unit
+        override fun setSubtitleStyle(preferences: SubtitlePreferences) = Unit
+        override fun setAspect(aspect: VideoAspect) = Unit
+        override suspend fun mediaInfo(): EngineMediaInfo? = null
     }
 
     private fun stagedFile(id: String, content: String): File =

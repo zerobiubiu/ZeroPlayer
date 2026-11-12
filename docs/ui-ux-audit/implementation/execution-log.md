@@ -384,3 +384,51 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 - 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未实施播放列表 CRUD/持久化/拖拽排序（不在 1C 范围）。
 - 证据索引见 `evidence/README-1C.md`。
 - **阶段 1C 通过验收；不自动进入阶段 1D。**
+
+---
+
+## 十四、阶段 1D：菜单分组与详情页文件操作（F-22 / F-21）
+
+- 时间：2026-11-12
+- 对应任务：T-22、T-21（含播放安全约束）
+- 变更记录：[changes/0014-ui-menu-and-detail-actions.md](../../changes/0014-ui-menu-and-detail-actions.md)
+
+### 14.1 根因与决策
+
+- **F-22**：行菜单 6 项平铺、删除与普通项同权重。修复：`core/design` 新增共享分组菜单构建器（信息→传输→管理→危险，组间分隔线、无组标题），删除独立置底 error 色；长按与三点共用同一构建器；首页与详情页取不同子集。
+- **F-21**：详情页无文件操作。修复：顶栏新增“更多”打开同一分组菜单（导出/分享/重命名/移动/删除）；`NameDialog`/`MoveDialog`/`DeleteDialog` 迁入 `core/design` 公开复用（删除确认统一为 `ConfirmDialog`，顺带关闭 F-32 重复实现）；`MediaDetailViewModel` 注入 `FileTreeRepository` 与 `PlaybackStopper`；导出/分享回调从根导航传入，复用唯一 SAF 实现。
+- **播放安全**：领域层新增 `PlaybackStopper` 端口，应用层 `CoordinatorPlaybackStopper` 接到唯一 `PlaybackCoordinator`。`stopForFileOperation(path)` 命中当前媒体/活动队列/待装载目标时经 `closeFromPlayerUi` 停服，等待会话释放后清除待装载/续播引用；`release()` 同时清空队列与媒体状态，确保不残留已删除/已移动路径。未命中不打断无关播放。MediaSession 生命周期契约不变（关闭停服、重开新会话）；队列随会话销毁、重开按目录重建。
+
+### 14.2 测试
+
+| 层 | 文件 | 用例数 |
+|---|---|---|
+| JVM 单测 | `core/design/.../FileActionMenuGroupingTest.kt` | 11（分组顺序/子集/目录裁剪/删除独立 7 + 名称校验 4） |
+| 仪器化 F-22/F-21 | `app/.../FileMenuAndDetailActionsInstrumentedTest.kt` | 7 |
+| 仪器化一致性/安全 | `app/.../FileTreeConsistencyInstrumentedTest.kt` | +3（详情同仓库一致；删除播放中先停服且队列不残留；移动播放中先停服且重开重建队列） |
+
+首轮完整套件 4 例失败，均为新用例问题：2 例测试写法（菜单项需在展开的 DropdownMenu 内渲染；“视频详情”断言误匹配顶栏标题）；2 例播放安全用例超时，根因有二：一是测试替身的 `stop()` 在主线程内 `runOnMainSync` 等待自己造成死锁（真实服务经 Intent 异步释放，替身改为投递主队列），二是 `release()` 未清空协调器队列状态导致会话结束后残留旧队列。已修复生产代码（release 清空 queue/mediaId/title）与测试写法，未削弱任何断言；修复后一致性类 23/23 通过。
+
+### 14.3 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；aapt2 确认 versionCode=10005 / versionName=1.0.5，仅 arm64-v8a |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest` | 113 tests，2 skipped，0 failure（原 102，+11） |
+| 完整 `connectedDebugAndroidTest`（headless） | **60/60 通过，0 failure / 0 error / 0 skipped**（原 50，新增 F-22/F-21 7 例 + 一致性/安全 3 例） |
+
+无头取证：`Get-CimInstance Win32_Process` 命令行含 `-avd Medium_Phone_API_37.0 -no-window -no-snapshot-save -no-boot-anim -no-audio`（唯一实例，PID 取证）；`adb shell getprop sys.boot_completed` = 1。截图期间客户机媒体流静音（`cmd media_session volume --stream 3 --set 0`，dumpsys audio 确认 STREAM_MUSIC streamVolume:0、speaker 设备索引 0），宿主机无音频输出。仪器化测试与截图均在该无头实例执行。
+
+### 14.4 截图取证（静态、不播放视频）
+
+- 核心静态集 14 张，逐张读图核验，索引见 `evidence/README-1D.md`：浅色 9（首页、行分组菜单、详情、更多菜单、重命名对话框、重命名非法字符、移动选择器、删除确认、SAF 导出选择器）；深色 3（首页、行分组菜单、详情）；1.3 倍字号 2（首页行菜单、详情更多菜单）。被中止 worker 遗留的 3 张深色图内容错误（SAF 界面/黑屏），已重拍核验。
+- 未取证（记为限制）：深色更多菜单、2.0 倍字号全部变体、横屏全部变体、1.3 倍字号整页；播放态与结果态截图（播放中删除/移动、成功/取消提示、服务停止 dumpsys）——静态取证不播放视频，播放安全由仪器化测试覆盖（60/60）。
+- 取证期间一次误触行内播放按钮触发播放，立即 `am force-stop` 并静音（stream 3 索引 0），此后仅经行菜单“视频详情”进入详情页；收尾 `font_scale` 恢复 1.0、night 恢复 yes，宿主机无残留 capture 脚本进程。
+
+### 14.5 阶段结论
+
+- F-22/F-21 验收标准由新增单测、仪器化测试与实机截图覆盖。
+- 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未实施批量操作（F-41，阶段 2G）。
+- 证据索引见 `evidence/README-1D.md`。
+- **阶段 1D 通过验收；不自动进入阶段 1E。**

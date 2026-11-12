@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.IoDispatcher
 import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.FileTreeRepository
+import com.privateplayer.domain.usecase.PlaybackStopper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -49,6 +50,7 @@ private val entryOrder = Comparator<FileTreeEntry> { left, right ->
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     private val fileTreeRepository: FileTreeRepository,
+    private val playbackStopper: PlaybackStopper,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
     private val currentDirectory = MutableStateFlow("")
@@ -119,7 +121,10 @@ class HomeViewModel @Inject constructor(
         perform(
             failureMessage = "重命名失败，请检查名称是否有效或已存在。",
             successMessage = "已重命名",
-            action = { fileTreeRepository.rename(entry.path, name) },
+            action = {
+                playbackStopper.stopIfAffected(entry.path)
+                fileTreeRepository.rename(entry.path, name)
+            },
         )
     }
 
@@ -127,7 +132,10 @@ class HomeViewModel @Inject constructor(
         perform(
             failureMessage = "移动失败，请检查目标目录是否可用且没有同名项目。",
             successMessage = "已移动",
-            action = { fileTreeRepository.move(entry.path, destination) },
+            action = {
+                playbackStopper.stopIfAffected(entry.path)
+                fileTreeRepository.move(entry.path, destination)
+            },
         )
     }
 
@@ -135,7 +143,10 @@ class HomeViewModel @Inject constructor(
         perform(
             failureMessage = "删除失败，请确认项目仍然存在后重试。",
             successMessage = "已删除",
-            action = { fileTreeRepository.delete(entry.path) },
+            action = {
+                playbackStopper.stopIfAffected(entry.path)
+                fileTreeRepository.delete(entry.path)
+            },
         )
     }
 

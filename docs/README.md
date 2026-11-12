@@ -45,6 +45,7 @@
 | [0011](changes/0011-settings-immediate-save.md) | 设置保存模型统一为即时生效：删除逐行“保存”按钮、非法值不落库、写入串行保序 |
 | [0012](changes/0012-player-panels.md) | 播放器面板语义与沉浸式：单选/动作/导航/状态区分、面板窗口隐藏系统栏、移除技术行 |
 | [0013](changes/0013-player-entries-queue.md) | 播放器入口归位与真实播放队列：顶栏比例/旋转分离、播放队列渲染与受控跳转 |
+| [0014](changes/0014-ui-menu-and-detail-actions.md) | 菜单分组与详情页文件操作：信息/传输/管理/危险分组、详情更多菜单五项操作、播放安全停止 |
 
 ### troubleshooting/（长期可复现的问题）
 

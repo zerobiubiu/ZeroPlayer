@@ -22,8 +22,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -57,21 +59,30 @@ import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.common.format.formatPercent
 import com.privateplayer.core.design.components.AppTopBar
 import com.privateplayer.core.design.components.ConfirmDialog
+import com.privateplayer.core.design.components.DeleteDialog
+import com.privateplayer.core.design.components.FileAction
+import com.privateplayer.core.design.components.FileActionMenuContent
 import com.privateplayer.core.design.components.InfoRow
 import com.privateplayer.core.design.components.LoadingState
 import com.privateplayer.core.design.components.MediaThumbnail
 import com.privateplayer.core.design.components.MetaChip
+import com.privateplayer.core.design.components.MoveDialog
+import com.privateplayer.core.design.components.NameDialog
 import com.privateplayer.core.design.components.SectionHeader
+import com.privateplayer.core.design.components.rememberFileActionMenuGroups
 import com.privateplayer.core.design.theme.Radius
 import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.domain.model.SubtitleFile
+import com.privateplayer.domain.repository.FileTreeEntry
 
-/** 视频详情：只读文件信息、播放与外挂字幕管理。 */
+/** 视频详情：文件信息、播放、外挂字幕管理与文件操作（F-21）。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MediaDetailScreen(
     onBack: () -> Unit,
     onPlay: (Long) -> Unit,
+    onExportFile: (path: String, name: String) -> Unit,
+    onShareFile: (path: String) -> Unit,
     modifier: Modifier = Modifier,
     viewModel: MediaDetailViewModel = hiltViewModel(),
 ) {
@@ -79,6 +90,8 @@ fun MediaDetailScreen(
     val snackbarHostState = remember { SnackbarHostState() }
 
     var subtitleToDelete by remember { mutableStateOf<SubtitleFile?>(null) }
+    var moreMenuExpanded by remember { mutableStateOf(false) }
+    var fileDialog by remember { mutableStateOf<DetailFileDialog?>(null) }
 
     val subtitlePicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -114,6 +127,36 @@ fun MediaDetailScreen(
                 actions = {
                     IconButton(onClick = { viewModel.setShowFileInfo(true) }) {
                         Icon(Icons.Outlined.Info, contentDescription = "文件信息")
+                    }
+                    Box {
+                        IconButton(
+                            onClick = { moreMenuExpanded = true },
+                            enabled = !state.isWorking,
+                        ) {
+                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                        }
+                        // 详情页取共享分组菜单的子集：不含“视频详情”（已在本页），
+                        // “文件信息”保留在顶栏，菜单内不再重复。
+                        val entry = viewModel.treeEntry()
+                        if (entry != null) {
+                            val groups = rememberFileActionMenuGroups(
+                                entry,
+                                setOf(FileAction.Export, FileAction.Share, FileAction.Rename, FileAction.Move, FileAction.Delete),
+                            )
+                            DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
+                                FileActionMenuContent(groups) { action ->
+                                    moreMenuExpanded = false
+                                    when (action) {
+                                        FileAction.Export -> onExportFile(entry.path, entry.name)
+                                        FileAction.Share -> onShareFile(entry.path)
+                                        FileAction.Rename -> fileDialog = DetailFileDialog.Rename(entry)
+                                        FileAction.Move -> fileDialog = DetailFileDialog.Move(entry)
+                                        FileAction.Delete -> fileDialog = DetailFileDialog.Delete(entry)
+                                        FileAction.Details, FileAction.FileInfo -> Unit
+                                    }
+                                }
+                            }
+                        }
                     }
                 },
             )
@@ -333,6 +376,48 @@ fun MediaDetailScreen(
             onDismiss = { viewModel.setShowFileInfo(false) },
         )
     }
+
+    when (val active = fileDialog) {
+        is DetailFileDialog.Rename -> NameDialog(
+            title = "重命名",
+            initialName = active.entry.name,
+            originalName = active.entry.path.substringAfterLast('/'),
+            confirmLabel = "保存",
+            onDismiss = { fileDialog = null },
+            onConfirm = { name ->
+                fileDialog = null
+                viewModel.rename(name)
+            },
+        )
+
+        is DetailFileDialog.Move -> MoveDialog(
+            entry = active.entry,
+            loadDirectories = viewModel::directoriesForMove,
+            onDismiss = { fileDialog = null },
+            onConfirm = { destination ->
+                fileDialog = null
+                viewModel.move(destination)
+            },
+        )
+
+        is DetailFileDialog.Delete -> DeleteDialog(
+            entry = active.entry,
+            onDismiss = { fileDialog = null },
+            onConfirm = {
+                fileDialog = null
+                viewModel.delete()
+            },
+        )
+
+        null -> Unit
+    }
+}
+
+/** 详情页文件操作对话框状态；对话框本体与首页共用 core:design 实现。 */
+private sealed interface DetailFileDialog {
+    data class Rename(val entry: FileTreeEntry) : DetailFileDialog
+    data class Move(val entry: FileTreeEntry) : DetailFileDialog
+    data class Delete(val entry: FileTreeEntry) : DetailFileDialog
 }
 
 @Composable

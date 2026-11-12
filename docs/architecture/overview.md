@@ -70,8 +70,9 @@ flowchart LR
 首页（文件树）
   ├─ 点击视频 → 播放器
   ├─ 长按视频 → 视频详情 → 播放器
+  │      └─ 顶栏“更多” → 重命名 / 移动 / 删除 / 导出 / 分享
   ├─ 加号 → 本机文件选择器 / Wi-Fi 文件服务浮层
-  └─ 长按文件 → 重命名 / 移动 / 删除 / 导出 / 分享
+  └─ 长按文件 → 分组菜单（信息 / 传输 / 管理 / 危险）
 
 设置
 ```
@@ -108,7 +109,7 @@ flowchart LR
 ## 5. 主题与设计系统
 
 - `core:design` 提供 `PrivatePlayerTheme(darkTheme, dynamicColor)`、色彩令牌、字体、圆角、间距。
-- 组件：`MediaThumbnail`、`MediaGridCard`、`MediaListRow`、`EmptyState`、`LoadingState`、`ErrorState`、`InlineMessage`、`ConfirmDialog`、`InputDialog`、`ActionSheet`、`AppTopBar`、`SelectionTopBar`、`SectionHeader`、`SettingSection`、`SwitchRow`、`ClickableSettingRow`、`InfoRow`、`MetaChip`。
+- 组件：`MediaThumbnail`、`MediaGridCard`、`MediaListRow`、`EmptyState`、`LoadingState`、`ErrorState`、`InlineMessage`、`ConfirmDialog`、`InputDialog`、`NameDialog`、`MoveDialog`、`DeleteDialog`、`FileActionMenuContent`（分组文件菜单）、`ActionSheet`、`AppTopBar`、`SelectionTopBar`、`SectionHeader`、`SettingSection`、`SwitchRow`、`ClickableSettingRow`、`InfoRow`、`MetaChip`。文件操作菜单与名称/移动/删除对话框由首页与详情页共用。
 - 占位缩略图按媒体 id 稳定取色，列表滚动不会出现颜色跳变。
 - 播放器覆盖层独立于主题（固定白色系 + 黑色渐变），符合沉浸式观看场景。
 

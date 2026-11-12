@@ -9,8 +9,6 @@ import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -25,6 +23,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.privateplayer.core.common.format.formatBytes
+import com.privateplayer.core.design.components.FileAction
+import com.privateplayer.core.design.components.FileActionMenuContent
+import com.privateplayer.core.design.components.rememberFileActionMenuGroups
 import com.privateplayer.domain.repository.FileTreeEntry
 
 /** 长按和行尾按钮打开同一菜单，保证触屏与辅助设备均可操作。 */
@@ -69,36 +70,32 @@ internal fun FileTreeRow(
                 IconButton(onClick = { menuExpanded = true }, enabled = enabled) {
                     Icon(Icons.Outlined.MoreVert, contentDescription = "${entry.name}的操作菜单")
                 }
-                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    if (!entry.isDirectory && entry.isVideo) {
-                        DropdownMenuItem(
-                            text = { Text("视频详情") },
-                            onClick = { menuExpanded = false; onDetails() },
-                        )
-                    }
+                // 首页行菜单取共享分组的子集：视频行不含“文件信息”（行菜单里已有“视频详情”入口），
+                // 目录与非视频文件不含传输/详情项；长按与三点按钮共用同一构建器。
+                val available = buildSet {
+                    if (!entry.isDirectory && entry.isVideo) add(FileAction.Details)
                     if (!entry.isDirectory) {
-                        DropdownMenuItem(
-                            text = { Text("导出") },
-                            onClick = { menuExpanded = false; onExport() },
-                        )
-                        DropdownMenuItem(
-                            text = { Text("分享") },
-                            onClick = { menuExpanded = false; onShare() },
-                        )
-                        HorizontalDivider()
+                        add(FileAction.Export)
+                        add(FileAction.Share)
                     }
-                    DropdownMenuItem(
-                        text = { Text("重命名") },
-                        onClick = { menuExpanded = false; onRename() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("移动") },
-                        onClick = { menuExpanded = false; onMove() },
-                    )
-                    DropdownMenuItem(
-                        text = { Text("删除", color = MaterialTheme.colorScheme.error) },
-                        onClick = { menuExpanded = false; onDelete() },
-                    )
+                    add(FileAction.Rename)
+                    add(FileAction.Move)
+                    add(FileAction.Delete)
+                }
+                val groups = rememberFileActionMenuGroups(entry, available)
+                DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
+                    FileActionMenuContent(groups) { action ->
+                        menuExpanded = false
+                        when (action) {
+                            FileAction.Details -> onDetails()
+                            FileAction.Export -> onExport()
+                            FileAction.Share -> onShare()
+                            FileAction.Rename -> onRename()
+                            FileAction.Move -> onMove()
+                            FileAction.Delete -> onDelete()
+                            FileAction.FileInfo -> Unit
+                        }
+                    }
                 }
             }
         },

@@ -29,12 +29,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** 由应用层实现：从可见页面启动媒体服务，并在关闭播放页时结束它。 */
 interface PlaybackServiceStarter {
@@ -272,7 +274,18 @@ class PlaybackCoordinator @Inject constructor(
         }
         releaseBarrier = cleanup
         active = null
-        state.update { it.copy(isLoading = false, playback = com.privateplayer.core.playback.PlaybackSnapshot()) }
+        // 会话结束即清空队列与媒体引用：文件操作后不残留已删除/已移动的路径，
+        // 重开时按目录重新列举（F-21 播放安全）。
+        state.update {
+            it.copy(
+                isLoading = false,
+                playback = com.privateplayer.core.playback.PlaybackSnapshot(),
+                mediaId = 0L,
+                title = "",
+                queue = emptyList(),
+                queueIndex = 0,
+            )
+        }
         cleanup.start()
         return cleanup
     }
@@ -319,6 +332,52 @@ class PlaybackCoordinator @Inject constructor(
         } catch (exception: Exception) {
             reportError("无法停止播放：${exception.message ?: "播放服务不可用"}")
         }
+    }
+
+    /**
+     * 文件操作前的播放保护（F-21）：目标路径命中当前播放媒体或活动队列时，
+     * 先结束播放会话再执行文件操作。复用 closeFromPlayerUi 的停服路径
+     * （ACTION_CLOSE_PLAYBACK → 释放会话与队列），不改变生命周期契约。
+     *
+     * 队列随会话销毁，重开时按目录重新列举，不会保留已删除/已移动的引用；
+     * 未命中任何会话引用时什么都不做，不打断无关播放。
+     */
+    suspend fun stopForFileOperation(path: String) {
+        // 待装载目标可能尚未建立队列，先从媒体记录解析其路径。
+        val pendingPath = (pendingMediaId ?: openingMediaId)?.let { id ->
+            mediaRepository.findById(id)?.relativePath?.removePrefix("media/")
+        }
+        // 判定与停服都在主线程完成，避免与页面关闭/服务销毁的写入竞争。
+        val stopped = withContext(Dispatchers.Main.immediate) {
+            if (!referencesPath(path, pendingPath)) return@withContext false
+            closeFromPlayerUi()
+            true
+        }
+        if (!stopped) return
+        // 等待会话真正释放（active 清空）；文件操作必须在引擎放开句柄之后执行。
+        withTimeoutOrNull(FILE_STOP_TIMEOUT_MS) {
+            while (active != null) delay(50)
+        }
+        // 清掉待装载/续播引用，避免服务重建时重新打开已失效的路径。
+        withContext(Dispatchers.Main.immediate) {
+            pendingMediaId = null
+            lastMediaId = null
+        }
+    }
+
+    /** 目标路径（或其子树）是否被当前会话引用：当前媒体、活动队列或待装载目标。主线程调用。 */
+    private fun referencesPath(path: String, pendingPath: String?): Boolean {
+        val session = active?.session
+        if (path.isEmpty()) return session != null || pendingMediaId != null || openingMediaId != null
+        fun matches(candidate: String?): Boolean =
+            candidate != null && (candidate == path || candidate.startsWith("$path/"))
+        if (matches(session?.currentTreePath())) return true
+        if (session != null && session.uiState.value.queue.any { matches(it.path) }) return true
+        return matches(pendingPath)
+    }
+
+    private companion object {
+        const val FILE_STOP_TIMEOUT_MS = 10_000L
     }
 
     /** 供系统服务 dump 定位请求、装载与真实引擎不一致；只读，不创建或借用新实例。 */
