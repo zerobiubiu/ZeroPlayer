@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -53,7 +54,7 @@ internal fun <T> SettingsDropdownRow(
         ) {
             Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
             Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-            Icon(Icons.Filled.ArrowDropDown, contentDescription = "展开${title}选项", tint = MaterialTheme.colorScheme.primary)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = stringResource(R.string.settings_expand_options, title), tint = MaterialTheme.colorScheme.primary)
         }
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }, modifier = Modifier.widthIn(min = 180.dp)) {
             options.forEach { (option, label) ->
@@ -139,9 +140,12 @@ internal fun NumericSettingRow(
     val currentInitial by rememberUpdatedState(initialValue)
     val currentOnCommit by rememberUpdatedState(onCommit)
     val focusManager = LocalFocusManager.current
+    val rangeHint = stringResource(R.string.settings_numeric_range_hint, rangeLabel)
+    val invalidInputText = stringResource(R.string.settings_numeric_invalid_input, rangeLabel)
     val savedValue = remember(currentInitial, minimum, maximum, integerOnly) {
         parseSettingNumber(currentInitial, minimum, maximum, integerOnly)
     }
+    val restoredNotice = stringResource(R.string.settings_numeric_restored, currentInitial)
 
     /** 写入合法值；与已保存值或上次写入值相同时跳过，避免重复落盘。 */
     fun commit(value: Double) {
@@ -173,7 +177,7 @@ internal fun NumericSettingRow(
         singleLine = true,
         isError = errorText != null,
         supportingText = {
-            val hint = errorText ?: notice ?: "允许范围：$rangeLabel"
+            val hint = errorText ?: notice ?: rangeHint
             Text(
                 text = hint,
                 color = if (errorText != null) {
@@ -196,7 +200,7 @@ internal fun NumericSettingRow(
                     }
 
                     is NumericEdit.Unchanged -> focusManager.clearFocus()
-                    is NumericEdit.Reject -> errorText = "请输入$rangeLabel"
+                    is NumericEdit.Reject -> errorText = invalidInputText
                 }
             },
         ),
@@ -213,7 +217,7 @@ internal fun NumericSettingRow(
                     is NumericEdit.Reject -> {
                         text = currentInitial
                         errorText = null
-                        notice = "输入无效，已恢复为$currentInitial"
+                        notice = restoredNotice
                     }
                 }
             },

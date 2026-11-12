@@ -53,6 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.ui.res.stringResource
 import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.common.format.formatDateTime
 import com.privateplayer.core.common.format.formatDuration
@@ -88,6 +89,7 @@ fun MediaDetailScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val messageText = state.messageRes?.let { stringResource(it, *state.messageArgs) }
 
     var subtitleToDelete by remember { mutableStateOf<SubtitleFile?>(null) }
     var moreMenuExpanded by remember { mutableStateOf(false) }
@@ -99,8 +101,8 @@ fun MediaDetailScreen(
         if (uri != null) viewModel.importSubtitle(uri.toString())
     }
 
-    LaunchedEffect(state.message) {
-        state.message?.let {
+    LaunchedEffect(messageText) {
+        messageText?.let {
             snackbarHostState.showSnackbar(it)
             viewModel.consumeMessage()
         }
@@ -122,18 +124,18 @@ fun MediaDetailScreen(
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             AppTopBar(
-                title = "视频详情",
+                title = stringResource(R.string.detail_title),
                 onBack = onBack,
                 actions = {
                     IconButton(onClick = { viewModel.setShowFileInfo(true) }) {
-                        Icon(Icons.Outlined.Info, contentDescription = "文件信息")
+                        Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.detail_file_info))
                     }
                     Box {
                         IconButton(
                             onClick = { moreMenuExpanded = true },
                             enabled = !state.isWorking,
                         ) {
-                            Icon(Icons.Outlined.MoreVert, contentDescription = "更多")
+                            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.detail_more))
                         }
                         // 详情页取共享分组菜单的子集：不含“视频详情”（已在本页），
                         // “文件信息”保留在顶栏，菜单内不再重复。
@@ -188,7 +190,7 @@ fun MediaDetailScreen(
                         ) {
                             Icon(Icons.Filled.PlayArrow, contentDescription = null)
                             Spacer(Modifier.width(Spacing.sm))
-                            Text("播放")
+                            Text(stringResource(R.string.detail_play))
                         }
                         if (media.hasProgress) {
                             LinearProgressIndicator(
@@ -227,9 +229,9 @@ fun MediaDetailScreen(
                         Spacer(Modifier.height(Spacing.sm))
                         Text(
                             text = if (media.hasProgress) {
-                                "观看进度 ${formatPercent(media.progress)} · 上次播放 ${formatDateTime(media.lastPlayedAt)}"
+                                stringResource(R.string.detail_progress_format, formatPercent(media.progress), formatDateTime(media.lastPlayedAt))
                             } else {
-                                "暂无播放进度"
+                                stringResource(R.string.detail_no_progress)
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -239,33 +241,40 @@ fun MediaDetailScreen(
 
                 item {
                     Spacer(Modifier.height(Spacing.lg))
-                    SectionHeader(title = "视频信息")
+                    SectionHeader(title = stringResource(R.string.detail_video_info))
                 }
                 item {
                     Column {
-                        InfoRow("文件名", media.fileName)
-                        InfoRow("大小", formatBytes(media.sizeBytes))
-                        InfoRow("时长", formatDuration(media.durationMs))
+                        InfoRow(stringResource(R.string.detail_file_name), media.fileName)
+                        InfoRow(stringResource(R.string.detail_size), formatBytes(media.sizeBytes))
+                        InfoRow(stringResource(R.string.detail_duration), formatDuration(media.durationMs))
                         InfoRow(
-                            label = "分辨率",
-                            value = if (media.width > 0) "${media.width}×${media.height}" else "未知",
+                            label = stringResource(R.string.detail_resolution),
+                            value = if (media.width > 0) {
+                                stringResource(R.string.detail_resolution_dimensions, media.width, media.height)
+                            } else {
+                                stringResource(R.string.detail_unknown)
+                            },
                         )
-                        InfoRow("视频编码", media.videoCodec ?: "未知")
-                        InfoRow("音频编码", media.audioCodec ?: "未知")
+                        InfoRow(stringResource(R.string.detail_video_codec), media.videoCodec ?: stringResource(R.string.detail_unknown))
+                        InfoRow(stringResource(R.string.detail_audio_codec), media.audioCodec ?: stringResource(R.string.detail_unknown))
                         InfoRow(
-                            label = "码率",
-                            value = media.bitrate?.let { "$it bps" } ?: "未知",
+                            label = stringResource(R.string.detail_bitrate),
+                            value = media.bitrate?.let { stringResource(R.string.detail_bitrate_bps, it) } ?: stringResource(R.string.detail_unknown),
                         )
-                        InfoRow("音轨数量（导入探测）", "${media.audioTrackCount}")
+                        InfoRow(stringResource(R.string.detail_audio_tracks_probe), "${media.audioTrackCount}")
                         InfoRow(
-                            "内嵌字幕轨（导入探测）",
-                            if (media.subtitleTrackCount == 0) "未识别，以播放器为准" else "${media.subtitleTrackCount}",
+                            stringResource(R.string.detail_subtitle_tracks_probe),
+                            if (media.subtitleTrackCount == 0) stringResource(R.string.detail_subtitle_tracks_unknown) else "${media.subtitleTrackCount}",
                         )
-                        InfoRow("导入时间", formatDateTime(media.addedAt))
-                        InfoRow("最近播放", formatDateTime(media.lastPlayedAt))
-                        InfoRow("播放次数", "${media.playCount}")
+                        InfoRow(stringResource(R.string.detail_added_at), formatDateTime(media.addedAt))
+                        InfoRow(stringResource(R.string.detail_last_played), formatDateTime(media.lastPlayedAt))
+                        InfoRow(stringResource(R.string.detail_play_count), "${media.playCount}")
                         state.fileInfo?.let { info ->
-                            InfoRow("文件状态", if (info.exists) "正常" else "文件缺失")
+                            InfoRow(
+                                stringResource(R.string.detail_file_status),
+                                stringResource(if (info.exists) R.string.detail_file_status_ok else R.string.detail_file_status_missing),
+                            )
                         }
                     }
                 }
@@ -273,8 +282,8 @@ fun MediaDetailScreen(
                 item {
                     Spacer(Modifier.height(Spacing.lg))
                     SectionHeader(
-                        title = "外挂字幕 (${state.subtitles.size + state.sameDirectorySubtitles.size})",
-                        actionLabel = "添加",
+                        title = stringResource(R.string.detail_subtitles_header, state.subtitles.size + state.sameDirectorySubtitles.size),
+                        actionLabel = stringResource(R.string.detail_subtitles_add),
                         onAction = { subtitlePicker.launch(arrayOf("*/*")) },
                     )
                 }
@@ -282,31 +291,31 @@ fun MediaDetailScreen(
                     Column(
                         modifier = Modifier.padding(horizontal = Spacing.screenHorizontal),
                     ) {
-                        state.sameDirectorySubtitleError?.let { error ->
+                        state.sameDirectorySubtitleErrorRes?.let { errorRes ->
                             Text(
-                                text = error,
+                                text = stringResource(errorRes),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.error,
                                 modifier = Modifier.padding(vertical = Spacing.sm),
                             )
                         }
                         if (state.subtitles.isEmpty() && state.sameDirectorySubtitles.isEmpty() &&
-                            state.sameDirectorySubtitleError == null
+                            state.sameDirectorySubtitleErrorRes == null
                         ) {
                             Text(
-                                text = "还没有外挂字幕。同目录同名字幕会自动匹配，也可添加 srt / ass / ssa / vtt 字幕副本。",
+                                text = stringResource(R.string.detail_subtitles_empty),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(vertical = Spacing.sm),
                             )
                         }
                         state.sameDirectorySubtitles.forEach { subtitle ->
-                            SubtitleRow(subtitle = subtitle, source = "同目录字幕 · 在首页管理")
+                            SubtitleRow(subtitle = subtitle, source = stringResource(R.string.detail_subtitle_source_same_dir))
                         }
                         state.subtitles.forEach { subtitle ->
                             SubtitleRow(
                                 subtitle = subtitle,
-                                source = "已添加的私有副本",
+                                source = stringResource(R.string.detail_subtitle_source_private),
                                 onDelete = { subtitleToDelete = subtitle },
                             )
                         }
@@ -324,12 +333,12 @@ fun MediaDetailScreen(
                     ) {
                         Column(modifier = Modifier.padding(Spacing.lg)) {
                             Text(
-                                text = "私有存储说明",
+                                text = stringResource(R.string.detail_private_storage_title),
                                 style = MaterialTheme.typography.titleSmall,
                             )
                             Spacer(Modifier.height(Spacing.xs))
                             Text(
-                                text = "该视频保存在应用私有目录，其他应用无法直接访问；删除应用数据会同时删除视频。原始导入文件从未被修改。",
+                                text = stringResource(R.string.detail_private_storage_note),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -350,9 +359,9 @@ fun MediaDetailScreen(
 
     subtitleToDelete?.let { subtitle ->
         ConfirmDialog(
-            title = "删除字幕",
-            message = "将删除应用私有目录中的字幕副本「${subtitle.name}」，不影响视频或原始字幕文件。",
-            confirmLabel = "删除",
+            title = stringResource(R.string.detail_subtitle_delete_title),
+            message = stringResource(R.string.detail_subtitle_delete_message, subtitle.name),
+            confirmLabel = stringResource(R.string.detail_subtitle_delete),
             destructive = true,
             onConfirm = {
                 viewModel.deleteSubtitle(subtitle)
@@ -366,12 +375,12 @@ fun MediaDetailScreen(
         FileInfoSheet(
             title = media.displayName,
             rows = buildList {
-                add("相对路径" to media.relativePath)
-                add("绝对路径" to (state.fileInfo?.absolutePath ?: "—"))
-                add("文件存在" to if (state.fileInfo?.exists == true) "是" else "否")
-                add("磁盘大小" to formatBytes(state.fileInfo?.sizeBytes ?: 0L))
-                add("MIME" to (media.mimeType ?: "未知"))
-                add("缩略图" to (media.thumbnailPath ?: "未生成"))
+                add(stringResource(R.string.detail_info_relative_path) to media.relativePath)
+                add(stringResource(R.string.detail_info_absolute_path) to (state.fileInfo?.absolutePath ?: stringResource(R.string.detail_info_dash)))
+                add(stringResource(R.string.detail_info_exists) to stringResource(if (state.fileInfo?.exists == true) R.string.detail_info_yes else R.string.detail_info_no))
+                add(stringResource(R.string.detail_info_disk_size) to formatBytes(state.fileInfo?.sizeBytes ?: 0L))
+                add(stringResource(R.string.detail_info_mime) to (media.mimeType ?: stringResource(R.string.detail_unknown)))
+                add(stringResource(R.string.detail_info_thumbnail) to (media.thumbnailPath ?: stringResource(R.string.detail_info_thumbnail_none)))
             },
             onDismiss = { viewModel.setShowFileInfo(false) },
         )
@@ -379,10 +388,10 @@ fun MediaDetailScreen(
 
     when (val active = fileDialog) {
         is DetailFileDialog.Rename -> NameDialog(
-            title = "重命名",
+            title = stringResource(R.string.detail_rename_title),
             initialName = active.entry.name,
             originalName = active.entry.path.substringAfterLast('/'),
-            confirmLabel = "保存",
+            confirmLabel = stringResource(R.string.detail_rename_confirm),
             onDismiss = { fileDialog = null },
             onConfirm = { name ->
                 fileDialog = null
@@ -453,11 +462,12 @@ private fun SubtitleRow(
             )
         }
         if (onDelete != null) {
+            val deleteDescription = stringResource(R.string.detail_subtitle_delete_description, subtitle.name)
             TextButton(
                 onClick = onDelete,
-                modifier = Modifier.semantics { contentDescription = "删除字幕 ${subtitle.name}" },
+                modifier = Modifier.semantics { contentDescription = deleteDescription },
             ) {
-                Text("删除", color = MaterialTheme.colorScheme.error)
+                Text(stringResource(R.string.detail_subtitle_delete), color = MaterialTheme.colorScheme.error)
             }
         }
     }
@@ -480,7 +490,7 @@ private fun FileInfoSheet(
     ) {
         Column(modifier = Modifier.padding(bottom = Spacing.xl)) {
             Text(
-                text = "文件信息",
+                text = stringResource(R.string.detail_file_info),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
             )

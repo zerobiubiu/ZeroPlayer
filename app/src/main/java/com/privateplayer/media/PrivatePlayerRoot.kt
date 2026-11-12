@@ -27,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
@@ -65,6 +66,14 @@ fun PrivatePlayerRoot(
     val context = LocalContext.current
     var localDirectory by rememberSaveable { mutableStateOf("") }
     var wifiDirectory by rememberSaveable { mutableStateOf<String?>(null) }
+    // 回调中使用的文案在组合期解析，保证配置变化（语言/深色）后取到最新值。
+    val exportBusyText = stringResource(R.string.app_export_busy)
+    val noDocumentAppText = stringResource(R.string.app_no_document_app)
+    val noShareAppText = stringResource(R.string.app_no_share_app)
+    val noPickerText = stringResource(R.string.app_no_picker)
+    val exportPickerFailedFormat = stringResource(R.string.app_export_picker_failed)
+    val shareUiFailedFormat = stringResource(R.string.app_share_ui_failed)
+    val pickerFailedFormat = stringResource(R.string.app_picker_failed)
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
@@ -79,7 +88,7 @@ fun PrivatePlayerRoot(
     // 导出走唯一的 SAF 路径：首页与详情页共用同一回调与启动器，不重复实现。
     val exportFile: (path: String, name: String) -> Unit = { path, name ->
         if (transfer.exporting) {
-            fileTransfers.reportError("已有文件正在导出，请等待完成")
+            fileTransfers.reportError(exportBusyText)
         } else {
             fileTransfers.prepareExport(path)
             val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -91,7 +100,7 @@ fun PrivatePlayerRoot(
                 exporter.launch(intent)
             } catch (error: Exception) {
                 fileTransfers.exportTo(null)
-                fileTransfers.reportError("无法选择导出位置：${error.message ?: "没有可用的文档应用"}")
+                fileTransfers.reportError(exportPickerFailedFormat.format(error.message ?: noDocumentAppText))
             }
         }
     }
@@ -119,7 +128,7 @@ fun PrivatePlayerRoot(
                 try {
                     context.startActivity(intent)
                 } catch (error: Exception) {
-                    fileTransfers.reportError("无法打开分享界面：${error.message ?: "没有可用的分享应用"}")
+                    fileTransfers.reportError(shareUiFailedFormat.format(error.message ?: noShareAppText))
                 } finally {
                     fileTransfers.consumeShare()
                 }
@@ -137,7 +146,7 @@ fun PrivatePlayerRoot(
                     ExtendedFloatingActionButton(
                         onClick = externalIntents::showImportTasks,
                         icon = { Icon(Icons.Outlined.Upload, contentDescription = null) },
-                        text = { Text("导入任务") },
+                        text = { Text(stringResource(R.string.app_import_tasks)) },
                     )
                 }
             },
@@ -156,7 +165,7 @@ fun PrivatePlayerRoot(
                             try {
                                 picker.launch(arrayOf("*/*"))
                             } catch (error: Exception) {
-                                fileTransfers.reportError("无法打开文件选择器：${error.message ?: "没有可用的选择器"}")
+                                fileTransfers.reportError(pickerFailedFormat.format(error.message ?: noPickerText))
                             }
                         },
                         onOpenWifiImport = { directory -> wifiDirectory = directory },
@@ -219,9 +228,9 @@ fun PrivatePlayerRoot(
         else transfer.message?.let { message ->
             AlertDialog(
                 onDismissRequest = fileTransfers::dismissMessage,
-                title = { Text("文件操作") },
+                title = { Text(stringResource(R.string.app_transfer_dialog_title)) },
                 text = { Text(message) },
-                confirmButton = { TextButton(onClick = fileTransfers::dismissMessage) { Text("知道了") } },
+                confirmButton = { TextButton(onClick = fileTransfers::dismissMessage) { Text(stringResource(R.string.app_transfer_dismiss)) } },
             )
         }
     }
@@ -234,13 +243,13 @@ private fun RootBottomBar(navController: NavHostController, currentRoute: String
             selected = currentRoute == Routes.HOME,
             onClick = { navController.navigateToTopLevel(Routes.HOME) },
             icon = { Icon(Icons.Outlined.Home, contentDescription = null) },
-            label = { Text("首页") },
+            label = { Text(stringResource(R.string.app_nav_home)) },
         )
         NavigationBarItem(
             selected = currentRoute == Routes.SETTINGS,
             onClick = { navController.navigateToTopLevel(Routes.SETTINGS) },
             icon = { Icon(Icons.Outlined.Settings, contentDescription = null) },
-            label = { Text("设置") },
+            label = { Text(stringResource(R.string.app_nav_settings)) },
         )
     }
 }

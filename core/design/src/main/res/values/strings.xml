@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- core/design 共享组件自身的通用文案。功能级文案由各 feature 模块资源提供，经参数传入。 -->
+<resources>
+    <string name="design_cancel">取消</string>
+    <string name="design_back">返回</string>
+    <string name="design_retry">重试</string>
+    <string name="design_loading">加载中…</string>
+    <string name="design_name_label">名称</string>
+    <string name="design_name_error_blank">请输入名称</string>
+    <string name="design_name_error_dot">名称不能是 . 或 ..</string>
+    <string name="design_name_error_chars">名称不能包含 / 或 \\</string>
+    <string name="design_delete">删除</string>
+    <string name="design_delete_folder_title">删除文件夹？</string>
+    <string name="design_delete_file_title">删除文件？</string>
+    <string name="design_delete_folder_message">将永久删除“%1$s”及其中的全部内容，此操作无法撤销。</string>
+    <string name="design_delete_file_message">将永久删除“%1$s”，此操作无法撤销。</string>
+    <string name="design_move_title">移动“%1$s”</string>
+    <string name="design_move_pick_target">选择目标文件夹</string>
+    <string name="design_move_current_root">当前位置：文件</string>
+    <string name="design_move_current_path">当前位置：文件/%1$s</string>
+    <string name="design_move_up">返回上级文件夹</string>
+    <string name="design_move_loading">正在读取文件夹…</string>
+    <string name="design_move_error">无法读取此文件夹，请重试。</string>
+    <string name="design_move_empty">没有可进入的子文件夹</string>
+    <string name="design_move_confirm">移动到此处</string>
+    <string name="design_selection_count">已选择 %1$d 项</string>
+    <string name="design_selection_close">退出多选</string>
+    <string name="design_favorite">已收藏</string>
+    <string name="design_selected">已选中</string>
+    <string name="design_unselected">未选中</string>
+    <string name="design_action_details">视频详情</string>
+    <string name="design_action_file_info">文件信息</string>
+    <string name="design_action_export">导出</string>
+    <string name="design_action_share">分享</string>
+    <string name="design_action_rename">重命名</string>
+    <string name="design_action_move">移动</string>
+    <string name="design_action_delete">删除</string>
+
+    <!-- 导入设置：设置页与 Wi-Fi 面板共用同一文案，保证同名设置只有一种叫法（F-10）。 -->
+    <string name="design_import_thumbnails">导入时生成缩略图</string>
+    <string name="design_import_thumbnails_desc">失败不影响导入，只影响列表封面</string>
+    <string name="design_import_duplicates">检测疑似重复视频</string>
+    <string name="design_import_duplicates_desc">按文件大小和首段内容提示，仍会保留副本</string>
+</resources>

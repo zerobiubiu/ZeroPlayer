@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -39,22 +40,26 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.design.theme.Spacing
+import com.privateplayer.core.design.R
 import com.privateplayer.domain.repository.FileTreeEntry
 import kotlinx.coroutines.CancellationException
 
-/** 名称校验（F-21/F-22 共用）：只陈述用户能操作的规则，不出现“空字符”这类术语。 */
-fun nameError(name: String): String? = when {
-    name.isBlank() -> "请输入名称"
-    name == "." || name == ".." -> "名称不能是 . 或 .."
-    name.any { it == '/' || it == '\\' || it == '\u0000' } -> "名称不能包含 / 或 \\"
+/** 名称非法原因（F-21/F-22 共用）；文案由界面按原因取资源，校验逻辑保持纯函数可单测。 */
+enum class NameErrorReason { Blank, DotPath, InvalidCharacter }
+
+/** 名称校验：只陈述用户能操作的规则，不出现“空字符”这类术语。 */
+fun nameErrorReason(name: String): NameErrorReason? = when {
+    name.isBlank() -> NameErrorReason.Blank
+    name == "." || name == ".." -> NameErrorReason.DotPath
+    name.any { it == '/' || it == '\\' || it == '\u0000' } -> NameErrorReason.InvalidCharacter
     else -> null
 }
 
 /** 是否改变真实文件名；旧文件的可读显示名可能与磁盘文件名不同。 */
 fun canConfirmName(name: String, originalName: String?): Boolean =
-    nameError(name) == null && (originalName == null || name != originalName)
+    nameErrorReason(name) == null && (originalName == null || name != originalName)
 
-/** 单行名称对话框：重命名与新建目录共用；非法名称禁用确认并给出行内提示。 */
+/** 单行名称对话框：重命名与新建文件夹共用；非法名称禁用确认并给出行内提示。 */
 @Composable
 fun NameDialog(
     title: String,
@@ -66,7 +71,16 @@ fun NameDialog(
 ) {
     var name by remember(initialName) { mutableStateOf(initialName) }
     var edited by remember(initialName) { mutableStateOf(false) }
-    val error = nameError(name)
+    val reason = nameErrorReason(name)
+    val error = reason?.let {
+        stringResource(
+            when (it) {
+                NameErrorReason.Blank -> R.string.design_name_error_blank
+                NameErrorReason.DotPath -> R.string.design_name_error_dot
+                NameErrorReason.InvalidCharacter -> R.string.design_name_error_chars
+            },
+        )
+    }
     val canConfirm = canConfirmName(name, originalName)
     val confirm = { if (canConfirm) onConfirm(name) }
 
@@ -78,7 +92,7 @@ fun NameDialog(
                 value = name,
                 onValueChange = { name = it; edited = true },
                 modifier = Modifier.fillMaxWidth().testTag("名称输入"),
-                label = { Text("名称") },
+                label = { Text(stringResource(R.string.design_name_label)) },
                 singleLine = true,
                 isError = edited && error != null,
                 supportingText = if (edited && error != null) ({ Text(error) }) else null,
@@ -91,7 +105,7 @@ fun NameDialog(
                 Text(confirmLabel)
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.design_cancel)) } },
     )
 }
 
@@ -99,13 +113,12 @@ fun NameDialog(
 @Composable
 fun DeleteDialog(entry: FileTreeEntry, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     ConfirmDialog(
-        title = if (entry.isDirectory) "删除目录？" else "删除文件？",
-        message = if (entry.isDirectory) {
-            "将永久删除“${entry.name}”及其中的全部内容，此操作无法撤销。"
-        } else {
-            "将永久删除“${entry.name}”，此操作无法撤销。"
-        },
-        confirmLabel = "删除",
+        title = stringResource(if (entry.isDirectory) R.string.design_delete_folder_title else R.string.design_delete_file_title),
+        message = stringResource(
+            if (entry.isDirectory) R.string.design_delete_folder_message else R.string.design_delete_file_message,
+            entry.name,
+        ),
+        confirmLabel = stringResource(R.string.design_delete),
         destructive = true,
         onConfirm = onConfirm,
         onDismiss = onDismiss,
@@ -119,7 +132,7 @@ private sealed interface MoveListing {
     data class Failure(override val path: String) : MoveListing
 }
 
-/** 移动目标选择器：只能进入真实存在的目录，确认按钮在目标与原目录相同时禁用。 */
+/** 移动目标选择器：只能进入真实存在的文件夹，确认按钮在目标与原文件夹相同时禁用。 */
 @Composable
 fun MoveDialog(
     entry: FileTreeEntry,
@@ -147,19 +160,23 @@ fun MoveDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("移动“${entry.name}”") },
+        title = { Text(stringResource(R.string.design_move_title, entry.name)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text("选择目标目录", style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(R.string.design_move_pick_target), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    text = if (destination.isEmpty()) "当前位置：文件" else "当前位置：文件/$destination",
+                    text = if (destination.isEmpty()) {
+                        stringResource(R.string.design_move_current_root)
+                    } else {
+                        stringResource(R.string.design_move_current_path, destination)
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 if (destination.isNotEmpty()) {
                     TextButton(onClick = { destination = destination.substringBeforeLast('/', "") }) {
                         Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = null)
-                        Text("返回上级目录", modifier = Modifier.padding(start = Spacing.sm))
+                        Text(stringResource(R.string.design_move_up), modifier = Modifier.padding(start = Spacing.sm))
                     }
                 }
                 Column(
@@ -169,17 +186,17 @@ fun MoveDialog(
                     when (currentListing) {
                         is MoveListing.Loading -> {
                             CircularProgressIndicator(modifier = Modifier.padding(Spacing.md))
-                            Text("正在读取目录…", modifier = Modifier.padding(Spacing.md))
+                            Text(stringResource(R.string.design_move_loading), modifier = Modifier.padding(Spacing.md))
                         }
 
                         is MoveListing.Failure -> {
-                            Text("无法读取此目录，请重试。", color = MaterialTheme.colorScheme.error)
-                            TextButton(onClick = { refresh++ }) { Text("重试") }
+                            Text(stringResource(R.string.design_move_error), color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = { refresh++ }) { Text(stringResource(R.string.design_retry)) }
                         }
 
                         is MoveListing.Success -> {
                             if (currentListing.directories.isEmpty()) {
-                                Text("没有可进入的子目录", modifier = Modifier.padding(vertical = Spacing.md))
+                                Text(stringResource(R.string.design_move_empty), modifier = Modifier.padding(vertical = Spacing.md))
                             }
                             currentListing.directories.forEach { directory ->
                                 Row(
@@ -203,8 +220,8 @@ fun MoveDialog(
                 onClick = { onConfirm(destination) },
                 enabled = currentListing is MoveListing.Success && destination != originalParent,
                 modifier = Modifier.testTag("移动确认"),
-            ) { Text("移动到此处") }
+            ) { Text(stringResource(R.string.design_move_confirm)) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.design_cancel)) } },
     )
 }

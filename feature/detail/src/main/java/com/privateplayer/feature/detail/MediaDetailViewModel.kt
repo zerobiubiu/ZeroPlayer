@@ -1,5 +1,7 @@
 package com.privateplayer.feature.detail
 
+import android.content.Context
+import androidx.annotation.StringRes
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -16,6 +18,7 @@ import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.usecase.PlaybackStopper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -41,6 +44,9 @@ object DetailRouteArgs {
     const val ARG_MEDIA_ID = "mediaId"
 }
 
+/** 详情页反馈消息：资源 + 参数，文案由界面解析。 */
+data class DetailMessage(@StringRes val res: Int, val args: List<String> = emptyList())
+
 data class MediaDetailUiState(
     val isLoading: Boolean = true,
     val media: Media? = null,
@@ -48,8 +54,9 @@ data class MediaDetailUiState(
     val fileInfo: MediaFileInfo? = null,
     val subtitles: List<SubtitleFile> = emptyList(),
     val sameDirectorySubtitles: List<SubtitleFile> = emptyList(),
-    val sameDirectorySubtitleError: String? = null,
-    val message: String? = null,
+    @StringRes val sameDirectorySubtitleErrorRes: Int? = null,
+    val messageRes: Int? = null,
+    val messageArgs: Array<Any> = emptyArray(),
     val showFileInfo: Boolean = false,
     /** 文件操作进行中：禁用更多菜单，避免并发操作同一文件。 */
     val isWorking: Boolean = false,
@@ -64,13 +71,14 @@ class MediaDetailViewModel @Inject constructor(
     private val subtitleStore: SubtitleStore,
     private val fileLocator: MediaFileLocator,
     private val playbackStopper: PlaybackStopper,
+    @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
 
     private val mediaId: Long = savedStateHandle.get<String>(DetailRouteArgs.ARG_MEDIA_ID)?.toLongOrNull() ?: -1L
 
     private data class Local(
-        val message: String? = null,
+        val message: DetailMessage? = null,
         val showFileInfo: Boolean = false,
         val subtitles: List<SubtitleFile> = emptyList(),
         val isWorking: Boolean = false,
@@ -79,7 +87,7 @@ class MediaDetailViewModel @Inject constructor(
     private data class SameDirectorySubtitles(
         val mediaPath: String? = null,
         val subtitles: List<SubtitleFile> = emptyList(),
-        val error: String? = null,
+        @StringRes val errorRes: Int? = null,
     )
 
     private val local = MutableStateFlow(Local())
@@ -106,11 +114,11 @@ class MediaDetailViewModel @Inject constructor(
                         } catch (error: CancellationException) {
                             throw error
                         } catch (error: Exception) {
-                            SameDirectorySubtitles(mediaPath = mediaPath, error = "无法读取同目录字幕，请在首页检查文件是否存在")
+                            SameDirectorySubtitles(mediaPath = mediaPath, errorRes = R.string.detail_same_dir_subtitle_error)
                         }
                     }
                     .catch {
-                        emit(SameDirectorySubtitles(mediaPath = mediaPath, error = "无法读取同目录字幕，请在首页检查文件是否存在"))
+                        emit(SameDirectorySubtitles(mediaPath = mediaPath, errorRes = R.string.detail_same_dir_subtitle_error))
                     }
             }
         }
@@ -132,8 +140,9 @@ class MediaDetailViewModel @Inject constructor(
             fileInfo = media?.let { fileLocator.mediaFile(it.relativePath) },
             subtitles = localState.subtitles,
             sameDirectorySubtitles = matches?.subtitles.orEmpty(),
-            sameDirectorySubtitleError = matches?.error,
-            message = localState.message,
+            sameDirectorySubtitleErrorRes = matches?.errorRes,
+            messageRes = localState.message?.res,
+            messageArgs = localState.message?.args.orEmpty().toTypedArray(),
             showFileInfo = localState.showFileInfo,
             isWorking = localState.isWorking,
         )
@@ -169,8 +178,8 @@ class MediaDetailViewModel @Inject constructor(
     fun rename(name: String) {
         val entry = treeEntry() ?: return
         performFileOperation(
-            failureMessage = "重命名失败，请检查名称是否有效或已存在。",
-            successMessage = "已重命名",
+            failureMessage = DetailMessage(R.string.detail_rename_failed),
+            successMessage = DetailMessage(R.string.detail_renamed),
         ) {
             playbackStopper.stopIfAffected(entry.path)
             fileTreeRepository.rename(entry.path, name)
@@ -180,8 +189,8 @@ class MediaDetailViewModel @Inject constructor(
     fun move(destination: String) {
         val entry = treeEntry() ?: return
         performFileOperation(
-            failureMessage = "移动失败，请检查目标目录是否可用且没有同名项目。",
-            successMessage = "已移动",
+            failureMessage = DetailMessage(R.string.detail_move_failed),
+            successMessage = DetailMessage(R.string.detail_moved),
         ) {
             playbackStopper.stopIfAffected(entry.path)
             fileTreeRepository.move(entry.path, destination)
@@ -191,15 +200,15 @@ class MediaDetailViewModel @Inject constructor(
     fun delete() {
         val entry = treeEntry() ?: return
         performFileOperation(
-            failureMessage = "删除失败，请确认文件仍然存在后重试。",
-            successMessage = "已删除",
+            failureMessage = DetailMessage(R.string.detail_delete_failed),
+            successMessage = DetailMessage(R.string.detail_deleted),
         ) {
             playbackStopper.stopIfAffected(entry.path)
             fileTreeRepository.delete(entry.path)
         }
     }
 
-    /** 移动目标选择器与首页同一规则：只列真实目录，排除自身及其子树。 */
+    /** 移动目标选择器与首页同一规则：只列真实文件夹，排除自身及其子树。 */
     suspend fun directoriesForMove(path: String, entry: FileTreeEntry): List<FileTreeEntry> =
         withContext(ioDispatcher) {
             fileTreeRepository.list(path)
@@ -209,8 +218,8 @@ class MediaDetailViewModel @Inject constructor(
 
     /** 文件操作统一入口：串行执行、先停播放再动文件；结果经消息反馈，媒体记录由观察流自动同步。 */
     private fun performFileOperation(
-        failureMessage: String,
-        successMessage: String,
+        failureMessage: DetailMessage,
+        successMessage: DetailMessage,
         action: suspend () -> Unit,
     ) {
         if (local.value.isWorking) return
@@ -238,12 +247,12 @@ class MediaDetailViewModel @Inject constructor(
     }
 
     fun importSubtitle(uri: String) =
-        changeSubtitles("字幕已添加") { subtitleStore.import(mediaId, uri) }
+        changeSubtitles(DetailMessage(R.string.detail_subtitle_added)) { subtitleStore.import(mediaId, uri) }
 
     fun deleteSubtitle(subtitle: SubtitleFile) =
-        changeSubtitles("字幕已删除") { subtitleStore.delete(subtitle.absolutePath) }
+        changeSubtitles(DetailMessage(R.string.detail_subtitle_deleted)) { subtitleStore.delete(subtitle.absolutePath) }
 
-    private fun changeSubtitles(success: String, action: suspend () -> OperationOutcome) {
+    private fun changeSubtitles(success: DetailMessage, action: suspend () -> OperationOutcome) {
         viewModelScope.launch(ioDispatcher) {
             subtitleMutex.withLock {
                 val outcome = try {
@@ -251,16 +260,16 @@ class MediaDetailViewModel @Inject constructor(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
-                    OperationOutcome.Failure("字幕操作失败：${error.message ?: "未知错误"}")
+                    OperationOutcome.Failure(error.message ?: context.getString(R.string.detail_unknown_error))
                 }
                 val subtitles = subtitleStore.list(mediaId)
-                local.update { it.copy(subtitles = subtitles, message = outcome.text(success)) }
+                local.update { it.copy(subtitles = subtitles, message = outcome.toMessage(success)) }
             }
         }
     }
 
-    private fun OperationOutcome.text(success: String): String = when (this) {
+    private fun OperationOutcome.toMessage(success: DetailMessage): DetailMessage = when (this) {
         is OperationOutcome.Success -> success
-        is OperationOutcome.Failure -> message
+        is OperationOutcome.Failure -> DetailMessage(R.string.detail_subtitle_op_failed, listOf(message))
     }
 }

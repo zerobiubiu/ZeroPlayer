@@ -8,7 +8,7 @@ import javax.inject.Singleton
 
 /** 外部打开请求独立持久化，进程被系统回收时仍可关联导入任务及播放目标。 */
 @Singleton
-class ExternalOpenStore @Inject constructor(@ApplicationContext context: Context) {
+class ExternalOpenStore @Inject constructor(@ApplicationContext private val context: Context) {
     data class State(val taskId: String?, val uri: String?, val mimeType: String?, val readyMediaId: Long?)
 
     private val preferences = context.getSharedPreferences("external_open", Context.MODE_PRIVATE)
@@ -23,16 +23,16 @@ class ExternalOpenStore @Inject constructor(@ApplicationContext context: Context
     fun pending(taskId: String, uri: String, mimeType: String?) {
         val edit = preferences.edit().clear().putString("task_id", taskId).putString("uri", uri)
         if (mimeType != null) edit.putString("mime_type", mimeType)
-        if (!edit.commit()) throw IOException("无法保存外部打开请求")
+        if (!edit.commit()) throw IOException(context.getString(R.string.app_external_store_pending_failed))
     }
 
     fun ready(mediaId: Long) {
         if (!preferences.edit().remove("task_id").putLong("media_id", mediaId).commit()) {
-            throw IOException("无法保存待播放的媒体记录")
+            throw IOException(context.getString(R.string.app_external_store_ready_failed))
         }
     }
 
     fun clear() {
-        if (!preferences.edit().clear().commit()) throw IOException("无法清除外部打开请求")
+        if (!preferences.edit().clear().commit()) throw IOException(context.getString(R.string.app_external_store_clear_failed))
     }
 }

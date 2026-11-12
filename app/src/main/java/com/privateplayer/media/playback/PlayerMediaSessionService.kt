@@ -156,7 +156,7 @@ class PlayerMediaSessionService : MediaSessionService() {
                         }
                         if (!needsCpu && wakeLock.isHeld) wakeLock.release()
                     } catch (error: RuntimeException) {
-                        coordinator.reportError("无法保持后台播放：${error.message ?: "电源锁不可用"}")
+                        coordinator.reportError(getString(R.string.app_service_wakelock_failed, error.message ?: getString(R.string.app_service_power_lock_unavailable)))
                     }
                 }
             }
@@ -189,10 +189,10 @@ class PlayerMediaSessionService : MediaSessionService() {
             // 应用内直接控制引擎，不等待外部控制器连接也必须注册通知观察者。
             addSession(session)
         } catch (error: Exception) {
-            coordinator.reportError("创建媒体会话失败：${error.message ?: "未知错误"}")
+            coordinator.reportError(getString(R.string.app_service_session_failed, error.message ?: getString(R.string.app_service_unknown_error)))
             stopSelf()
         } catch (error: LinkageError) {
-            coordinator.reportError("创建媒体会话失败：${error.message ?: "组件不可用"}")
+            coordinator.reportError(getString(R.string.app_service_session_failed, error.message ?: getString(R.string.app_service_component_unavailable)))
             stopSelf()
         }
     }
@@ -270,7 +270,7 @@ class PlayerMediaSessionService : MediaSessionService() {
 
     private fun initialNotification(): Notification {
         notificationManager.createNotificationChannel(
-            NotificationChannel(DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID, "媒体播放", NotificationManager.IMPORTANCE_LOW),
+            NotificationChannel(DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID, getString(R.string.app_media_channel_name), NotificationManager.IMPORTANCE_LOW),
         )
         return Notification.Builder(this, DefaultMediaNotificationProvider.DEFAULT_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -407,7 +407,7 @@ object PlaybackServiceModule {
         object : PlaybackServiceStarter {
             override fun start(): String? =
                 if (context.startService(Intent(context, PlayerMediaSessionService::class.java)) == null) {
-                    "系统未能创建播放服务"
+                    context.getString(R.string.app_service_create_failed)
                 } else {
                     null
                 }

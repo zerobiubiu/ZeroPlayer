@@ -40,6 +40,7 @@ class FileTransferManager @Inject constructor(
     private val fileTree: FileTreeRepository,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
+    private fun text(res: Int, vararg args: Any): String = context.getString(res, *args)
     suspend fun share(path: String): Intent = withContext(ioDispatcher) {
         val file = fileTree.openForRead(path)
         val name = fileTree.find(path)?.name ?: file.name
@@ -47,10 +48,10 @@ class FileTransferManager @Inject constructor(
         val send = Intent(Intent.ACTION_SEND).apply {
             type = mimeForName(name)
             putExtra(Intent.EXTRA_STREAM, uri)
-            clipData = ClipData.newRawUri("文件", uri)
+            clipData = ClipData.newRawUri(text(R.string.app_share_clip_label), uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        Intent.createChooser(send, "分享文件").apply {
+        Intent.createChooser(send, text(R.string.app_share_chooser_title)).apply {
             clipData = send.clipData
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -58,18 +59,18 @@ class FileTransferManager @Inject constructor(
 
     suspend fun export(path: String, destination: Uri, onProgress: (Long, Long) -> Unit) = withContext(ioDispatcher) {
         if (destination.scheme != "content" || destination.authority.isNullOrBlank()) {
-            throw IOException("导出目标不是有效的文档地址")
+            throw IOException(text(R.string.app_export_invalid_target))
         }
         val authority = requireNotNull(destination.authority)
         val owner = context.packageManager.resolveContentProvider(authority, 0)?.packageName
         if (authority == "${context.packageName}.files" || owner == context.packageName) {
-            throw IOException("不能将文件导出到应用自己的私有文件")
+            throw IOException(text(R.string.app_export_self_target))
         }
         val source = fileTree.openForRead(path)
         val total = source.length()
         source.inputStream().use { input ->
             val output = context.contentResolver.openOutputStream(destination, "w")
-                ?: throw IOException("无法打开导出目标")
+                ?: throw IOException(text(R.string.app_export_open_target_failed))
             output.use {
                 val buffer = ByteArray(1024 * 1024)
                 var copied = 0L
@@ -91,7 +92,7 @@ class FileTransferManager @Inject constructor(
                     }
                 }
                 output.flush()
-                if (copied != total) throw IOException("源文件在导出期间发生变化")
+                if (copied != total) throw IOException(text(R.string.app_export_source_changed))
                 onProgress(copied, total)
             }
         }
@@ -100,6 +101,7 @@ class FileTransferManager @Inject constructor(
 
 @HiltViewModel
 class FileTransferViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val manager: FileTransferManager,
     private val savedState: SavedStateHandle,
 ) : ViewModel() {
@@ -114,7 +116,7 @@ class FileTransferViewModel @Inject constructor(
         savedState.set<String?>(KEY_EXPORT_PATH, null)
         if (path == null || destination == null) return
         if (mutableState.value.exporting) {
-            mutableState.update { it.copy(message = "已有文件正在导出，请等待完成") }
+            mutableState.update { it.copy(message = context.getString(R.string.app_export_busy)) }
             return
         }
         mutableState.update { it.copy(exporting = true, copied = 0L, total = 0L, message = null) }
@@ -123,13 +125,14 @@ class FileTransferViewModel @Inject constructor(
                 manager.export(path, destination) { copied, total ->
                     mutableState.update { it.copy(copied = copied, total = total) }
                 }
-                mutableState.update { it.copy(exporting = false, message = "导出完成") }
+                mutableState.update { it.copy(exporting = false, message = context.getString(R.string.app_export_done)) }
             } catch (cancelled: CancellationException) {
-                mutableState.update { it.copy(exporting = false, message = "已取消导出；目标位置可能保留未完成的文件") }
+                mutableState.update { it.copy(exporting = false, message = context.getString(R.string.app_export_canceled)) }
                 throw cancelled
             } catch (error: Exception) {
+                val reason = error.message ?: context.getString(R.string.app_export_write_failed)
                 mutableState.update {
-                    it.copy(exporting = false, message = "导出失败：${error.message ?: "无法写入目标"}；目标位置可能保留未完成的文件")
+                    it.copy(exporting = false, message = context.getString(R.string.app_export_failed, reason))
                 }
             }
         }
@@ -145,7 +148,8 @@ class FileTransferViewModel @Inject constructor(
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                mutableState.update { it.copy(message = "分享失败：${error.message ?: "无法读取文件"}") }
+                val reason = error.message ?: context.getString(R.string.app_share_read_failed)
+                mutableState.update { it.copy(message = context.getString(R.string.app_share_failed, reason)) }
             }
         }
     }

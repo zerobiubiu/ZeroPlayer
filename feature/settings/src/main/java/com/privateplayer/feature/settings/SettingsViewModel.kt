@@ -1,5 +1,6 @@
 package com.privateplayer.feature.settings
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.ApplicationScope
@@ -26,13 +27,17 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+/** 设置页反馈消息：资源 + 参数，文案由界面解析，逻辑层不持有中文。 */
+data class SettingsMessage(@StringRes val res: Int, val args: List<String> = emptyList())
+
 data class SettingsUiState(
     val settings: AppSettings = AppSettings(),
     val usage: StorageUsage = StorageUsage(0, 0, 0, 0, 0),
     val engineLabel: String = "",
     val engineDetail: String = "",
     val versionName: String = "",
-    val message: String? = null,
+    val messageRes: Int? = null,
+    val messageArgs: Array<Any> = emptyArray(),
 )
 
 @HiltViewModel
@@ -44,7 +49,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationScope private val applicationScope: CoroutineScope,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : ViewModel() {
-    private val message = MutableStateFlow<String?>(null)
+    private val message = MutableStateFlow<SettingsMessage?>(null)
 
     /**
      * 设置写入队列：所有写入按提交顺序串行执行。
@@ -53,7 +58,7 @@ class SettingsViewModel @Inject constructor(
      * 队列消费使用应用级作用域，离开设置页后仍在完成写入。
      */
     private val writeQueue = SettingsWriteQueue(applicationScope) { error ->
-        message.value = "设置保存失败：${error.message ?: "未知错误"}"
+        message.value = SettingsMessage(R.string.settings_save_failed, listOf(error.message ?: ""))
     }
 
     private val engineLabel = engineProvider.backendLabel
@@ -71,7 +76,8 @@ class SettingsViewModel @Inject constructor(
             engineLabel = engineLabel,
             engineDetail = engineDetail,
             versionName = versionName,
-            message = messageValue,
+            messageRes = messageValue?.res,
+            messageArgs = messageValue?.args.orEmpty().toTypedArray(),
         )
     }
         .flowOn(ioDispatcher)
@@ -125,15 +131,15 @@ class SettingsViewModel @Inject constructor(
 
     fun clearThumbnailCache() {
         viewModelScope.launch {
-            val outcome = storageRepository.clearThumbnailCache()
-            message.value = outcome.text("缩略图缓存已清理")
+            message.value = storageRepository.clearThumbnailCache()
+                .toMessage(R.string.settings_thumbnails_cleared)
         }
     }
 
     fun clearTemporaryFiles() {
         viewModelScope.launch {
-            val outcome = storageRepository.clearTemporaryFiles()
-            message.value = outcome.text("临时文件已清理")
+            message.value = storageRepository.clearTemporaryFiles()
+                .toMessage(R.string.settings_temp_cleared)
         }
     }
 
@@ -141,8 +147,9 @@ class SettingsViewModel @Inject constructor(
         writeQueue.submit(block)
     }
 
-    private fun OperationOutcome.text(success: String): String = when (this) {
-        is OperationOutcome.Success -> success
-        is OperationOutcome.Failure -> message
+    /** 成功只反馈结果；失败原因来自数据层，保持可展示文本。 */
+    private fun OperationOutcome.toMessage(@StringRes successRes: Int): SettingsMessage = when (this) {
+        is OperationOutcome.Success -> SettingsMessage(successRes)
+        is OperationOutcome.Failure -> SettingsMessage(R.string.settings_operation_failed, listOf(message))
     }
 }

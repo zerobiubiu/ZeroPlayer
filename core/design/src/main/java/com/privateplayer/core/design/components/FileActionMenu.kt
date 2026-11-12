@@ -1,5 +1,6 @@
 package com.privateplayer.core.design.components
 
+import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileMove
@@ -17,17 +18,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.core.design.R
 
 /** 文件操作菜单的动作；名称与图标全应用唯一，首页行菜单与详情页更多菜单共用。 */
-enum class FileAction(val label: String, val icon: ImageVector) {
-    Details("视频详情", Icons.Outlined.Info),
-    FileInfo("文件信息", Icons.Outlined.Info),
-    Export("导出", Icons.Outlined.Upload),
-    Share("分享", Icons.Outlined.Share),
-    Rename("重命名", Icons.Outlined.Edit),
-    Move("移动", Icons.Outlined.DriveFileMove),
-    Delete("删除", Icons.Outlined.Delete),
+enum class FileAction(@StringRes val labelRes: Int, val icon: ImageVector) {
+    Details(R.string.design_action_details, Icons.Outlined.Info),
+    FileInfo(R.string.design_action_file_info, Icons.Outlined.Info),
+    Export(R.string.design_action_export, Icons.Outlined.Upload),
+    Share(R.string.design_action_share, Icons.Outlined.Share),
+    Rename(R.string.design_action_rename, Icons.Outlined.Edit),
+    Move(R.string.design_action_move, Icons.Outlined.DriveFileMove),
+    Delete(R.string.design_action_delete, Icons.Outlined.Delete),
 }
 
 /** 菜单分组：信息 / 传输 / 管理 / 危险。组间用分隔线，不加组标题。 */
@@ -38,7 +41,7 @@ data class FileActionGroup(val actions: List<FileAction>)
  *
  * 分组顺序固定为 信息（视频详情/文件信息）→ 传输（导出/分享）→ 管理（重命名/移动）→ 危险（删除）；
  * 删除始终位于最后一个独立分组。不同页面按 [available] 取子集：
- * 首页视频行不含“文件信息”，详情页不含“视频详情”，目录与非视频文件不含传输/详情项。
+ * 首页视频行不含“文件信息”，详情页不含“视频详情”，文件夹与非视频文件不含传输/详情项。
  */
 fun fileActionMenuGroups(entry: FileTreeEntry, available: Set<FileAction>): List<FileActionGroup> {
     fun group(vararg actions: FileAction): FileActionGroup? =
@@ -68,8 +71,9 @@ fun FileActionMenuContent(
         if (index > 0) HorizontalDivider()
         group.actions.forEach { action ->
             val destructive = action == FileAction.Delete
+            val label = stringResource(action.labelRes)
             DropdownMenuItem(
-                modifier = Modifier.testTag("文件菜单-${action.label}"),
+                modifier = Modifier.testTag("文件菜单-$label"),
                 leadingIcon = {
                     Icon(
                         imageVector = action.icon,
@@ -79,7 +83,7 @@ fun FileActionMenuContent(
                 },
                 text = {
                     Text(
-                        text = action.label,
+                        text = label,
                         color = if (destructive) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                     )
                 },

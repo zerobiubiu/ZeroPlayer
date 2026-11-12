@@ -11,7 +11,7 @@ import com.privateplayer.core.playback.PlaybackSource
 
 /** 所有入口共用的焦点策略：短暂失焦暂停，恢复焦点时仅恢复此前正在播放的内容。 */
 internal class FocusPlaybackEngine(
-    context: Context,
+    private val context: Context,
     private val delegate: PlaybackEngine,
     private val awaitPreviousRelease: suspend () -> Unit,
     private val onError: (String) -> Unit,
@@ -43,13 +43,13 @@ internal class FocusPlaybackEngine(
             audioManager?.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         } catch (error: RuntimeException) {
             onFocusAbandoned()
-            onError("申请音频焦点失败：${error.message ?: error.javaClass.simpleName}")
+            onError(context.getString(R.string.player_error_focus_request, error.message ?: error.javaClass.simpleName))
             return false
         }
         hasFocus = granted
         if (!granted) {
             onFocusAbandoned()
-            onError("系统拒绝音频焦点，请返回播放器后重试")
+            onError(context.getString(R.string.player_error_focus_denied))
         }
         return granted
     }

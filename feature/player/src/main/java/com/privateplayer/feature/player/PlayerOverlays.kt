@@ -56,6 +56,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,10 +64,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.privateplayer.core.common.format.formatDuration
-import com.privateplayer.core.playback.MediaTrack
+import com.privateplayer.feature.player.R
 import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackStatus
-import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.abs
 
 /** 播放器覆盖层的可读文本色板：固定白色系，不跟随主题。 */
@@ -81,6 +81,7 @@ fun PlayerVideoLayer(
     onSurfaceDestroyed: (android.view.Surface) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val surfaceDescription = stringResource(R.string.player_video_surface)
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -106,7 +107,7 @@ fun PlayerVideoLayer(
                 }
             },
             onRelease = { onSurfaceDestroyed(it.holder.surface) },
-            modifier = Modifier.fillMaxSize().semantics { contentDescription = "视频画面" },
+            modifier = Modifier.fillMaxSize().semantics { contentDescription = surfaceDescription },
         )
     }
 }
@@ -137,7 +138,7 @@ fun PlayerTopBar(
             .padding(horizontal = 4.dp, vertical = 2.dp),
     ) {
         IconButton(onClick = onBack) {
-            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回", tint = PlayerText)
+            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.player_back), tint = PlayerText)
         }
         Text(
             text = title,
@@ -150,16 +151,16 @@ fun PlayerTopBar(
                 .padding(horizontal = 4.dp),
         )
         IconButton(onClick = onOpenAspect) {
-            Icon(Icons.Outlined.AspectRatio, contentDescription = "画面比例", tint = PlayerText)
+            Icon(Icons.Outlined.AspectRatio, contentDescription = stringResource(R.string.player_aspect), tint = PlayerText)
         }
         IconButton(onClick = onRotate) {
-            Icon(Icons.Outlined.ScreenRotation, contentDescription = "旋转屏幕", tint = PlayerText)
+            Icon(Icons.Outlined.ScreenRotation, contentDescription = stringResource(R.string.player_rotate), tint = PlayerText)
         }
         IconButton(onClick = onOpenSubtitle) {
-            Icon(Icons.Outlined.ClosedCaption, contentDescription = "字幕", tint = PlayerText)
+            Icon(Icons.Outlined.ClosedCaption, contentDescription = stringResource(R.string.player_subtitle), tint = PlayerText)
         }
         IconButton(onClick = onOpenMore) {
-            Icon(Icons.Outlined.MoreVert, contentDescription = "更多", tint = PlayerText)
+            Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.player_more), tint = PlayerText)
         }
     }
 }
@@ -186,6 +187,7 @@ fun PlayerBottomControls(
     val sliderValue = scrubValue ?: (snapshot.positionMs.toFloat() / duration).coerceIn(0f, 1f)
     val shownPosition = (sliderValue * duration).toLong()
     val remaining = (duration - shownPosition).coerceAtLeast(0L)
+    val progressDescription = stringResource(R.string.player_progress)
 
     Column(
         modifier = modifier
@@ -201,13 +203,13 @@ fun PlayerBottomControls(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = "${formatDuration(shownPosition)} / ${formatDuration(duration)}",
+                text = stringResource(R.string.player_time_format, formatDuration(shownPosition), formatDuration(duration)),
                 style = MaterialTheme.typography.labelLarge,
                 color = PlayerText,
             )
             Spacer(Modifier.weight(1f))
             Text(
-                text = "-${formatDuration(remaining)}",
+                text = stringResource(R.string.player_remaining_format, formatDuration(remaining)),
                 style = MaterialTheme.typography.labelLarge,
                 color = PlayerTextSecondary,
             )
@@ -232,7 +234,7 @@ fun PlayerBottomControls(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 4.dp)
-                .semantics { contentDescription = "播放进度" },
+                .semantics { contentDescription = progressDescription },
         )
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -246,24 +248,24 @@ fun PlayerBottomControls(
             ) {
                 PlayerTransportButton(
                     icon = Icons.Filled.Replay10,
-                    contentDescription = "快退 $seekStepSeconds 秒",
+                    contentDescription = stringResource(R.string.player_rewind_seconds, seekStepSeconds),
                     onClick = onSeekBack,
                 )
                 PlayerTransportButton(
                     icon = if (snapshot.status == PlaybackStatus.PLAYING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = if (snapshot.status == PlaybackStatus.PLAYING) "暂停" else "播放",
+                    contentDescription = stringResource(if (snapshot.status == PlaybackStatus.PLAYING) R.string.player_pause else R.string.player_play),
                     onClick = onPlayPause,
                     large = true,
                     loading = snapshot.status == PlaybackStatus.LOADING,
                 )
                 PlayerTransportButton(
                     icon = Icons.Filled.Forward10,
-                    contentDescription = "快进 $seekStepSeconds 秒",
+                    contentDescription = stringResource(R.string.player_forward_seconds, seekStepSeconds),
                     onClick = onSeekForward,
                 )
             }
             IconButton(onClick = onOpenQueue) {
-                Icon(Icons.Outlined.QueueMusic, contentDescription = "播放队列", tint = PlayerText)
+                Icon(Icons.Outlined.QueueMusic, contentDescription = stringResource(R.string.player_queue), tint = PlayerText)
             }
         }
     }
@@ -277,7 +279,7 @@ private fun PlayerSpeedPill(speed: Float, onClick: () -> Unit) {
         onClick = onClick,
     ) {
         Text(
-            text = "${formatSpeed(speed)}×",
+            text = stringResource(R.string.player_speed_format, formatSpeed(speed)),
             style = MaterialTheme.typography.labelLarge,
             color = PlayerText,
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
@@ -326,8 +328,9 @@ internal fun PlayerSeekGestureOverlay(
 ) {
     val targetText = if (preview.targetMs == 0L) "00:00" else formatDuration(preview.targetMs)
     val deltaText = formatSeekDelta(preview.deltaMs)
-    val mode = if (preview.accelerated) "加速" else "微调"
+    val mode = stringResource(if (preview.accelerated) R.string.player_seek_mode_accelerated else R.string.player_seek_mode_fine)
     val fraction = (preview.targetMs.toDouble() / preview.durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
+    val seekDescription = stringResource(R.string.player_seek_description, targetText, deltaText, mode, preview.tickSeconds)
 
     Surface(
         color = Color.Black.copy(alpha = 0.9f),
@@ -336,7 +339,7 @@ internal fun PlayerSeekGestureOverlay(
             .widthIn(max = 380.dp)
             .fillMaxWidth()
             .semantics(mergeDescendants = true) {
-                contentDescription = "预览目标 $targetText，$deltaText，$mode，每格 ${preview.tickSeconds} 秒"
+                contentDescription = seekDescription
             },
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -345,7 +348,7 @@ internal fun PlayerSeekGestureOverlay(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    text = "目标 $targetText",
+                    text = stringResource(R.string.player_seek_target, targetText),
                     style = MaterialTheme.typography.titleSmall,
                     color = PlayerText,
                     maxLines = 1,
@@ -371,7 +374,7 @@ internal fun PlayerSeekGestureOverlay(
             }
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "$mode · 每格 ${preview.tickSeconds} 秒",
+                text = stringResource(R.string.player_seek_tick, mode, preview.tickSeconds),
                 style = MaterialTheme.typography.labelSmall,
                 color = PlayerTextSecondary,
                 maxLines = 1,
@@ -381,12 +384,14 @@ internal fun PlayerSeekGestureOverlay(
     }
 }
 
+@Composable
 private fun formatSeekDelta(deltaMs: Long): String {
-    if (deltaMs == 0L) return "0 秒"
+    if (deltaMs == 0L) return stringResource(R.string.player_seek_delta_zero)
     val magnitude = abs(deltaMs)
     val remainder = magnitude % 1_000L
     val decimals = if (remainder == 0L) "" else ".${remainder.toString().padStart(3, '0').trimEnd('0')}"
-    return "${if (deltaMs > 0L) "+" else "−"}${magnitude / 1_000L}$decimals 秒"
+    val sign = if (deltaMs > 0L) "+" else "−"
+    return stringResource(R.string.player_seek_delta_format, sign, "${magnitude / 1_000L}$decimals")
 }
 
 /** 手势反馈浮层：快进/快退、音量、亮度、临时倍速。 */
@@ -430,7 +435,7 @@ fun LockedIndicator(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
         ) {
             Icon(Icons.Outlined.Lock, contentDescription = null, tint = PlayerText, modifier = Modifier.size(16.dp))
             Spacer(Modifier.width(6.dp))
-            Text(text = "已锁定，点击解锁", style = MaterialTheme.typography.labelSmall, color = PlayerText)
+            Text(text = stringResource(R.string.player_locked_hint), style = MaterialTheme.typography.labelSmall, color = PlayerText)
         }
     }
 }
@@ -453,7 +458,7 @@ fun PlayerErrorBanner(message: String, onDismiss: () -> Unit, modifier: Modifier
                 color = MaterialTheme.colorScheme.onErrorContainer,
                 modifier = Modifier.weight(1f),
             )
-            TextButton(onClick = onDismiss) { Text("知道了") }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_dismiss)) }
         }
     }
 }
@@ -463,13 +468,3 @@ private fun formatSpeed(speed: Float): String {
     return if (rounded % 100 == 0) (rounded / 100).toString() else (rounded / 100f).toString().trimEnd('0').trimEnd('.')
 }
 
-private val VideoAspect.label: String
-    get() = when (this) {
-        VideoAspect.FIT -> "适应"
-        VideoAspect.FILL -> "拉伸"
-        VideoAspect.CROP -> "裁剪"
-        VideoAspect.RATIO_16_9 -> "16:9"
-        VideoAspect.RATIO_4_3 -> "4:3"
-    }
-
-private fun trackLabel(track: MediaTrack?): String = track?.label ?: "默认"

@@ -1,5 +1,6 @@
 package com.privateplayer.feature.home
 
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.IoDispatcher
@@ -35,7 +36,7 @@ data class HomeUiState(
     val entries: List<FileTreeEntry> = emptyList(),
     val isLoading: Boolean = true,
     val isWorking: Boolean = false,
-    val error: String? = null,
+    @StringRes val errorRes: Int? = null,
 )
 
 private val entryOrder = Comparator<FileTreeEntry> { left, right ->
@@ -56,7 +57,7 @@ class HomeViewModel @Inject constructor(
     private val currentDirectory = MutableStateFlow("")
     private val reload = MutableStateFlow(0L)
     private val working = MutableStateFlow(false)
-    private val messageChannel = Channel<String>(Channel.BUFFERED)
+    private val messageChannel = Channel<HomeMessage>(Channel.BUFFERED)
     val messages = messageChannel.receiveAsFlow()
 
     private val directoryState = combine(currentDirectory, reload) { path, generation -> path to generation }
@@ -66,12 +67,8 @@ class HomeViewModel @Inject constructor(
                 .onStart { emit(HomeUiState(currentDirectory = path)) }
                 .catch { error ->
                     if (error is CancellationException) throw error
-                    val message = if (path.isEmpty()) {
-                        "无法读取文件目录，请稍后重试。"
-                    } else {
-                        "无法读取此目录，可能已被移动或删除。请返回上级目录或重试。"
-                    }
-                    emit(HomeUiState(currentDirectory = path, isLoading = false, error = message))
+                    val errorRes = if (path.isEmpty()) R.string.home_error_root else R.string.home_error_directory
+                    emit(HomeUiState(currentDirectory = path, isLoading = false, errorRes = errorRes))
                 }
         }
         .flowOn(ioDispatcher)
@@ -94,7 +91,7 @@ class HomeViewModel @Inject constructor(
     }
 
     fun showUnsupportedFileMessage() {
-        messageChannel.trySend("此文件不支持播放，可通过操作菜单导出或分享。")
+        messageChannel.trySend(HomeMessage.UnsupportedFile)
     }
 
     fun resolveVideo(entry: FileTreeEntry, onResolved: (Long) -> Unit) {
@@ -103,7 +100,7 @@ class HomeViewModel @Inject constructor(
             return
         }
         perform(
-            failureMessage = "无法打开视频，请确认文件仍然存在后重试。",
+            failureMessage = HomeMessage.OpenVideoFailed,
             action = { entry.mediaId ?: fileTreeRepository.ensureMedia(entry.path) },
             onSuccess = onResolved,
         )
@@ -111,16 +108,16 @@ class HomeViewModel @Inject constructor(
 
     fun createDirectory(parent: String, name: String) {
         perform(
-            failureMessage = "新建目录失败，请检查名称是否有效或已存在。",
-            successMessage = "目录已创建",
+            failureMessage = HomeMessage.CreateFolderFailed,
+            successMessage = HomeMessage.FolderCreated,
             action = { fileTreeRepository.createDirectory(parent, name) },
         )
     }
 
     fun rename(entry: FileTreeEntry, name: String) {
         perform(
-            failureMessage = "重命名失败，请检查名称是否有效或已存在。",
-            successMessage = "已重命名",
+            failureMessage = HomeMessage.RenameFailed,
+            successMessage = HomeMessage.Renamed,
             action = {
                 playbackStopper.stopIfAffected(entry.path)
                 fileTreeRepository.rename(entry.path, name)
@@ -130,8 +127,8 @@ class HomeViewModel @Inject constructor(
 
     fun move(entry: FileTreeEntry, destination: String) {
         perform(
-            failureMessage = "移动失败，请检查目标目录是否可用且没有同名项目。",
-            successMessage = "已移动",
+            failureMessage = HomeMessage.MoveFailed,
+            successMessage = HomeMessage.Moved,
             action = {
                 playbackStopper.stopIfAffected(entry.path)
                 fileTreeRepository.move(entry.path, destination)
@@ -141,8 +138,8 @@ class HomeViewModel @Inject constructor(
 
     fun delete(entry: FileTreeEntry) {
         perform(
-            failureMessage = "删除失败，请确认项目仍然存在后重试。",
-            successMessage = "已删除",
+            failureMessage = HomeMessage.DeleteFailed,
+            successMessage = HomeMessage.Deleted,
             action = {
                 playbackStopper.stopIfAffected(entry.path)
                 fileTreeRepository.delete(entry.path)
@@ -150,7 +147,7 @@ class HomeViewModel @Inject constructor(
         )
     }
 
-    /** 目标选择器只能浏览实际存在的目录，且不能进入正在移动的目录。 */
+    /** 目标选择器只能浏览实际存在的文件夹，且不能进入正在移动的文件夹。 */
     suspend fun directoriesForMove(path: String, entry: FileTreeEntry): List<FileTreeEntry> =
         withContext(ioDispatcher) {
             fileTreeRepository.list(path)
@@ -159,8 +156,8 @@ class HomeViewModel @Inject constructor(
         }
 
     private fun <T> perform(
-        failureMessage: String,
-        successMessage: String? = null,
+        failureMessage: HomeMessage,
+        successMessage: HomeMessage? = null,
         action: suspend () -> T,
         onSuccess: (T) -> Unit = {},
     ) {

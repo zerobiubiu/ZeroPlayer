@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -72,11 +73,19 @@ fun HomeScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    var pendingMessage by remember { mutableStateOf<HomeMessage?>(null) }
     var dialog by remember { mutableStateOf<HomeDialog?>(null) }
+    val messageText = pendingMessage?.let { stringResource(it.labelRes()) }
 
     BackHandler(enabled = state.currentDirectory.isNotEmpty()) { viewModel.navigateUp() }
     LaunchedEffect(viewModel) {
-        viewModel.messages.collect { message -> snackbarHostState.showSnackbar(message) }
+        viewModel.messages.collect { message -> pendingMessage = message }
+    }
+    LaunchedEffect(messageText) {
+        messageText?.let {
+            snackbarHostState.showSnackbar(it)
+            pendingMessage = null
+        }
     }
 
     Scaffold(
@@ -106,14 +115,14 @@ fun HomeScreen(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                         .semantics { liveRegion = LiveRegionMode.Polite },
                     contentAlignment = Alignment.Center,
-                ) { LoadingState("正在读取目录…") }
+                ) { LoadingState(label = stringResource(R.string.home_loading)) }
 
-                state.error != null -> Box(
+                state.errorRes != null -> Box(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
                         .semantics { liveRegion = LiveRegionMode.Polite },
                     contentAlignment = Alignment.Center,
                 ) {
-                    ErrorState(message = state.error.orEmpty(), onRetry = viewModel::retry)
+                    ErrorState(message = stringResource(state.errorRes!!), onRetry = viewModel::retry)
                 }
 
                 state.entries.isEmpty() -> Box(
@@ -123,9 +132,9 @@ fun HomeScreen(
                 ) {
                     EmptyState(
                         icon = Icons.Outlined.FolderOpen,
-                        title = "此目录为空",
-                        message = "使用右上角的加号导入文件，或新建目录。",
-                        actionLabel = if (state.isWorking) null else "新建目录",
+                        title = stringResource(R.string.home_empty_title),
+                        message = stringResource(R.string.home_empty_message),
+                        actionLabel = if (state.isWorking) null else stringResource(R.string.home_new_folder),
                         onAction = if (state.isWorking) null else ({ dialog = HomeDialog.CreateDirectory(state.currentDirectory) }),
                         modifier = Modifier.padding(horizontal = Spacing.screenHorizontal),
                     )
@@ -161,9 +170,9 @@ fun HomeScreen(
 
     when (val active = dialog) {
         is HomeDialog.CreateDirectory -> NameDialog(
-            title = "新建目录",
+            title = stringResource(R.string.home_dialog_create_title),
             initialName = "",
-            confirmLabel = "创建",
+            confirmLabel = stringResource(R.string.home_dialog_create_confirm),
             onDismiss = { dialog = null },
             onConfirm = { name ->
                 dialog = null
@@ -172,10 +181,10 @@ fun HomeScreen(
         )
 
         is HomeDialog.Rename -> NameDialog(
-            title = "重命名",
+            title = stringResource(R.string.home_dialog_rename_title),
             initialName = active.entry.name,
             originalName = active.entry.path.substringAfterLast('/'),
-            confirmLabel = "保存",
+            confirmLabel = stringResource(R.string.home_dialog_rename_confirm),
             onDismiss = { dialog = null },
             onConfirm = { name ->
                 dialog = null
@@ -218,29 +227,29 @@ private fun HomeTopBar(
 ) {
     var importMenuExpanded by remember { mutableStateOf(false) }
     TopAppBar(
-        title = { Text("文件", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+        title = { Text(stringResource(R.string.home_title), maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = {
             if (canGoBack) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回上级目录")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.home_back_description))
                 }
             }
         },
         actions = {
             IconButton(onClick = onCreateDirectory, enabled = enabled) {
-                Icon(Icons.Outlined.CreateNewFolder, contentDescription = "新建目录")
+                Icon(Icons.Outlined.CreateNewFolder, contentDescription = stringResource(R.string.home_new_folder))
             }
             Box {
                 IconButton(onClick = { importMenuExpanded = true }, enabled = enabled) {
-                    Icon(Icons.Outlined.Add, contentDescription = "导入文件")
+                    Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.home_import_files))
                 }
                 DropdownMenu(expanded = importMenuExpanded, onDismissRequest = { importMenuExpanded = false }) {
                     DropdownMenuItem(
-                        text = { Text("从本机导入") },
+                        text = { Text(stringResource(R.string.home_import_local)) },
                         onClick = { importMenuExpanded = false; onLocalImport() },
                     )
                     DropdownMenuItem(
-                        text = { Text("通过 Wi-Fi 导入") },
+                        text = { Text(stringResource(R.string.home_import_wifi)) },
                         onClick = { importMenuExpanded = false; onWifiImport() },
                     )
                 }
@@ -251,10 +260,11 @@ private fun HomeTopBar(
 
 @Composable
 private fun DirectoryBreadcrumbs(path: String, onNavigate: (String) -> Unit) {
-    val segments = remember(path) {
+    val rootLabel = stringResource(R.string.home_title)
+    val segments = remember(path, rootLabel) {
         val parts = path.split('/').filter(String::isNotEmpty)
         buildList {
-            add("文件" to "")
+            add(rootLabel to "")
             var current = ""
             parts.forEach { part ->
                 current = if (current.isEmpty()) part else "$current/$part"

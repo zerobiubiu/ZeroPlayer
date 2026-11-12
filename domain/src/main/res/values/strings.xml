@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- domain 枚举选项文案：设置与播放器共用同一来源，保证同一选项只有一种叫法。 -->
+<resources>
+    <string name="option_theme_system">跟随系统</string>
+    <string name="option_theme_light">浅色</string>
+    <string name="option_theme_dark">深色</string>
+    <string name="option_aspect_fit">适应屏幕</string>
+    <string name="option_aspect_fill">拉伸填充</string>
+    <string name="option_aspect_crop">裁剪填满</string>
+    <string name="option_aspect_16_9">16:9</string>
+    <string name="option_aspect_4_3">4:3</string>
+    <string name="option_subtitle_bg_none">无背景</string>
+    <string name="option_subtitle_bg_semi">半透明</string>
+    <string name="option_subtitle_bg_solid">纯色</string>
+    <string name="option_subtitle_color_white">白色</string>
+    <string name="option_subtitle_color_yellow">黄色</string>
+    <string name="option_subtitle_color_cyan">青色</string>
+</resources>

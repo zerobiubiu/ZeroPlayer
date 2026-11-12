@@ -72,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -113,6 +114,12 @@ fun PlayerScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val audioManager = remember(context) { context.getSystemService(AudioManager::class.java) }
     val surfaceOwner = remember(viewModel) { Any() }
+    // 手势反馈文案在组合期解析模板，回调中只做格式化，配置变化后仍取最新资源。
+    val volumeFormat = stringResource(R.string.player_gesture_volume)
+    val brightnessFormat = stringResource(R.string.player_gesture_brightness)
+    val rewindFormat = stringResource(R.string.player_rewind_seconds)
+    val forwardFormat = stringResource(R.string.player_forward_seconds)
+    val tempSpeedFormat = stringResource(R.string.player_gesture_temp_speed)
 
     var brightness by remember { mutableFloatStateOf(readBrightness(activity)) }
     var volume by remember { mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0) }
@@ -192,7 +199,7 @@ fun PlayerScreen(
                     audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
                     maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                     volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, maxVolume)
-                    gestureMessage = "音量 ${volume * 100 / maxVolume}%"
+                    gestureMessage = volumeFormat.format(volume * 100 / maxVolume)
                     if (!seekActive) seekPreview = null
                     gestureMessageRevision++
                 }
@@ -264,11 +271,8 @@ fun PlayerScreen(
                             val step = state.playbackPrefs.seekStepSeconds * 1_000L
                             viewModel.seekBy(if (gesture.leftSide) -step else step)
                             seekPreview = null
-                            gestureMessage = if (gesture.leftSide) {
-                                "快退 ${state.playbackPrefs.seekStepSeconds} 秒"
-                            } else {
-                                "快进 ${state.playbackPrefs.seekStepSeconds} 秒"
-                            }
+                            gestureMessage = (if (gesture.leftSide) rewindFormat else forwardFormat)
+                                .format(state.playbackPrefs.seekStepSeconds)
                         }
                     }
 
@@ -341,14 +345,14 @@ fun PlayerScreen(
                             DragMode.BRIGHTNESS -> {
                                 brightness = (baseBrightness - gesture.dyFraction).coerceIn(0.05f, 1f)
                                 applyBrightness(activity, brightness)
-                                gestureMessage = "亮度 ${(brightness * 100).toInt()}%"
+                                gestureMessage = brightnessFormat.format((brightness * 100).toInt())
                             }
 
                             DragMode.VOLUME -> {
                                 volume = (baseVolume - gesture.dyFraction * maxVolume * 1.5f).roundToInt()
                                     .coerceIn(0, maxVolume)
                                 audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
-                                gestureMessage = "音量 ${(volume * 100 / maxVolume)}%"
+                                gestureMessage = volumeFormat.format(volume * 100 / maxVolume)
                             }
                             DragMode.IGNORED -> Unit
                         }
@@ -379,7 +383,7 @@ fun PlayerScreen(
                     PlayerGesture.LongPressStart -> {
                         if (state.gesturePrefs.longPressSpeedEnabled) {
                             viewModel.beginTemporarySpeed(state.playbackPrefs.longPressSpeed)
-                            gestureMessage = "${state.playbackPrefs.longPressSpeed}× 临时倍速"
+                            gestureMessage = tempSpeedFormat.format(state.playbackPrefs.longPressSpeed.toString())
                         }
                     }
 
@@ -495,7 +499,7 @@ fun PlayerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
                 ) {
-                    Text(text = "播放结束，点击重播", style = MaterialTheme.typography.titleSmall, color = Color.White)
+                    Text(text = stringResource(R.string.player_ended_replay), style = MaterialTheme.typography.titleSmall, color = Color.White)
                 }
             }
         }
@@ -503,11 +507,11 @@ fun PlayerScreen(
 
     if (showSpeedSheet) {
         ActionSheet(
-            title = "播放速度",
+            title = stringResource(R.string.player_speed_sheet_title),
             immersive = true,
             actions = SPEED_OPTIONS.map { speed ->
                 SheetAction(
-                    label = "$speed×",
+                    label = stringResource(R.string.player_speed_format, speed.toString()),
                     icon = Icons.Outlined.Speed,
                     kind = SheetActionKind.SingleChoice,
                     selected = speed == state.playback.speed,
@@ -523,7 +527,7 @@ fun PlayerScreen(
 
     if (showAspectSheet) {
         ActionSheet(
-            title = "画面比例",
+            title = stringResource(R.string.player_aspect),
             immersive = true,
             actions = aspectSheetActions(
                 current = state.playback.aspect,
@@ -538,12 +542,12 @@ fun PlayerScreen(
 
     if (showAudioSheet) {
         ActionSheet(
-            title = "音轨",
+            title = stringResource(R.string.player_audio_sheet_title),
             immersive = true,
             actions = if (state.audioTracks.isEmpty()) {
                 listOf(
                     SheetAction(
-                        label = "没有可选音轨",
+                        label = stringResource(R.string.player_audio_none),
                         icon = Icons.Outlined.VolumeOff,
                         kind = SheetActionKind.Status,
                         enabled = false,
@@ -636,9 +640,10 @@ private fun PlayerGestureFeedback(
     }
 }
 
+@Composable
 private fun audioLabel(state: PlayerUiState): String {
     val track = state.audioTracks.firstOrNull { it.id == state.selectedAudioTrackId }
-    return track?.label ?: "音轨"
+    return track?.label ?: stringResource(R.string.player_audio_default)
 }
 
 /** 播放模式各自使用语义相符的图标，避免四种模式共用同一个图标。 */
@@ -650,23 +655,15 @@ private val PlayMode.icon: ImageVector
         PlayMode.SHUFFLE -> Icons.Outlined.Shuffle
     }
 
-private val VideoAspect.labelText: String
-    get() = when (this) {
-        VideoAspect.FIT -> "适应屏幕"
-        VideoAspect.FILL -> "拉伸填充"
-        VideoAspect.CROP -> "裁剪填满"
-        VideoAspect.RATIO_16_9 -> "16:9"
-        VideoAspect.RATIO_4_3 -> "4:3"
-    }
-
 /**
  * “画面比例”面板的条目（F-19：与“旋转屏幕”完全分离）。
  * 抽成共享构建器，保证页面与仪器化测试断言同一份内容。
  */
+@Composable
 fun aspectSheetActions(current: VideoAspect, onPick: (VideoAspect) -> Unit): List<SheetAction> =
     VideoAspect.entries.map { aspect ->
         SheetAction(
-            label = aspect.labelText,
+            label = stringResource(aspect.labelRes),
             icon = Icons.Outlined.AspectRatio,
             kind = SheetActionKind.SingleChoice,
             selected = aspect == current,
@@ -679,6 +676,7 @@ fun aspectSheetActions(current: VideoAspect, onPick: (VideoAspect) -> Unit): Lis
  * 旋转屏幕已提为顶栏独立按钮（F-19），此处不再保留第二入口；
  * “播放引擎”技术行已在 F-17 移除。
  */
+@Composable
 fun moreSheetActions(
     state: PlayerUiState,
     onLock: () -> Unit,
@@ -686,24 +684,24 @@ fun moreSheetActions(
     onOpenAspect: () -> Unit,
 ): List<SheetAction> = listOf(
     SheetAction(
-        label = "锁定屏幕",
+        label = stringResource(R.string.player_lock_screen),
         icon = Icons.Outlined.Lock,
         kind = SheetActionKind.Action,
-        supportingText = "隐藏控制，避免误触",
+        supportingText = stringResource(R.string.player_lock_screen_desc),
         onClick = onLock,
     ),
     SheetAction(
-        label = "音轨",
+        label = stringResource(R.string.player_audio_sheet_title),
         icon = Icons.Outlined.VolumeUp,
         kind = SheetActionKind.Navigation,
         supportingText = audioLabel(state),
         onClick = onOpenAudio,
     ),
     SheetAction(
-        label = "画面比例",
+        label = stringResource(R.string.player_aspect),
         icon = Icons.Outlined.AspectRatio,
         kind = SheetActionKind.Navigation,
-        supportingText = state.playback.aspect.labelText,
+        supportingText = stringResource(state.playback.aspect.labelRes),
         onClick = onOpenAspect,
     ),
 )
@@ -726,12 +724,12 @@ private fun SubtitleSheet(
         ImmersiveSheetWindowEffect()
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text(
-                text = "字幕",
+                text = stringResource(R.string.player_subtitle),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             SelectionRow(
-                label = "关闭字幕",
+                label = stringResource(R.string.player_subtitle_off),
                 selected = state.selectedSubtitleTrackId == null,
                 onClick = { onSelectTrack(null) },
             )
@@ -744,7 +742,7 @@ private fun SubtitleSheet(
             }
             if (state.subtitleTracks.isEmpty()) {
                 Text(
-                    text = "未检测到字幕轨。可在详情页导入外挂字幕（srt / ass / ssa / vtt）。",
+                    text = stringResource(R.string.player_subtitle_none_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
@@ -758,23 +756,28 @@ private fun SubtitleSheet(
                     .padding(horizontal = 16.dp),
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "字幕延迟", style = MaterialTheme.typography.bodyLarge)
+                    Text(text = stringResource(R.string.player_subtitle_delay), style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        text = "${state.subtitleDelayMs} ms",
+                        text = stringResource(R.string.player_subtitle_delay_value, state.subtitleDelayMs),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 TextButton(onClick = { onAdjustDelay(-state.subtitlePrefs.delayStepMs.toLong()) }) {
-                    Text("-${state.subtitlePrefs.delayStepMs}ms")
+                    Text(stringResource(R.string.player_subtitle_delay_minus, state.subtitlePrefs.delayStepMs))
                 }
                 TextButton(onClick = { onAdjustDelay(state.subtitlePrefs.delayStepMs.toLong()) }) {
-                    Text("+${state.subtitlePrefs.delayStepMs}ms")
+                    Text(stringResource(R.string.player_subtitle_delay_plus, state.subtitlePrefs.delayStepMs))
                 }
-                TextButton(onClick = onResetDelay) { Text("重置") }
+                TextButton(onClick = onResetDelay) { Text(stringResource(R.string.player_subtitle_delay_reset)) }
             }
             Text(
-                text = "字幕字号 ${(state.subtitlePrefs.fontSizeScale * 100).toInt()}% · ${state.subtitlePrefs.background.label} · ${state.subtitlePrefs.textColor.label}（在设置中调整）",
+                text = stringResource(
+                    R.string.player_subtitle_style_summary,
+                    (state.subtitlePrefs.fontSizeScale * 100).toInt(),
+                    stringResource(state.subtitlePrefs.background.labelRes),
+                    stringResource(state.subtitlePrefs.textColor.labelRes),
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
@@ -863,15 +866,19 @@ fun PlaybackQueueSheet(
         ImmersiveSheetWindowEffect()
         Column(modifier = Modifier.navigationBarsPadding().padding(bottom = Spacing.lg)) {
             Text(
-                text = "播放队列 · ${(state.queueIndex + 1).coerceAtLeast(1)}/${state.queue.size.coerceAtLeast(1)}",
+                text = stringResource(
+                    R.string.player_queue_title,
+                    (state.queueIndex + 1).coerceAtLeast(1),
+                    state.queue.size.coerceAtLeast(1),
+                ),
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
             )
             if (state.queue.isEmpty()) {
                 EmptyState(
                     icon = Icons.Outlined.QueueMusic,
-                    title = "队列为空",
-                    message = "当前没有可播放的队列条目。",
+                    title = stringResource(R.string.player_queue_empty_title),
+                    message = stringResource(R.string.player_queue_empty_message),
                 )
             } else {
                 LazyColumn(
@@ -900,14 +907,14 @@ fun PlaybackQueueSheet(
                     .padding(horizontal = Spacing.lg),
             ) {
                 QueueActionButton(
-                    label = "上一集",
+                    label = stringResource(R.string.player_previous),
                     icon = Icons.Outlined.SkipPrevious,
                     enabled = state.queueIndex > 0,
                     onClick = onPlayPrevious,
                     modifier = Modifier.weight(1f),
                 )
                 QueueActionButton(
-                    label = "下一集",
+                    label = stringResource(R.string.player_next),
                     icon = Icons.Outlined.SkipNext,
                     enabled = state.hasNext,
                     onClick = onPlayNext,
@@ -917,7 +924,7 @@ fun PlaybackQueueSheet(
             Spacer(Modifier.height(Spacing.sm))
             PlayMode.entries.forEach { mode ->
                 SelectionRow(
-                    label = mode.label,
+                    label = stringResource(mode.labelRes),
                     selected = mode == state.playMode,
                     onClick = { onSelectMode(mode) },
                 )
@@ -995,17 +1002,3 @@ private fun applyBrightness(activity: Activity?, value: Float) {
     attributes.screenBrightness = value
     window.attributes = attributes
 }
-
-private val com.privateplayer.domain.model.SubtitleBackground.label: String
-    get() = when (this) {
-        com.privateplayer.domain.model.SubtitleBackground.NONE -> "无背景"
-        com.privateplayer.domain.model.SubtitleBackground.SEMI_TRANSPARENT -> "半透明背景"
-        com.privateplayer.domain.model.SubtitleBackground.SOLID -> "纯色背景"
-    }
-
-private val com.privateplayer.domain.model.SubtitleTextColor.label: String
-    get() = when (this) {
-        com.privateplayer.domain.model.SubtitleTextColor.WHITE -> "白色"
-        com.privateplayer.domain.model.SubtitleTextColor.YELLOW -> "黄色"
-        com.privateplayer.domain.model.SubtitleTextColor.CYAN -> "青色"
-    }

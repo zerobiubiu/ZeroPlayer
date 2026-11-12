@@ -1,5 +1,7 @@
 package com.privateplayer.feature.player
 
+import android.content.Context
+import androidx.annotation.StringRes
 import androidx.media3.common.Player
 import com.privateplayer.core.playback.EngineMediaInfo
 import com.privateplayer.core.playback.MediaTrack
@@ -43,12 +45,12 @@ object PlayerRouteArgs {
 /** 媒体记录中表示“用户主动关闭字幕”的哨兵值；轨道 ID 均为数字，不会冲突。 */
 internal const val SUBTITLE_OFF = "off"
 
-/** 播放模式。 */
-enum class PlayMode(val label: String) {
-    SEQUENTIAL("顺序播放"),
-    REPEAT_ONE("单个循环"),
-    REPEAT_ALL("目录循环"),
-    SHUFFLE("随机播放"),
+/** 播放模式。文案由界面按 [labelRes] 解析。 */
+enum class PlayMode(@StringRes val labelRes: Int) {
+    SEQUENTIAL(R.string.player_mode_sequential),
+    REPEAT_ONE(R.string.player_mode_repeat_one),
+    REPEAT_ALL(R.string.player_mode_repeat_all),
+    SHUFFLE(R.string.player_mode_shuffle),
 }
 
 data class QueueItem(
@@ -98,6 +100,7 @@ internal class PlaybackSession(
     private val saveProgress: (PlaybackProgress) -> Unit,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher,
+    private val context: Context,
 ) {
     @Volatile private var currentMedia: Media? = null
     /** 本次装载是否已按媒体记录恢复过字幕选择。 */
@@ -191,7 +194,7 @@ internal class PlaybackSession(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                reportError(error.message ?: "无法打开文件")
+                reportError(error.message ?: context.getString(R.string.player_error_open_file))
             }
         }
         // 外部重新装载可能顶掉尚未执行的队列跳转，同步清除受理标记。
@@ -338,7 +341,7 @@ internal class PlaybackSession(
         val settings = settingsRepository.observeSettings().first()
         loadStage = "读取媒体记录"
         val media = mediaRepository.findById(mediaId) ?: run {
-            state.update { it.copy(isLoading = false, error = "媒体不存在或已被删除") }
+            state.update { it.copy(isLoading = false, error = context.getString(R.string.player_error_media_missing)) }
             return
         }
 
@@ -388,7 +391,7 @@ internal class PlaybackSession(
                     isLoading = false,
                     mediaId = media.id,
                     title = media.displayName,
-                    error = "文件缺失：${media.relativePath}",
+                    error = context.getString(R.string.player_error_file_missing, media.relativePath),
                 )
             }
             return
@@ -472,7 +475,7 @@ internal class PlaybackSession(
             throw error
         } catch (error: Exception) {
             engine.pause()
-            state.update { it.copy(isLoading = false, error = error.message ?: "无法播放此视频") }
+            state.update { it.copy(isLoading = false, error = error.message ?: context.getString(R.string.player_error_play_video)) }
         }
     }
 
@@ -504,7 +507,7 @@ internal class PlaybackSession(
                     throw cancellation
                 } catch (error: Exception) {
                     engine.pause()
-                    reportError(error.message ?: "无法自动播放下一文件")
+                    reportError(error.message ?: context.getString(R.string.player_error_auto_next))
                 }
             }
         }
@@ -528,12 +531,12 @@ internal class PlaybackSession(
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                state.update { it.copy(error = error.message ?: "无法打开文件") }
+                state.update { it.copy(error = error.message ?: context.getString(R.string.player_error_open_file)) }
                 return false
             }
         }
         val media = mediaRepository.findById(mediaId) ?: run {
-            reportError("文件不存在或已被删除")
+            reportError(context.getString(R.string.player_error_file_gone))
             return false
         }
         state.update { it.copy(queueIndex = index) }
@@ -619,7 +622,9 @@ internal class PlaybackSession(
             val remembered = trackId ?: SUBTITLE_OFF
             scope.launch {
                 runCatching { mediaRepository.setSelectedSubtitleTrack(mediaId, remembered) }
-                    .onFailure { error -> reportError("无法保存字幕选择：${error.message ?: "未知错误"}") }
+                    .onFailure { error ->
+                        reportError(context.getString(R.string.player_error_subtitle_save, error.message ?: context.getString(R.string.player_unknown_error)))
+                    }
             }
         }
     }

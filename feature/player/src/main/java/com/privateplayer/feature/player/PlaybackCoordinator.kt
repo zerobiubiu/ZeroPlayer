@@ -135,9 +135,9 @@ class PlaybackCoordinator @Inject constructor(
                 } catch (cancellation: CancellationException) {
                     throw cancellation
                 } catch (exception: Exception) {
-                    exception.message ?: "保存播放进度失败"
+                    exception.message ?: context.getString(R.string.player_error_save_progress_bare)
                 }
-                if (error != null) launch(Dispatchers.Main.immediate) { reportError("保存播放进度失败：$error") }
+                if (error != null) launch(Dispatchers.Main.immediate) { reportError(context.getString(R.string.player_error_save_progress, error)) }
             }
         }
     }
@@ -172,6 +172,7 @@ class PlaybackCoordinator @Inject constructor(
             saveProgress = { progress.trySend(ProgressWork.Save(it)) },
             scope = scope,
             ioDispatcher = ioDispatcher,
+            context = context,
         )
         active = Active(owner, session, scope, predecessor, focusCallbacks)
         scope.launch { session.uiState.collect { if (active?.session === session) state.value = it } }
@@ -231,7 +232,7 @@ class PlaybackCoordinator @Inject constructor(
                 withContext(Dispatchers.Main.immediate) {
                     if (openGeneration == generation && active?.session === session) {
                         openingMediaId = null
-                        session.reportError("上一个播放实例未能释放：${error.message ?: "未知错误"}")
+                        session.reportError(context.getString(R.string.player_error_previous_release, error.message ?: context.getString(R.string.player_unknown_error)))
                     }
                 }
             }
@@ -266,7 +267,7 @@ class PlaybackCoordinator @Inject constructor(
             }
             failure?.let { error ->
                 applicationScope.launch(Dispatchers.Main.immediate) {
-                    reportError("释放播放引擎失败：${error.message ?: error.javaClass.simpleName}")
+                    reportError(context.getString(R.string.player_error_engine_release, error.message ?: error.javaClass.simpleName))
                 }
                 throw IllegalStateException("上一个播放实例未能释放", error)
             }
@@ -295,10 +296,10 @@ class PlaybackCoordinator @Inject constructor(
         val error = try {
             serviceStarter.start()
         } catch (exception: Exception) {
-            exception.message ?: "无法启动播放服务"
+            exception.message ?: context.getString(R.string.player_error_service_unavailable)
         }
         if (error != null) {
-            reportError("无法启动后台播放：$error")
+            reportError(context.getString(R.string.player_error_background_start, error))
             return false
         }
         val session = active?.session
@@ -330,7 +331,7 @@ class PlaybackCoordinator @Inject constructor(
         try {
             serviceStarter.stop()
         } catch (exception: Exception) {
-            reportError("无法停止播放：${exception.message ?: "播放服务不可用"}")
+            reportError(context.getString(R.string.player_error_stop, exception.message ?: context.getString(R.string.player_error_service_unavailable)))
         }
     }
 
@@ -400,7 +401,10 @@ class PlaybackCoordinator @Inject constructor(
         val current = active ?: return
         if (current.owner !== owner) return
         current.session.pauseForFailure()
-        reportError(if (detail.isNullOrBlank()) "系统不允许启动前台播放服务，请返回播放器后重试" else "无法启动前台播放服务：$detail")
+        reportError(
+            if (detail.isNullOrBlank()) context.getString(R.string.player_error_foreground_denied)
+            else context.getString(R.string.player_error_foreground_failed, detail),
+        )
     }
 
     fun activateSurfaceOwner(owner: Any) {

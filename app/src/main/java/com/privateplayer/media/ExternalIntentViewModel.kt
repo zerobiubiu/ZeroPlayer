@@ -1,4 +1,5 @@
 package com.privateplayer.media
+import android.content.Context
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -7,6 +8,7 @@ import com.privateplayer.domain.model.ImportTask
 import com.privateplayer.domain.model.ImportTaskState
 import com.privateplayer.domain.repository.ImportRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -22,6 +24,7 @@ import kotlinx.coroutines.launch
 /** 系统打开和分享只负责入队；播放器只接收导入完成后的内部媒体 ID。 */
 @HiltViewModel
 class ExternalIntentViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val importRepository: ImportRepository,
     private val openStore: ExternalOpenStore,
     private val savedState: SavedStateHandle,
@@ -59,7 +62,7 @@ class ExternalIntentViewModel @Inject constructor(
                         try {
                             openStore.ready(mediaId)
                         } catch (error: Exception) {
-                            messages.value = listOf(error.message ?: "无法保存待播放记录")
+                            messages.value = listOf(error.message ?: context.getString(R.string.app_external_save_ready_failed))
                         }
                         savedState[KEY_READY_MEDIA] = mediaId
                         savedState.set<String?>(KEY_OPEN_TASK, null)
@@ -85,11 +88,11 @@ class ExternalIntentViewModel @Inject constructor(
                 val result = importRepository.enqueueExternal(listOf(uri), saved.mimeType, true, taskId)
                 if (request != latestRequest) return@launch
                 acceptResult(result.acceptedTaskIds, uri, saved.mimeType, true)
-                messages.value = result.rejected.map { "${it.displayName}：${it.reason}" }
+                messages.value = result.rejected.map { context.getString(R.string.app_external_rejected, it.displayName, it.reason) }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                messages.value = listOf(error.message ?: "无法恢复导入，请重新分享或重新选择")
+                messages.value = listOf(error.message ?: context.getString(R.string.app_external_restore_failed))
             } finally {
                 enqueuingCount.value -= 1
             }
@@ -100,7 +103,7 @@ class ExternalIntentViewModel @Inject constructor(
         val request = ++latestRequest
         savedState[KEY_SHOW_IMPORTS] = true
         if (uris.isEmpty()) {
-            messages.value = listOf("未收到可读取的文件，请重新分享或重新选择")
+            messages.value = listOf(context.getString(R.string.app_external_no_readable_file))
             return
         }
         val uri = uris.first()
@@ -115,7 +118,7 @@ class ExternalIntentViewModel @Inject constructor(
         try {
             if (requestTaskId != null) openStore.pending(requestTaskId, uri, mimeType) else openStore.clear()
         } catch (error: Exception) {
-            messages.value = listOf(error.message ?: "无法保存导入请求")
+            messages.value = listOf(error.message ?: context.getString(R.string.app_external_save_request_failed))
             return
         }
         savedState.set<Long?>(KEY_READY_MEDIA, null)
@@ -127,12 +130,12 @@ class ExternalIntentViewModel @Inject constructor(
                 acceptedAwaitingObservation.value = acceptedAwaitingObservation.value + result.acceptedTaskIds
                 if (request == latestRequest) {
                     acceptResult(result.acceptedTaskIds, uri, mimeType, openForPlayback)
-                    messages.value = result.rejected.map { "${it.displayName}：${it.reason}" }
+                    messages.value = result.rejected.map { context.getString(R.string.app_external_rejected, it.displayName, it.reason) }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
-                if (request == latestRequest) messages.value = listOf(error.message ?: "无法创建导入任务，请重新分享或重新选择")
+                if (request == latestRequest) messages.value = listOf(error.message ?: context.getString(R.string.app_external_enqueue_failed))
             } finally {
                 enqueuingCount.value -= 1
             }

@@ -21,9 +21,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.design.theme.Spacing
+import com.privateplayer.core.design.R
 
 /** 标准顶部导航栏：返回按钮 + 标题 + 操作区。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,7 +60,7 @@ fun AppTopBar(
         navigationIcon = {
             if (onBack != null) {
                 IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "返回")
+                    Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = stringResource(R.string.design_back))
                 }
             }
         },
@@ -81,10 +83,10 @@ fun SelectionTopBar(
     actions: @Composable RowScope.() -> Unit,
 ) {
     TopAppBar(
-        title = { Text(text = "已选择 $selectedCount 项", style = MaterialTheme.typography.titleMedium) },
+        title = { Text(text = stringResource(R.string.design_selection_count, selectedCount), style = MaterialTheme.typography.titleMedium) },
         navigationIcon = {
             IconButton(onClick = onClose) {
-                Icon(Icons.Outlined.Close, contentDescription = "退出多选")
+                Icon(Icons.Outlined.Close, contentDescription = stringResource(R.string.design_selection_close))
             }
         },
         actions = actions,

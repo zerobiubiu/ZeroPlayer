@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- feature/settings 用户可见文案。术语约定：用户可见容器称“文件夹”，技术路径称“目录”。 -->
+<resources>
+    <string name="settings_title">设置</string>
+    <string name="settings_group_preferences">偏好设置</string>
+
+    <!-- 一级入口与摘要 -->
+    <string name="settings_section_playback">播放</string>
+    <string name="settings_section_playback_summary">续播、倍速与画面比例</string>
+    <string name="settings_section_subtitle">字幕</string>
+    <string name="settings_section_subtitle_summary">字号、颜色与延迟</string>
+    <string name="settings_section_gesture">手势</string>
+    <string name="settings_section_gesture_summary">亮度、音量、进度与震动</string>
+    <string name="settings_section_display">显示</string>
+    <string name="settings_section_display_summary">主题模式</string>
+    <string name="settings_section_import">导入</string>
+    <string name="settings_section_import_summary">缩略图与重复检测</string>
+    <string name="settings_section_storage">存储</string>
+    <string name="settings_section_storage_summary">用量统计与缓存清理</string>
+    <string name="settings_section_about">关于</string>
+    <string name="settings_section_about_summary">版本、播放引擎与许可</string>
+    <string name="settings_enter_section">进入%1$s设置</string>
+    <string name="settings_detail_auto_resume">自动续播</string>
+    <string name="settings_detail_from_start">从头播放</string>
+    <string name="settings_detail_speed_format">%1$s×</string>
+    <string name="settings_detail_font_scale_format">字号 %1$d%%</string>
+    <string name="settings_detail_delay_step_format">步长 %1$d ms</string>
+    <string name="settings_detail_seek_on">滑动调速</string>
+    <string name="settings_detail_seek_off">滑动已关闭</string>
+    <string name="settings_detail_haptics_on">震动开</string>
+    <string name="settings_detail_haptics_off">震动关</string>
+    <string name="settings_detail_thumbnails_on">生成缩略图</string>
+    <string name="settings_detail_thumbnails_off">不生成缩略图</string>
+    <string name="settings_detail_duplicate_on">查重开</string>
+    <string name="settings_detail_duplicate_off">查重关</string>
+    <string name="settings_detail_video_count_format">%1$d 个视频</string>
+    <string name="settings_detail_video_usage_format">%1$d 个视频 · %2$s</string>
+    <string name="settings_detail_version_format">版本 %1$s · %2$s</string>
+
+    <!-- 播放 -->
+    <string name="settings_playback_behavior">播放行为</string>
+    <string name="settings_playback_params">播放参数</string>
+    <string name="settings_auto_play_next">自动播放下一个视频</string>
+    <string name="settings_auto_play_next_desc">播放结束后按当前顺序继续播放</string>
+    <string name="settings_remember_progress">记忆播放进度</string>
+    <string name="settings_remember_progress_desc">关闭后不写入断点，仅保留播放历史</string>
+    <string name="settings_auto_resume">打开时自动续播</string>
+    <string name="settings_auto_resume_desc">从上次位置继续播放</string>
+    <string name="settings_default_speed">默认倍速</string>
+    <string name="settings_default_aspect">默认画面比例</string>
+    <string name="settings_seek_step">双击跳转时长</string>
+    <string name="settings_long_press_speed">长按临时倍速</string>
+    <string name="settings_range_speed_025_4">0.25～4 倍</string>
+    <string name="settings_range_seconds_5_60">5～60 的整数秒</string>
+    <string name="settings_range_speed_15_4">1.5～4 倍</string>
+
+    <!-- 字幕 -->
+    <string name="settings_subtitle_style">字幕样式</string>
+    <string name="settings_subtitle_sync">字幕同步</string>
+    <string name="settings_subtitle_font_scale">字幕字号</string>
+    <string name="settings_subtitle_background">字幕背景</string>
+    <string name="settings_subtitle_text_color">字幕颜色</string>
+    <string name="settings_subtitle_style_note">字号、颜色和背景用于普通文本字幕；ASS 等自带样式的字幕保留原排版。</string>
+    <string name="settings_subtitle_delay_step">延迟调节步长</string>
+    <string name="settings_subtitle_memory_note">播放器会记住每个视频上次选中的字幕，下次打开自动恢复。</string>
+    <string name="settings_range_percent_60_200">60～200 的整数百分比</string>
+    <string name="settings_range_ms_50_1000">50～1000 的整数毫秒</string>
+
+    <!-- 手势 -->
+    <string name="settings_gesture_switches">手势开关</string>
+    <string name="settings_gesture_feedback">反馈</string>
+    <string name="settings_gesture_brightness">左侧上下滑动调节亮度</string>
+    <string name="settings_gesture_volume">右侧上下滑动调节音量</string>
+    <string name="settings_gesture_seek">横向滑动调节进度</string>
+    <string name="settings_gesture_seek_desc">滑动越快跳幅越大，慢滑保持逐秒微调</string>
+    <string name="settings_gesture_long_press">长按临时倍速</string>
+    <string name="settings_gesture_haptics">滑动进度震动反馈</string>
+    <string name="settings_gesture_haptics_desc">部分设备没有线性马达或震感生硬，可关闭</string>
+
+    <!-- 显示 -->
+    <string name="settings_theme">主题</string>
+    <string name="settings_theme_mode">主题模式</string>
+    <string name="settings_theme_note">使用应用自带的配色，不跟随系统动态取色，保证深色与浅色下的对比度一致。</string>
+
+    <!-- 导入：开关文案使用 core/design 共享资源（design_import_*），与 Wi-Fi 面板同源。 -->
+    <string name="settings_import_group">导入</string>
+
+    <!-- 存储 -->
+    <string name="settings_storage_management">存储管理</string>
+    <string name="settings_storage_files">文件</string>
+    <string name="settings_storage_thumbnail_cache">缩略图缓存</string>
+    <string name="settings_storage_temp_files">临时文件</string>
+    <string name="settings_storage_free">可用空间</string>
+    <string name="settings_clear_thumbnails">清理缩略图</string>
+    <string name="settings_clear_temp">清理临时文件</string>
+    <string name="settings_clear_note">清理缓存不会删除文件或待恢复的导入暂存。</string>
+
+    <!-- 关于 -->
+    <string name="settings_about_version_info">版本信息</string>
+    <string name="settings_about_version">版本</string>
+    <string name="settings_about_engine">播放引擎</string>
+    <string name="settings_about_engine_status">引擎状态</string>
+    <string name="settings_about_notes">说明</string>
+    <string name="settings_about_license_note">本软件部分基于 FreeType 团队的工作。第三方许可随安装包保存在 assets/third-party-licenses；对外分发前须遵守各组件条款。</string>
+    <string name="settings_about_product_note">ZeroPlayer · 本地优先。视频保存在应用私有存储，不自动扫描系统文件；网页上传仅在手动开启时接收局域网文件。</string>
+
+    <!-- 数值输入与写入反馈 -->
+    <string name="settings_numeric_range_hint">允许范围：%1$s</string>
+    <string name="settings_numeric_invalid_input">请输入%1$s</string>
+    <string name="settings_numeric_restored">输入无效，已恢复为%1$s</string>
+    <string name="settings_save_failed">设置保存失败：%1$s</string>
+    <string name="settings_operation_failed">操作失败：%1$s</string>
+    <string name="settings_unknown_error">未知错误</string>
+    <string name="settings_thumbnails_cleared">缩略图缓存已清理</string>
+    <string name="settings_temp_cleared">临时文件已清理</string>
+    <string name="settings_expand_options">展开%1$s选项</string>
+    <string name="settings_unit_times">×</string>
+    <string name="settings_unit_seconds">秒</string>
+    <string name="settings_unit_percent">%</string>
+    <string name="settings_unit_ms">ms</string>
+</resources>

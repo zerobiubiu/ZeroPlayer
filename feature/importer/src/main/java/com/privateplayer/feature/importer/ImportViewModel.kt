@@ -1,5 +1,6 @@
 package com.privateplayer.feature.importer
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.IoDispatcher
@@ -12,6 +13,7 @@ import com.privateplayer.domain.repository.SettingsRepository
 import com.privateplayer.domain.repository.WebUploadController
 import com.privateplayer.domain.repository.WebUploadState
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -35,6 +37,7 @@ data class ImportUiState(
 
 @HiltViewModel
 class ImportViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val importRepository: ImportRepository,
     storageRepository: StorageRepository,
     private val settingsRepository: SettingsRepository,
@@ -95,20 +98,21 @@ class ImportViewModel @Inject constructor(
                 val result = importRepository.enqueue(uris, targetDirectory = directory)
                 val notices = buildList {
                     if (result.acceptedTaskIds.isNotEmpty()) {
-                        add("已加入 ${result.acceptedTaskIds.size} 个导入任务")
+                        add(context.getString(R.string.import_notice_enqueued, result.acceptedTaskIds.size))
                     }
                     if (result.duplicates.isNotEmpty()) {
-                        add("重复文件：${result.duplicates.joinToString("、")}")
+                        add(context.getString(R.string.import_notice_duplicates, result.duplicates.joinToString("、")))
                     }
                     result.rejected.forEach { rejected ->
-                        add("${rejected.displayName}：${rejected.reason}")
+                        add(context.getString(R.string.import_notice_rejected, rejected.displayName, rejected.reason))
                     }
                 }
                 if (notices.isNotEmpty()) local.update { it.copy(notices = it.notices + notices) }
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (error: Exception) {
-                local.update { it.copy(notices = it.notices + "无法创建导入任务：${error.message ?: "未知错误"}") }
+                val reason = error.message ?: context.getString(R.string.import_unknown_error)
+                local.update { it.copy(notices = it.notices + context.getString(R.string.import_notice_enqueue_failed, reason)) }
             } finally {
                 local.update { it.copy(enqueuing = false) }
             }

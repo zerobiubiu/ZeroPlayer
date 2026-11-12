@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- feature/detail 用户可见文案。术语约定：用户可见容器称“文件夹”，技术路径称“目录”。 -->
+<resources>
+    <string name="detail_title">视频详情</string>
+    <string name="detail_file_info">文件信息</string>
+    <string name="detail_more">更多</string>
+    <string name="detail_play">播放</string>
+    <string name="detail_progress_format">观看进度 %1$s · 上次播放 %2$s</string>
+    <string name="detail_no_progress">暂无播放进度</string>
+    <string name="detail_video_info">视频信息</string>
+    <string name="detail_file_name">文件名</string>
+    <string name="detail_size">大小</string>
+    <string name="detail_duration">时长</string>
+    <string name="detail_resolution">分辨率</string>
+    <string name="detail_video_codec">视频编码</string>
+    <string name="detail_audio_codec">音频编码</string>
+    <string name="detail_bitrate">码率</string>
+    <string name="detail_bitrate_bps">%1$d bps</string>
+    <string name="detail_audio_tracks_probe">音轨数量（导入探测）</string>
+    <string name="detail_subtitle_tracks_probe">内嵌字幕轨（导入探测）</string>
+    <string name="detail_subtitle_tracks_unknown">未识别，以播放器为准</string>
+    <string name="detail_added_at">导入时间</string>
+    <string name="detail_last_played">最近播放</string>
+    <string name="detail_play_count">播放次数</string>
+    <string name="detail_file_status">文件状态</string>
+    <string name="detail_file_status_ok">正常</string>
+    <string name="detail_file_status_missing">文件缺失</string>
+    <string name="detail_unknown">未知</string>
+    <string name="detail_resolution_dimensions">%1$d×%2$d</string>
+    <string name="detail_subtitles_header">外挂字幕 (%1$d)</string>
+    <string name="detail_subtitles_add">添加</string>
+    <string name="detail_subtitles_empty">还没有外挂字幕。同目录同名字幕会自动匹配，也可添加 srt / ass / ssa / vtt 字幕副本。</string>
+    <string name="detail_subtitle_source_same_dir">同目录字幕 · 在首页管理</string>
+    <string name="detail_subtitle_source_private">已添加的私有副本</string>
+    <string name="detail_subtitle_delete">删除</string>
+    <string name="detail_subtitle_delete_description">删除字幕 %1$s</string>
+    <string name="detail_subtitle_delete_title">删除字幕</string>
+    <string name="detail_subtitle_delete_message">将删除应用私有目录中的字幕副本「%1$s」，不影响视频或原始字幕文件。</string>
+    <string name="detail_private_storage_title">私有存储说明</string>
+    <string name="detail_private_storage_note">该视频保存在应用私有目录，其他应用无法直接访问；删除应用数据会同时删除视频。原始导入文件从未被修改。</string>
+    <string name="detail_info_relative_path">相对路径</string>
+    <string name="detail_info_absolute_path">绝对路径</string>
+    <string name="detail_info_exists">文件存在</string>
+    <string name="detail_info_disk_size">磁盘大小</string>
+    <string name="detail_info_mime">MIME</string>
+    <string name="detail_info_thumbnail">缩略图</string>
+    <string name="detail_info_yes">是</string>
+    <string name="detail_info_no">否</string>
+    <string name="detail_info_dash">—</string>
+    <string name="detail_info_thumbnail_none">未生成</string>
+    <string name="detail_rename_title">重命名</string>
+    <string name="detail_rename_confirm">保存</string>
+
+    <!-- 操作反馈（资源 + 参数，逻辑层不持有中文） -->
+    <string name="detail_rename_failed">重命名失败，请检查名称是否有效或已存在。</string>
+    <string name="detail_renamed">已重命名</string>
+    <string name="detail_move_failed">移动失败，请检查目标文件夹是否可用且没有同名项目。</string>
+    <string name="detail_moved">已移动</string>
+    <string name="detail_delete_failed">删除失败，请确认文件仍然存在后重试。</string>
+    <string name="detail_deleted">已删除</string>
+    <string name="detail_subtitle_added">字幕已添加</string>
+    <string name="detail_subtitle_deleted">字幕已删除</string>
+    <string name="detail_subtitle_op_failed">字幕操作失败：%1$s</string>
+    <string name="detail_same_dir_subtitle_error">无法读取同目录字幕，请在首页检查文件是否存在</string>
+    <string name="detail_unknown_error">未知错误</string>
+</resources>

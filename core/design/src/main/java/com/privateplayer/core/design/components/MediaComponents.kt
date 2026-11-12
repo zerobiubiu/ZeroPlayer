@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,7 @@ import coil3.compose.AsyncImage
 import com.privateplayer.core.design.theme.PlaceholderPalettes
 import com.privateplayer.core.design.theme.Radius
 import com.privateplayer.core.design.theme.Spacing
+import com.privateplayer.core.design.R
 import java.io.File
 import kotlin.math.absoluteValue
 
@@ -115,7 +117,7 @@ fun MediaThumbnail(
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Favorite,
-                    contentDescription = "已收藏",
+                    contentDescription = stringResource(R.string.design_favorite),
                     tint = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.padding(5.dp),
                 )
@@ -202,7 +204,7 @@ fun MediaGridCard(
                         if (selected) {
                             Icon(
                                 imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = "已选中",
+                                contentDescription = stringResource(R.string.design_selected),
                                 tint = MaterialTheme.colorScheme.onPrimary,
                                 modifier = Modifier.padding(2.dp),
                             )
@@ -295,7 +297,7 @@ fun MediaListRow(
                 Spacer(Modifier.width(Spacing.sm))
                 Icon(
                     imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = if (selected) "已选中" else "未选中",
+                    contentDescription = stringResource(if (selected) R.string.design_selected else R.string.design_unselected),
                     tint = if (selected) {
                         MaterialTheme.colorScheme.primary
                     } else {

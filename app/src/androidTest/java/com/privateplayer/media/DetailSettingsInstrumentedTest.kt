@@ -122,6 +122,7 @@ class DetailSettingsInstrumentedTest {
             LocalSubtitleStore(storage, SafDocuments(context)),
             StorageMediaFileLocator(storage),
             NoOpPlaybackStopper,
+            context,
             Dispatchers.IO,
         )
         val playedId = AtomicLong()

@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
@@ -35,7 +36,7 @@ internal fun ImportTasksDialog(
     val tasks = state.activeTasks + state.finishedTasks
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("导入任务") },
+        title = { Text(stringResource(R.string.app_import_tasks_title)) },
         text = {
             LazyColumn(
                 modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp),
@@ -45,14 +46,14 @@ internal fun ImportTasksDialog(
                 if (allNotices.isNotEmpty()) {
                     item { Text(allNotices.joinToString("\n"), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
                 }
-                if (state.enqueuing) item { Text("正在创建导入任务…") }
-                if (tasks.isEmpty() && !state.enqueuing) item { Text("暂无导入任务") }
+                if (state.enqueuing) item { Text(stringResource(R.string.app_import_creating)) }
+                if (tasks.isEmpty() && !state.enqueuing) item { Text(stringResource(R.string.app_import_empty)) }
                 items(tasks, key = ImportTask::id) { task ->
                     ImportTaskRow(task, onCancel, onRetry, onRemove)
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("关闭") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.app_import_close)) } },
     )
 }
 
@@ -67,12 +68,12 @@ private fun ImportTaskRow(
         Text(task.displayName, style = MaterialTheme.typography.titleSmall)
         Text(
             when (task.state) {
-                ImportTaskState.QUEUED -> "等待导入"
-                ImportTaskState.RUNNING -> "正在复制：${formatBytes(task.bytesCopied)}"
-                ImportTaskState.COMMITTING -> "正在校验并保存"
-                ImportTaskState.COMPLETED -> "已完成"
-                ImportTaskState.CANCELED -> "已取消"
-                ImportTaskState.FAILED -> "导入失败"
+                ImportTaskState.QUEUED -> stringResource(R.string.app_task_queued)
+                ImportTaskState.RUNNING -> stringResource(R.string.app_task_running, formatBytes(task.bytesCopied))
+                ImportTaskState.COMMITTING -> stringResource(R.string.app_task_committing)
+                ImportTaskState.COMPLETED -> stringResource(R.string.app_task_completed)
+                ImportTaskState.CANCELED -> stringResource(R.string.app_task_canceled)
+                ImportTaskState.FAILED -> stringResource(R.string.app_task_failed)
             },
             style = MaterialTheme.typography.bodySmall,
         )
@@ -85,9 +86,9 @@ private fun ImportTaskRow(
             else LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
         }
         Row {
-            if (task.state.isActive) TextButton(onClick = { onCancel(task.id) }) { Text("取消") }
-            if (task.state == ImportTaskState.FAILED) TextButton(onClick = { onRetry(task.id) }) { Text("重试") }
-            if (!task.state.isActive) TextButton(onClick = { onRemove(task.id) }) { Text("移除记录") }
+            if (task.state.isActive) TextButton(onClick = { onCancel(task.id) }) { Text(stringResource(R.string.app_task_cancel)) }
+            if (task.state == ImportTaskState.FAILED) TextButton(onClick = { onRetry(task.id) }) { Text(stringResource(R.string.app_task_retry)) }
+            if (!task.state.isActive) TextButton(onClick = { onRemove(task.id) }) { Text(stringResource(R.string.app_task_remove)) }
         }
     }
 }
@@ -96,10 +97,10 @@ private fun ImportTaskRow(
 internal fun ExportProgressDialog(state: FileTransferState, onCancel: () -> Unit) {
     AlertDialog(
         onDismissRequest = {},
-        title = { Text("正在导出") },
+        title = { Text(stringResource(R.string.app_exporting_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("已复制 ${formatBytes(state.copied)} / ${formatBytes(state.total)}")
+                Text(stringResource(R.string.app_exporting_progress, formatBytes(state.copied), formatBytes(state.total)))
                 if (state.total > 0L) {
                     LinearProgressIndicator(
                         progress = { (state.copied.toFloat() / state.total).coerceIn(0f, 1f) },
@@ -110,6 +111,6 @@ internal fun ExportProgressDialog(state: FileTransferState, onCancel: () -> Unit
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onCancel) { Text("取消导出") } },
+        confirmButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.app_export_cancel)) } },
     )
 }

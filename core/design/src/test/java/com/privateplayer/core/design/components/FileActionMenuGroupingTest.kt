@@ -105,31 +105,30 @@ class FileActionMenuGroupingTest {
     }
 }
 
-/** 名称校验（F-21 重命名复用）：非法字符提示不出现“空字符”术语。 */
+/** 名称校验（F-21 重命名复用）：按原因分类，文案由资源提供，不出现“空字符”术语。 */
 class NameValidationTest {
 
     @Test
     fun `合法名称通过校验`() {
-        assertNull(nameError("旅行.mp4"))
-        assertNull(nameError("新 名称"))
+        assertNull(nameErrorReason("旅行.mp4"))
+        assertNull(nameErrorReason("新 名称"))
         assertTrue(canConfirmName("旅行.mp4", "旧文件.mp4"))
     }
 
     @Test
     fun `空名称与点路径被拒绝`() {
-        assertEquals("请输入名称", nameError(""))
-        assertEquals("请输入名称", nameError("   "))
-        assertEquals("名称不能是 . 或 ..", nameError("."))
-        assertEquals("名称不能是 . 或 ..", nameError(".."))
+        assertEquals(NameErrorReason.Blank, nameErrorReason(""))
+        assertEquals(NameErrorReason.Blank, nameErrorReason("   "))
+        assertEquals(NameErrorReason.DotPath, nameErrorReason("."))
+        assertEquals(NameErrorReason.DotPath, nameErrorReason(".."))
     }
 
     @Test
-    fun `非法字符提示只列可输入符号`() {
-        val error = nameError("a/b")
-        assertEquals("名称不能包含 / 或 \\", error)
-        assertFalse(error!!.contains("空字符"))
-        assertEquals(error, nameError("a\\b"))
-        assertEquals(error, nameError("a\u0000b"))
+    fun `非法字符归为同一原因`() {
+        assertEquals(NameErrorReason.InvalidCharacter, nameErrorReason("a/b"))
+        assertEquals(NameErrorReason.InvalidCharacter, nameErrorReason("a\\b"))
+        assertEquals(NameErrorReason.InvalidCharacter, nameErrorReason("a\u0000b"))
+        assertNull(nameErrorReason("正常 名称.mp4"))
     }
 
     @Test

@@ -217,6 +217,7 @@ class FileMenuAndDetailActionsInstrumentedTest {
             LocalSubtitleStore(storage, SafDocuments(context)),
             StorageMediaFileLocator(storage),
             NoOpPlaybackStopper,
+            context,
             Dispatchers.IO,
         )
         return DetailFixture(storage, video, media, tree, viewModel)

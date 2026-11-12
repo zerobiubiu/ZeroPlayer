@@ -49,7 +49,7 @@ class MainActivity : ComponentActivity(), PlayerVolumeKeyHost {
                 ) {
                     Toast.makeText(
                         this@MainActivity,
-                        "文件正在导入或导出，请等待完成；也可按主页键切换应用",
+                        R.string.app_transfer_busy_toast,
                         Toast.LENGTH_LONG,
                     ).show()
                 } else {

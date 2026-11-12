@@ -1,4 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ZeroPlayer</string>
+
+    <!-- 底部导航与导入入口 -->
+    <string name="app_nav_home">首页</string>
+    <string name="app_nav_settings">设置</string>
+    <string name="app_import_tasks">导入任务</string>
+    <string name="app_transfer_busy_toast">文件正在导入或导出，请等待完成；也可按主页键切换应用</string>
+
+    <!-- 文件传输反馈 -->
+    <string name="app_transfer_dialog_title">文件操作</string>
+    <string name="app_transfer_dismiss">知道了</string>
+    <string name="app_share_clip_label">文件</string>
+    <string name="app_share_chooser_title">分享文件</string>
+    <string name="app_export_busy">已有文件正在导出，请等待完成</string>
+    <string name="app_export_done">导出完成</string>
+    <string name="app_export_canceled">已取消导出；目标位置可能保留未完成的文件</string>
+    <string name="app_export_failed">导出失败：%1$s；目标位置可能保留未完成的文件</string>
+    <string name="app_export_write_failed">无法写入目标</string>
+    <string name="app_share_failed">分享失败：%1$s</string>
+    <string name="app_share_read_failed">无法读取文件</string>
+    <string name="app_export_invalid_target">导出目标不是有效的文档地址</string>
+    <string name="app_export_self_target">不能将文件导出到应用自己的私有文件</string>
+    <string name="app_export_open_target_failed">无法打开导出目标</string>
+    <string name="app_export_source_changed">源文件在导出期间发生变化</string>
+    <string name="app_export_picker_failed">无法选择导出位置：%1$s</string>
+    <string name="app_no_document_app">没有可用的文档应用</string>
+    <string name="app_share_ui_failed">无法打开分享界面：%1$s</string>
+    <string name="app_no_share_app">没有可用的分享应用</string>
+    <string name="app_picker_failed">无法打开文件选择器：%1$s</string>
+    <string name="app_no_picker">没有可用的选择器</string>
+
+    <!-- 导入任务对话框 -->
+    <string name="app_import_tasks_title">导入任务</string>
+    <string name="app_import_creating">正在创建导入任务…</string>
+    <string name="app_import_empty">暂无导入任务</string>
+    <string name="app_import_close">关闭</string>
+    <string name="app_task_queued">等待导入</string>
+    <string name="app_task_running">正在复制：%1$s</string>
+    <string name="app_task_committing">正在校验并保存</string>
+    <string name="app_task_completed">已完成</string>
+    <string name="app_task_canceled">已取消</string>
+    <string name="app_task_failed">导入失败</string>
+    <string name="app_task_cancel">取消</string>
+    <string name="app_task_retry">重试</string>
+    <string name="app_task_remove">移除记录</string>
+    <string name="app_exporting_title">正在导出</string>
+    <string name="app_exporting_progress">已复制 %1$s / %2$s</string>
+    <string name="app_export_cancel">取消导出</string>
+
+    <!-- 外部打开/分享导入 -->
+    <string name="app_external_save_ready_failed">无法保存待播放记录</string>
+    <string name="app_external_restore_failed">无法恢复导入，请重新分享或重新选择</string>
+    <string name="app_external_no_readable_file">未收到可读取的文件，请重新分享或重新选择</string>
+    <string name="app_external_save_request_failed">无法保存导入请求</string>
+    <string name="app_external_enqueue_failed">无法创建导入任务，请重新分享或重新选择</string>
+    <string name="app_external_rejected">%1$s：%2$s</string>
+    <string name="app_external_store_pending_failed">无法保存外部打开请求</string>
+    <string name="app_external_store_ready_failed">无法保存待播放的媒体记录</string>
+    <string name="app_external_store_clear_failed">无法清除外部打开请求</string>
+
+    <!-- 播放服务 -->
+    <string name="app_media_channel_name">媒体播放</string>
+    <string name="app_service_wakelock_failed">无法保持后台播放：%1$s</string>
+    <string name="app_service_power_lock_unavailable">电源锁不可用</string>
+    <string name="app_service_session_failed">创建媒体会话失败：%1$s</string>
+    <string name="app_service_unknown_error">未知错误</string>
+    <string name="app_service_component_unavailable">组件不可用</string>
+    <string name="app_service_create_failed">系统未能创建播放服务</string>
 </resources>

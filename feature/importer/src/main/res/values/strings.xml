@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- feature/importer 用户可见文案：Wi-Fi 导入面板与导入任务反馈。 -->
+<resources>
+    <string name="wifi_title">通过 Wi-Fi 导入</string>
+    <string name="wifi_status_stopped">服务已停止</string>
+    <string name="wifi_status_starting">正在启动服务</string>
+    <string name="wifi_status_running">服务运行中</string>
+    <string name="wifi_status_error">服务启动失败</string>
+    <string name="wifi_initial_directory">初始目录：/%1$s</string>
+    <string name="wifi_space_port">可用空间 %1$s · 端口 8765</string>
+    <string name="wifi_copy_address">复制地址</string>
+    <string name="wifi_address_copied">地址已复制</string>
+    <string name="wifi_clip_label">Wi-Fi 导入地址</string>
+    <string name="wifi_start">启动服务</string>
+    <string name="wifi_stop">停止服务</string>
+    <string name="wifi_usage_note">在同一网络的浏览器中打开地址，可上传、下载和管理文件。传输完成后请停止服务。关闭此面板不会停止服务。</string>
+    <string name="wifi_risk_title">同一网络内的设备可读写你的文件</string>
+    <string name="wifi_risk_detail">服务没有登录或访问令牌。仅在可信网络使用。</string>
+    <string name="wifi_permission_denied">未获得局域网权限，请在系统设置中允许后重试。</string>
+    <string name="wifi_import_settings">导入设置</string>
+    <string name="wifi_uploads_title">本次上传</string>
+    <string name="wifi_uploads_waiting">等待上传文件</string>
+    <string name="wifi_uploads_hint">启动服务后显示本次上传记录</string>
+    <string name="wifi_transfer_receiving">接收中</string>
+    <string name="wifi_transfer_importing">正在保存</string>
+    <string name="wifi_transfer_completed">已完成</string>
+    <string name="wifi_transfer_failed">失败</string>
+    <string name="wifi_transfer_canceled">已取消</string>
+    <string name="wifi_transfer_size_progress">%1$s / %2$s</string>
+    <string name="wifi_retry_save">重试保存</string>
+    <string name="wifi_cancel_save">取消保存</string>
+
+    <!-- 导入任务反馈（通知文案；F-12 阶段 2D 再做逐条渲染） -->
+    <string name="import_notice_enqueued">已加入 %1$d 个导入任务</string>
+    <string name="import_notice_duplicates">重复文件：%1$s</string>
+    <string name="import_notice_rejected">%1$s：%2$s</string>
+    <string name="import_notice_enqueue_failed">无法创建导入任务：%1$s</string>
+    <string name="import_unknown_error">未知错误</string>
+</resources>

@@ -85,7 +85,7 @@ class HomeViewModelTest {
         val repository = FakeFileTreeRepository()
         val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
         val played = mutableListOf<Long>()
-        val messages = mutableListOf<String>()
+        val messages = mutableListOf<HomeMessage>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }
 
         model.resolveVideo(file("新片.mp4", video = true)) { played += it }
@@ -97,13 +97,13 @@ class HomeViewModelTest {
 
         assertEquals(listOf(91L, 23L), played)
         assertEquals(listOf("新片.mp4"), repository.ensuredPaths)
-        assertTrue(messages.single().contains("不支持播放"))
+        assertEquals(HomeMessage.UnsupportedFile, messages.single())
 
         repository.failOperations = true
         model.resolveVideo(file("已删除.mp4", video = true)) { played += it }
         runCurrent()
         assertEquals(listOf(91L, 23L), played)
-        assertTrue(messages.last().contains("无法打开视频"))
+        assertEquals(HomeMessage.OpenVideoFailed, messages.last())
     }
 
     @Test
@@ -118,7 +118,7 @@ class HomeViewModelTest {
     }
 
     @Test
-    fun `当前目录被删除时提示返回上级且不显示为空目录`() = runTest(dispatcher) {
+    fun `当前文件夹被删除时提示返回上级且不显示为空文件夹`() = runTest(dispatcher) {
         val repository = FakeFileTreeRepository().apply {
             directories[""] = listOf(directory("旧目录"))
             directories["旧目录"] = listOf(file("旧目录/视频.mp4", video = true))
@@ -134,12 +134,12 @@ class HomeViewModelTest {
         repository.directories[""] = emptyList()
         repository.notifyChanged()
         runCurrent()
-        assertTrue(model.uiState.value.error.orEmpty().contains("返回上级目录"))
+        assertEquals(R.string.home_error_directory, model.uiState.value.errorRes)
         assertFalse(model.uiState.value.isLoading)
         model.navigateUp()
         runCurrent()
         assertEquals("", model.uiState.value.currentDirectory)
-        assertEquals(null, model.uiState.value.error)
+        assertEquals(null, model.uiState.value.errorRes)
         assertTrue(model.uiState.value.entries.isEmpty())
     }
 
@@ -147,11 +147,11 @@ class HomeViewModelTest {
     fun `读取失败可重试 操作失败有反馈`() = runTest(dispatcher) {
         val repository = FakeFileTreeRepository().apply { failedDirectories += "" }
         val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
-        val messages = mutableListOf<String>()
+        val messages = mutableListOf<HomeMessage>()
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.uiState.collect {} }
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }
         runCurrent()
-        assertNotNull(model.uiState.value.error)
+        assertEquals(R.string.home_error_root, model.uiState.value.errorRes)
         assertFalse(model.uiState.value.isLoading)
 
         repository.failedDirectories.clear()
@@ -159,13 +159,40 @@ class HomeViewModelTest {
         model.retry()
         runCurrent()
         assertEquals(listOf("a.txt"), model.uiState.value.entries.map { it.name })
-        assertEquals(null, model.uiState.value.error)
+        assertEquals(null, model.uiState.value.errorRes)
 
         repository.failOperations = true
         model.delete(file("a.txt"))
         runCurrent()
-        assertTrue(messages.single().contains("删除失败"))
+        assertEquals(HomeMessage.DeleteFailed, messages.single())
         assertFalse(model.uiState.value.isWorking)
+    }
+
+    @Test
+    fun `新建文件夹成功只反馈结果`() = runTest(dispatcher) {
+        val repository = FakeFileTreeRepository()
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
+        val messages = mutableListOf<HomeMessage>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }
+
+        model.createDirectory("", "旅行")
+        runCurrent()
+        assertEquals(listOf(HomeMessage.FolderCreated), messages)
+        assertFalse(model.uiState.value.isWorking)
+    }
+
+    @Test
+    fun `消息文案资源映射完整且唯一`() {
+        val samples = listOf(
+            HomeMessage.UnsupportedFile, HomeMessage.OpenVideoFailed,
+            HomeMessage.CreateFolderFailed, HomeMessage.FolderCreated,
+            HomeMessage.RenameFailed, HomeMessage.Renamed,
+            HomeMessage.MoveFailed, HomeMessage.Moved,
+            HomeMessage.DeleteFailed, HomeMessage.Deleted,
+        )
+        val resources = samples.map { it.labelRes() }
+        assertEquals(samples.size, resources.toSet().size)
+        assertTrue(resources.all { it != 0 })
     }
 }
 

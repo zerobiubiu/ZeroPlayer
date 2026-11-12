@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import com.privateplayer.core.common.format.formatBytes
@@ -47,8 +48,10 @@ internal fun FileTreeRow(
         modifier = Modifier.fillMaxWidth().combinedClickable(
             enabled = enabled,
             role = Role.Button,
-            onClickLabel = if (entry.isDirectory) "打开目录" else if (entry.isVideo) "播放视频" else "打开文件",
-            onLongClickLabel = "打开操作菜单",
+            onClickLabel = stringResource(
+                if (entry.isDirectory) R.string.home_row_open_folder else if (entry.isVideo) R.string.home_row_play_video else R.string.home_row_open_file,
+            ),
+            onLongClickLabel = stringResource(R.string.home_row_menu),
             onClick = onOpen,
             onLongClick = { menuExpanded = true },
         ),
@@ -63,15 +66,21 @@ internal fun FileTreeRow(
             Text(entry.name, maxLines = 2, overflow = TextOverflow.Ellipsis)
         },
         supportingContent = {
-            Text(if (entry.isDirectory) "目录" else "文件 · ${formatBytes(entry.sizeBytes)}")
+            Text(
+                if (entry.isDirectory) {
+                    stringResource(R.string.home_folder_row_label)
+                } else {
+                    stringResource(R.string.home_file_row_format, formatBytes(entry.sizeBytes))
+                },
+            )
         },
         trailingContent = {
             Box {
                 IconButton(onClick = { menuExpanded = true }, enabled = enabled) {
-                    Icon(Icons.Outlined.MoreVert, contentDescription = "${entry.name}的操作菜单")
+                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.home_row_menu_description, entry.name))
                 }
                 // 首页行菜单取共享分组的子集：视频行不含“文件信息”（行菜单里已有“视频详情”入口），
-                // 目录与非视频文件不含传输/详情项；长按与三点按钮共用同一构建器。
+                // 文件夹与非视频文件不含传输/详情项；长按与三点按钮共用同一构建器。
                 val available = buildSet {
                     if (!entry.isDirectory && entry.isVideo) add(FileAction.Details)
                     if (!entry.isDirectory) {

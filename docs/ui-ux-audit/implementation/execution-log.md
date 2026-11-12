@@ -432,3 +432,45 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 - 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未实施批量操作（F-41，阶段 2G）。
 - 证据索引见 `evidence/README-1D.md`。
 - **阶段 1D 通过验收；不自动进入阶段 1E。**
+
+---
+
+## 十五、阶段 1E：术语统一、文案资源层与 Wi-Fi 风险提示（F-10 / F-14 / F-09）
+
+- 时间：2026-11-13
+- 对应任务：T-10、T-14、T-09
+- 变更记录：[changes/0015-copy-layer-terminology-wifi-risk.md](../../changes/0015-copy-layer-terminology-wifi-risk.md)
+
+### 15.1 决策与实施
+
+- **F-10**：用户可见容器统一“文件夹”，技术路径保留“目录”；两个导入开关文案只在 `core/design` 定义（`design_import_thumbnails`/`design_import_duplicates`），设置页与 Wi-Fi 面板共同引用；播放模式“目录循环”改“文件夹循环”。
+- **F-14**：按模块建立中文 `strings.xml`（core/design、domain、home、settings、importer、detail、player、app）；UI 模块用户可见文案全部经 `stringResource`/`Context.getString` 引用；ViewModel 消息改为“资源+参数”模型（HomeMessage/SettingsMessage/DetailMessage）；枚举选项改 `labelRes` 单一来源；`nameError` 重构为纯函数 `nameErrorReason`。新增 `CopyResourceGateTest` 门禁（硬编码白名单扫描 + 术语黑名单 + 同源断言），随 `testDebugUnitTest` 运行。
+- **F-09**：先核实 `WebUploadHttpServer` 全部路由无鉴权、`localAddress()` 绑定站点本地地址（风险属实），再在 `WifiImportSheet` 启动按钮前新增独立警示块（errorContainer + WarningAmber 图标 + 两行事实文案），常驻且重开仍在；未加鉴权/协议。
+- 保留项不变：F-37 即时保存与 SettingsWriteQueue、F-16/17/38 面板、F-19/20 入口与队列、F-22/21 菜单与详情操作、F-32 统一删除确认、transitionMutex、私有导入复制、MediaSession 生命周期契约。
+
+### 15.2 迁移统计
+
+- 迁移前 UI 模块中文硬编码约 400 处（全仓约 710），`stringResource` 0 次。
+- 迁移后 UI 模块用户可见文案全部资源化；剩余为数据层/引擎错误原因文案（约 200 处，2D 错误分类阶段处理）与已登记白名单的内部字符串（loadStage 诊断、dumpsys、testTag、控制流异常）。
+
+### 15.3 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；aapt2 确认 versionCode=10006 / versionName=1.0.6，仅 arm64-v8a |
+| `lintDebug`（14 模块） | 0 error；app 11 warning（10 基线 + 1 新增 androidx.annotation 版本提示），core/design 0 warning（修复 LoadingState 参数顺序）。修复 LocalContextGetResourceValueCall：Wi-Fi 剪贴板标签、首页/详情/设置 Snackbar、根导航回调、播放器手势反馈均改组合期 stringResource |
+| `testDebugUnitTest`（全模块） | 118 tests，2 skipped，0 failure / 0 error（原 113，新增门禁 3 + 首页 2） |
+| 完整 `connectedDebugAndroidTest`（headless） | **63/63 通过，0 failure / 0 error / 0 skipped**（原 60，新增 Wi-Fi 风险/术语 3 例；F-16/17/19/20/21/22/37/38 与 MediaSession 生命周期回归全部通过） |
+
+### 15.4 仪器化与截图
+
+- 新增 `WifiRiskAndImportTermsInstrumentedTest` 3 例：风险块独立/近按钮/重开仍在；Wi-Fi 面板与设置·导入开关名一致。
+- 既有仪器化测试仅更新构造参数与术语变化导致的文本断言，未削弱断言。
+- 无头取证：`Get-CimInstance Win32_Process` 命令行含 `-avd Medium_Phone_API_37.0 -no-window -no-snapshot-save -no-boot-anim -no-audio`（qemu-system-x86_64-headless.exe，唯一实例）；客户机媒体流静音（stream 3 索引 0）。
+- 截图索引见 `evidence/README-1E.md`。
+
+### 15.5 阶段结论
+
+- F-10/F-14/F-09 验收标准由门禁单测、仪器化测试与实机截图覆盖。
+- 未改动 DB schema、libmpv 核心与 MediaSession 生命周期契约；未新增 i18n 框架（仅中文资源化）。
+- **阶段 1E 通过验收；自动进入阶段 1F（F-27 横屏验证）。**

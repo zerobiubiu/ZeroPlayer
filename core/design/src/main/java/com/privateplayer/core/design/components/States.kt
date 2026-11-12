@@ -25,10 +25,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.design.theme.Radius
 import com.privateplayer.core.design.theme.Spacing
+import com.privateplayer.core.design.R
 
 /** 空状态：图标 + 标题 + 说明 + 明确的操作入口（若提供）。 */
 @Composable
@@ -82,7 +84,7 @@ fun EmptyState(
 
 /** 加载态。 */
 @Composable
-fun LoadingState(label: String = "加载中…", modifier: Modifier = Modifier) {
+fun LoadingState(modifier: Modifier = Modifier, label: String = stringResource(R.string.design_loading)) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -127,7 +129,7 @@ fun ErrorState(
         )
         if (onRetry != null) {
             Spacer(Modifier.height(Spacing.sm))
-            TextButton(onClick = onRetry) { Text("重试") }
+            TextButton(onClick = onRetry) { Text(stringResource(R.string.design_retry)) }
         }
     }
 }
