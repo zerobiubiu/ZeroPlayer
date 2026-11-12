@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -69,10 +70,10 @@ import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackStatus
 import kotlin.math.abs
 
-/** 播放器覆盖层的可读文本色板：固定白色系，不跟随主题。 */
-private val PlayerText = Color.White
-private val PlayerTextSecondary = Color.White.copy(alpha = 0.72f)
-private val PlayerAccent = Color(0xFF4A84FF)
+/** 播放器覆盖层色板与尺寸统一来自 [PlayerTokens]（F-34），保持深色媒体语境。 */
+private val PlayerText = PlayerTokens.Text
+private val PlayerTextSecondary = PlayerTokens.TextSecondary
+private val PlayerAccent = PlayerTokens.Accent
 
 @Composable
 fun PlayerVideoLayer(
@@ -274,15 +275,16 @@ fun PlayerBottomControls(
 @Composable
 private fun PlayerSpeedPill(speed: Float, onClick: () -> Unit) {
     Surface(
-        color = PlayerText.copy(alpha = 0.14f),
+        color = PlayerTokens.PillContainer,
         shape = RoundedCornerShape(50),
         onClick = onClick,
+        modifier = Modifier.defaultMinSize(minHeight = PlayerTokens.MinTouchTarget),
     ) {
         Text(
             text = stringResource(R.string.player_speed_format, formatSpeed(speed)),
             style = MaterialTheme.typography.labelLarge,
             color = PlayerText,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
         )
     }
 }
@@ -299,21 +301,21 @@ private fun PlayerTransportButton(
         color = Color.Transparent,
         shape = CircleShape,
         onClick = onClick,
-        modifier = Modifier.size(if (large) 56.dp else 44.dp),
+        modifier = Modifier.size(if (large) PlayerTokens.TransportLargeSize else PlayerTokens.TransportSize),
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (loading) {
                 CircularProgressIndicator(
                     color = PlayerText,
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(22.dp),
+                    modifier = Modifier.size(PlayerTokens.TransportLoading),
                 )
             } else {
                 Icon(
                     imageVector = icon,
                     contentDescription = contentDescription,
                     tint = PlayerText,
-                    modifier = Modifier.size(if (large) 40.dp else 28.dp),
+                    modifier = Modifier.size(if (large) PlayerTokens.TransportLargeIcon else PlayerTokens.TransportIcon),
                 )
             }
         }
@@ -424,10 +426,10 @@ fun PlayerGestureOverlay(
 @Composable
 fun LockedIndicator(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
     Surface(
-        color = Color.Black.copy(alpha = 0.45f),
+        color = PlayerTokens.Scrim.copy(alpha = 0.45f),
         shape = RoundedCornerShape(20.dp),
         onClick = onUnlock,
-        modifier = modifier,
+        modifier = modifier.defaultMinSize(minHeight = PlayerTokens.MinTouchTarget),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

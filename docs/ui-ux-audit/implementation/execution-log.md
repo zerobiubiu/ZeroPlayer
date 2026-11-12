@@ -642,3 +642,38 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-08/F-12/F-39 验收由单测、门禁、仪器化回归与截图覆盖。
 - **阶段 2D 通过验收；自动进入阶段 2E（F-32/F-33/F-34/F-36/F-31）。**
+
+---
+
+## 二十一、阶段 2E：组件收敛（F-33 / F-34 / F-36 / F-31，F-32 核验）
+
+- 时间：2026-11-13
+- 对应任务：T-33、T-34、T-36、T-31（T-32 核验）
+- 变更记录：[changes/0021-component-convergence.md](../../changes/0021-component-convergence.md)
+
+### 21.1 实施
+
+- **F-33**：SwitchRow 外层 toggleable(role=Switch)，Switch(onCheckedChange=null)，单目标。
+- **F-34**：新增 PlayerTokens（色板+关键尺寸单一来源，间距复用 Spacing），PlayerOverlays 引用。
+- **F-36**：速度胶囊/锁定 chip defaultMinSize 48dp，传输键 44→48dp。
+- **F-31**：删除 FilterChipRow/ClickableSettingRow/PrimaryActionButton/InputDialog/MediaCardData/MediaGridCard/MediaListRow/MetaChip/cardInteraction；保留 SelectionTopBar。
+- **F-32**：核验 DeleteDialog 单实现（1D 已落地），回填 findings。
+
+### 21.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10011 / versionName=1.0.11 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 132 tests，2 skipped，0 failure |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 21.3 |
+
+### 21.3 仪器化与截图
+
+- 既有设置/播放器用例回归（SwitchRow 单目标、播放器控件）。
+- 截图索引见 `evidence/README-2E.md`。
+
+### 21.4 阶段结论
+
+- F-33/F-34/F-36/F-31 验收由编译、仪器化回归与截图覆盖；F-32 核验单实现。
+- **阶段 2E 通过验收；自动进入阶段 2F（F-13/F-40）。**

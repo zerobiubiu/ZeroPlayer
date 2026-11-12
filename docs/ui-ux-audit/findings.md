@@ -360,6 +360,7 @@
 - 影响：误导后续开发“这是既有规范”；增加维护面。
 - 建议：删除或标注 `@Deprecated` 并在设计系统文档中移除。
 - 优先级：P3
+- 状态：**已修复**（2026-11-13，阶段 2E）。确认无调用后删除 FilterChipRow/ClickableSettingRow/PrimaryActionButton/InputDialog/MediaCardData(toCardData)/MediaGridCard/MediaListRow/MetaChip/cardInteraction；保留 SelectionTopBar 供 F-41 复用；全量编译通过。详见 [变更记录 0021](../changes/0021-component-convergence.md)。
 
 ### F-32 删除对话框两套实现——P2——已验证
 - 页面：首页删除 / 详情删字幕
@@ -370,6 +371,7 @@
 - 影响：未来调整危险操作样式需改两处，容易产生偏差。
 - 建议：首页删除改用 `ConfirmDialog(destructive = true)`。
 - 优先级：P2
+- 状态：**已修复**（2026-11-12，阶段 1D；2E 核验）。DeleteDialog 基于 ConfirmDialog(destructive=true)，首页/详情/字幕删除单实现。详见 [变更记录 0014](../changes/0014-ui-menu-and-detail-actions.md)。
 
 ### F-33 开关整行可点且开关自身可点，读屏出现双目标——P2——已验证（代码）
 - 页面：设置二级页（所有 SwitchRow）
@@ -380,6 +382,7 @@
 - 影响：辅助技术用户会遇到两个同名、功能重复的控件。
 - 建议：给 Row 加 `toggleable(role = Switch)` 并移除 Switch 的独立 `onCheckedChange`（`onCheckedChange = null`），合并语义。
 - 优先级：P2
+- 状态：**已修复**（2026-11-13，阶段 2E）。SwitchRow 外层 toggleable(role=Switch)，内部 Switch(onCheckedChange=null)，整行单一可切换目标。详见 [变更记录 0021](../changes/0021-component-convergence.md)。
 
 ### F-34 播放器完全绕开设计 Token——P2——已验证
 - 页面：播放器
@@ -390,6 +393,7 @@
 - 影响：品牌色不统一；主题切换或设计调整无法覆盖播放器。
 - 建议：抽出 `PlayerTokens`（背景、强调、间距、控件尺寸）并从主题派生；播放器允许独立明暗但共享色板来源。
 - 优先级：P2
+- 状态：**已修复**（2026-11-13，阶段 2E）。新增 PlayerTokens 集中色板与关键尺寸，间距复用 Spacing；保持深色媒体语境与媒体控制专用蓝。详见 [变更记录 0021](../changes/0021-component-convergence.md)。
 
 ### F-35 图标风格与圆角体系不统一——P3——已验证
 - 页面：全项目
@@ -414,6 +418,7 @@
 - 影响：手部不便或运动中的用户容易点错；不满足 Material 48dp 建议。
 - 建议：视觉尺寸可保留，点击区域扩展到 ≥48dp（`minimumInteractiveComponentSize` 或外层 padding + `clickable`）。
 - 优先级：P2
+- 状态：**已修复**（2026-11-13，阶段 2E）。速度胶囊/锁定 chip defaultMinSize 48dp，传输键 44→48dp（大键 56dp）。详见 [变更记录 0021](../changes/0021-component-convergence.md)。
 
 > 已核对通过的无障碍项：深浅色文本对比度 6.0–11.0:1（全部 ≥4.5:1）；交互图标均有 `contentDescription`；选中状态有文字标注，不只靠颜色；空/错/载状态带 `liveRegion`；无障碍名称在文件行包含 `onClickLabel`。详见 `design-system.md`。
 

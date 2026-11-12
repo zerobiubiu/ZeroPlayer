@@ -1,23 +1,16 @@
 package com.privateplayer.core.design.components
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.Movie
 import androidx.compose.material.icons.outlined.PlayArrow
@@ -35,8 +28,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import com.privateplayer.core.design.theme.PlaceholderPalettes
@@ -155,187 +146,4 @@ fun MediaThumbnail(
     }
 }
 
-/** 网格卡片：缩略图 + 标题 + 副标题，支持多选态。 */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-fun MediaGridCard(
-    thumbnailFile: File?,
-    title: String,
-    subtitle: String?,
-    durationText: String?,
-    progress: Float?,
-    fallbackKey: Long,
-    selectionMode: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = Color.Transparent,
-        modifier = modifier.cardInteraction(onClick = onClick, onLongClick = onLongClick),
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-            Box {
-                MediaThumbnail(
-                    thumbnailFile = thumbnailFile,
-                    fallbackKey = fallbackKey,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f),
-                    durationText = durationText,
-                    progress = progress,
-                    isFavorite = false,
-                )
-                if (selectionMode) {
-                    val containerColor = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        Color.Black.copy(alpha = 0.35f)
-                    }
-                    Surface(
-                        color = containerColor,
-                        shape = CircleShape,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(6.dp)
-                            .size(22.dp),
-                    ) {
-                        if (selected) {
-                            Icon(
-                                imageVector = Icons.Filled.CheckCircle,
-                                contentDescription = stringResource(R.string.design_selected),
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(2.dp),
-                            )
-                        }
-                    }
-                }
-            }
-            Column {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (subtitle != null) {
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-        }
-    }
-}
 
-/** 列表行：适合长文件名与更多元信息。 */
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-fun MediaListRow(
-    thumbnailFile: File?,
-    title: String,
-    subtitle: String,
-    trailingText: String?,
-    progress: Float?,
-    fallbackKey: Long,
-    selectionMode: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        color = Color.Transparent,
-        modifier = modifier.cardInteraction(onClick = onClick, onLongClick = onLongClick),
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = Spacing.sm),
-        ) {
-            MediaThumbnail(
-                thumbnailFile = thumbnailFile,
-                fallbackKey = fallbackKey,
-                modifier = Modifier
-                    .width(112.dp)
-                    .aspectRatio(16f / 9f),
-                progress = progress,
-            )
-            Spacer(Modifier.width(Spacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-            if (trailingText != null) {
-                Spacer(Modifier.width(Spacing.sm))
-                Text(
-                    text = trailingText,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (selectionMode) {
-                Spacer(Modifier.width(Spacing.sm))
-                Icon(
-                    imageVector = Icons.Filled.CheckCircle,
-                    contentDescription = stringResource(if (selected) R.string.design_selected else R.string.design_unselected),
-                    tint = if (selected) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.outlineVariant
-                    },
-                    modifier = Modifier.size(22.dp),
-                )
-            }
-        }
-    }
-}
-
-/** 小尺寸统计标签，用于详情页元信息。 */
-@Composable
-fun MetaChip(text: String, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-        shape = RoundedCornerShape(Radius.pill),
-        modifier = modifier,
-    ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-        )
-    }
-}
-
-/**
- * 卡片交互修饰符：单击 + 长按。
- *
- * Material3 的 Surface(onClick=...) 不支持长按回调，这里用 combinedClickable 组合，
- * 保持无涟漪冲突（indication 由 clickable 提供）。
- */
-@androidx.compose.foundation.ExperimentalFoundationApi
-fun Modifier.cardInteraction(
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-): Modifier = this.combinedClickable(onClick = onClick, onLongClick = onLongClick)

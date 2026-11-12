@@ -52,6 +52,7 @@
 | [0018](changes/0018-home-header-rows-move-path.md) | 首页标题/面包屑去重并入统一顶栏、目录行单行、移动路径根目录文案（阶段 2B：F-01/F-24/F-30/F-23/F-04） |
 | [0019](changes/0019-detail-info-grouping-bitrate.md) | 详情信息四组分组、探测轨道移入文件信息、码率 Mbps 换算、chips 去重（阶段 2C：F-25/F-06/F-07/F-15） |
 | [0020](changes/0020-about-import-notices-error-state.md) | 关于页技术信息归位+开源许可入口、导入通知列表化与可行动失败、错误态标题与返回上级（阶段 2D：F-08/F-12/F-39） |
+| [0021](changes/0021-component-convergence.md) | 开关单目标、播放器 Token、触控 ≥48dp、死组件清理（阶段 2E：F-33/F-34/F-36/F-31，F-32 核验） |
 
 ### troubleshooting/（长期可复现的问题）
 

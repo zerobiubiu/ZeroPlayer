@@ -85,48 +85,6 @@ fun ConfirmDialog(
     )
 }
 
-/** 单行文本输入对话框（重命名、新建文件夹、新建播放列表）。 */
-@Composable
-fun InputDialog(
-    title: String,
-    label: String,
-    initialValue: String,
-    confirmLabel: String,
-    onConfirm: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var value by remember(initialValue) { mutableStateOf(initialValue) }
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) { runCatching { focusRequester.requestFocus() } }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            OutlinedTextField(
-                value = value,
-                onValueChange = { value = it },
-                label = { Text(label) },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = { if (value.isNotBlank()) onConfirm(value) }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .focusRequester(focusRequester),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onConfirm(value) },
-                enabled = value.isNotBlank(),
-            ) { Text(confirmLabel) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.design_cancel)) }
-        },
-    )
-}
 
 /**
  * 底部操作面板中一项的语义类型。
@@ -332,28 +290,6 @@ private fun SheetActionRow(action: SheetAction) {
     )
 }
 
-/** 单选筛选标签行。 */
-@Composable
-fun FilterChipRow(
-    labels: List<String>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        itemsIndexed(labels) { index, label ->
-            FilterChip(
-                selected = index == selectedIndex,
-                onClick = { onSelect(index) },
-                label = { Text(label) },
-                colors = FilterChipDefaults.filterChipColors(),
-            )
-        }
-    }
-}
 
 /** 设置页开关行（F-33）：整行单一可切换目标，读屏只停一次。 */
 @Composable
@@ -390,46 +326,4 @@ fun SwitchRow(
     }
 }
 
-/** 设置页可点击行（打开选择面板或对话框）。 */
-@Composable
-fun ClickableSettingRow(
-    title: String,
-    value: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    description: String? = null,
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
-    ) {
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
-        if (description != null) {
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-    }
-}
 
-/** 关键操作主按钮，用于空状态与详情页。 */
-@Composable
-fun PrimaryActionButton(
-    text: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    enabled: Boolean = true,
-) {
-    Button(onClick = onClick, modifier = modifier, enabled = enabled) {
-        Text(text)
-    }
-}
