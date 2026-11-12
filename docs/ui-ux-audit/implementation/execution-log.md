@@ -709,3 +709,37 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-13/F-40 验收由仪器化回归与手测/截图覆盖；F-09 风险块保留。
 - **阶段 2F 通过验收；自动进入阶段 2G（F-41 多选批量）。**
+
+---
+
+## 二十三、阶段 2G：文件树多选与批量删除/移动（F-41）
+
+- 时间：2026-11-13
+- 对应任务：T-41
+- 变更记录：[changes/0023-multi-select-batch.md](../../changes/0023-multi-select-batch.md)
+
+### 23.1 实施
+
+- 长按多选 + SelectionTopBar（数量/全选/清除/移动/删除）；返回键退出多选；切目录清空选择。
+- `deleteBatch/moveBatch` 逐项执行、先停播放（PlaybackStopper）、working 串行防重复；`BatchResult` 部分失败保留失败项；`HomeMessage.BatchDone` 按数量格式化 Snackbar。
+- 批量删除二次确认（ConfirmDialog destructive）；批量移动复用 MoveDialog；仅删除+移动（D5）。
+
+### 23.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10013 / versionName=1.0.13 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 136 tests，2 skipped，0 failure（原 132，新增批量 4） |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 23.3 |
+
+### 23.3 仪器化与截图
+
+- `HomeViewModelTest` +4（部分失败/全成功/全失败/消息格式化）。
+- 既有首页用例回归。
+- 截图索引见 `evidence/README-2G.md`。
+
+### 23.4 阶段结论
+
+- F-41 验收由批量单测、仪器化回归与截图覆盖；播放安全与生命周期契约不变。
+- **阶段 2G 通过验收；自动进入阶段 3（F-02/F-03/F-05/F-11/F-28/F-35）。**

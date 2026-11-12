@@ -38,6 +38,9 @@ sealed interface HomeMessage {
 
     /** 已删除。 */
     data object Deleted : HomeMessage
+
+    /** 批量操作结果（F-41）：按成功/部分失败/全失败汇总。 */
+    data class BatchDone(val result: BatchResult) : HomeMessage
 }
 
 /** 消息对应的文案资源；界面用 `Context.getString` 解析，参数按资源占位符传入。 */
@@ -53,4 +56,19 @@ fun HomeMessage.labelRes(): Int = when (this) {
     HomeMessage.Moved -> R.string.home_moved
     HomeMessage.DeleteFailed -> R.string.home_delete_failed
     HomeMessage.Deleted -> R.string.home_deleted
+    is HomeMessage.BatchDone -> when {
+        this.result.allSucceeded -> R.string.home_batch_result_all_success
+        this.result.allFailed -> R.string.home_batch_result_all_failed
+        else -> R.string.home_batch_result_partial
+    }
+}
+
+/** 消息的格式化参数；批量结果按成功/失败数填充。 */
+fun HomeMessage.formatArgs(): Array<Any> = when (this) {
+    is HomeMessage.BatchDone -> when {
+        result.allSucceeded -> arrayOf(result.succeeded.size)
+        result.allFailed -> arrayOf(result.failed.size)
+        else -> arrayOf(result.succeeded.size, result.failed.size)
+    }
+    else -> emptyArray()
 }

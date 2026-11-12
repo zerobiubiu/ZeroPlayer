@@ -148,10 +148,12 @@ class FileMenuAndDetailActionsInstrumentedTest {
             }
             assertTrue(video.isFile)
 
-            // 长按同样打开分组菜单
+            // F-41：长按进入多选（不再打开菜单），顶栏显示已选数量
             compose.onNodeWithText(video.name).performTouchInput { longClick() }
-            compose.onNodeWithTag("文件菜单-删除").assertIsDisplayed()
-            compose.onNodeWithTag("文件菜单-删除").performClick()
+            compose.onNodeWithText("已选择 1 项").assertIsDisplayed()
+            // 多选态批量删除：二次确认后删除
+            compose.onNodeWithContentDescription("删除").performClick()
+            compose.onNodeWithText("删除 1 项？").assertIsDisplayed()
             compose.onNode(hasText("删除") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
             compose.waitUntil(10_000) { !video.exists() }
             compose.waitUntil(10_000) {

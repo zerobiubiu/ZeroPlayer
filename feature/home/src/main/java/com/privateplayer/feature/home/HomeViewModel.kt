@@ -147,6 +147,52 @@ class HomeViewModel @Inject constructor(
         )
     }
 
+    /**
+     * 批量删除（F-41）：逐项执行，先停播放再删文件；成功项移除、失败项保留并汇总原因。
+     * 播放安全沿用单项路径的 [PlaybackStopper]，不改变 MediaSession 生命周期契约。
+     */
+    fun deleteBatch(entries: List<FileTreeEntry>, onResult: (BatchResult) -> Unit) {
+        performBatch(entries, onResult) { entry ->
+            playbackStopper.stopIfAffected(entry.path)
+            fileTreeRepository.delete(entry.path)
+        }
+    }
+
+    /** 批量移动（F-41）：逐项执行，先停播放再移动；部分失败保留失败项。 */
+    fun moveBatch(entries: List<FileTreeEntry>, destination: String, onResult: (BatchResult) -> Unit) {
+        performBatch(entries, onResult) { entry ->
+            playbackStopper.stopIfAffected(entry.path)
+            fileTreeRepository.move(entry.path, destination)
+        }
+    }
+
+    private fun performBatch(
+        entries: List<FileTreeEntry>,
+        onResult: (BatchResult) -> Unit,
+        action: suspend (FileTreeEntry) -> Unit,
+    ) {
+        if (entries.isEmpty()) return
+        if (!working.compareAndSet(expect = false, update = true)) return
+        viewModelScope.launch {
+            val succeeded = mutableListOf<String>()
+            val failed = mutableListOf<Pair<String, String>>()
+            withContext(ioDispatcher) {
+                entries.forEach { entry ->
+                    try {
+                        action(entry)
+                        succeeded += entry.path
+                    } catch (error: CancellationException) {
+                        throw error
+                    } catch (error: Exception) {
+                        failed += entry.path to (error.message ?: "")
+                    }
+                }
+            }
+            working.value = false
+            onResult(BatchResult(succeeded.toList(), failed.toList()))
+        }
+    }
+
     /** 目标选择器只能浏览实际存在的文件夹，且不能进入正在移动的文件夹。 */
     suspend fun directoriesForMove(path: String, entry: FileTreeEntry): List<FileTreeEntry> =
         withContext(ioDispatcher) {

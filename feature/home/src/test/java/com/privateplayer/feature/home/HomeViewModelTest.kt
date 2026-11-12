@@ -194,6 +194,53 @@ class HomeViewModelTest {
         assertEquals(samples.size, resources.toSet().size)
         assertTrue(resources.all { it != 0 })
     }
+
+    @Test
+    fun `批量删除部分失败保留失败项`() = runTest(dispatcher) {
+        val repository = FakeFileTreeRepository().apply { failPaths += "b.txt" }
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
+        var result: BatchResult? = null
+        model.deleteBatch(listOf(file("a.txt"), file("b.txt"), file("c.txt"))) { result = it }
+        runCurrent()
+        assertEquals(listOf("a.txt", "c.txt"), result!!.succeeded)
+        assertEquals(listOf("b.txt"), result!!.failed.map { it.first })
+        assertFalse(result!!.allSucceeded)
+        assertFalse(result!!.allFailed)
+        assertFalse(model.uiState.value.isWorking)
+    }
+
+    @Test
+    fun `批量移动全部成功`() = runTest(dispatcher) {
+        val repository = FakeFileTreeRepository()
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
+        var result: BatchResult? = null
+        model.moveBatch(listOf(file("a.txt"), file("b.txt")), "目标") { result = it }
+        runCurrent()
+        assertEquals(listOf("a.txt", "b.txt"), result!!.succeeded)
+        assertTrue(result!!.allSucceeded)
+    }
+
+    @Test
+    fun `批量删除全部失败`() = runTest(dispatcher) {
+        val repository = FakeFileTreeRepository().apply { failOperations = true }
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
+        var result: BatchResult? = null
+        model.deleteBatch(listOf(file("a.txt"), file("b.txt"))) { result = it }
+        runCurrent()
+        assertTrue(result!!.allFailed)
+        assertEquals(2, result!!.failed.size)
+    }
+
+    @Test
+    fun `批量结果消息按成功失败数格式化`() {
+        val partial = HomeMessage.BatchDone(BatchResult(listOf("a"), listOf("b" to "err")))
+        assertEquals(R.string.home_batch_result_partial, partial.labelRes())
+        assertEquals(listOf<Any>(1, 1), partial.formatArgs().toList())
+        val all = HomeMessage.BatchDone(BatchResult(listOf("a", "b"), emptyList()))
+        assertEquals(R.string.home_batch_result_all_success, all.labelRes())
+        val none = HomeMessage.BatchDone(BatchResult(emptyList(), listOf("a" to "err")))
+        assertEquals(R.string.home_batch_result_all_failed, none.labelRes())
+    }
 }
 
 private fun directory(path: String) = FileTreeEntry(
@@ -210,6 +257,7 @@ private class FakeFileTreeRepository : FileTreeRepository {
     val failedDirectories = mutableSetOf<String>()
     val ensuredPaths = mutableListOf<String>()
     var failOperations = false
+    val failPaths = mutableSetOf<String>()
     private val changes = MutableStateFlow(0L)
 
     override fun observeChanges(): Flow<Long> = changes
@@ -228,11 +276,11 @@ private class FakeFileTreeRepository : FileTreeRepository {
         return directory(name)
     }
     override suspend fun move(path: String, destination: String): FileTreeEntry {
-        if (failOperations) error("移动失败")
+        if (failOperations || path in failPaths) error("移动失败")
         return directory(path)
     }
     override suspend fun delete(path: String) {
-        if (failOperations) error("删除失败")
+        if (failOperations || path in failPaths) error("删除失败")
     }
     override suspend fun ensureMedia(path: String): Long {
         if (failOperations) error("视频不可用")

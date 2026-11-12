@@ -21,6 +21,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.CreateNewFolder
 import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material3.DropdownMenu
@@ -32,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.design.components.EmptyState
+import com.privateplayer.core.design.components.ConfirmDialog
+import com.privateplayer.core.design.components.SelectionTopBar
 import com.privateplayer.core.design.components.AppTopBar
 import com.privateplayer.core.design.components.DeleteDialog
 import com.privateplayer.core.design.components.MoveDialog
@@ -76,9 +81,23 @@ fun HomeScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingMessage by remember { mutableStateOf<HomeMessage?>(null) }
     var dialog by remember { mutableStateOf<HomeDialog?>(null) }
-    val messageText = pendingMessage?.let { stringResource(it.labelRes()) }
+    var selectedPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var batchDeleteConfirm by remember { mutableStateOf(false) }
+    var batchMove by remember { mutableStateOf(false) }
+    val selectionMode = selectedPaths.isNotEmpty()
+    val messageText = pendingMessage?.let { stringResource(it.labelRes(), *it.formatArgs()) }
 
-    BackHandler(enabled = state.currentDirectory.isNotEmpty()) { viewModel.navigateUp() }
+    // 切换目录时清空选择，避免跨目录误操作。
+    LaunchedEffect(state.currentDirectory) { selectedPaths = emptySet() }
+
+    fun handleBatchResult(result: BatchResult) {
+        selectedPaths = result.failed.map { it.first }.toSet()
+        pendingMessage = HomeMessage.BatchDone(result)
+    }
+
+    BackHandler(enabled = selectionMode || state.currentDirectory.isNotEmpty()) {
+        if (selectionMode) selectedPaths = emptySet() else viewModel.navigateUp()
+    }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message -> pendingMessage = message }
     }
@@ -93,15 +112,36 @@ fun HomeScreen(
         modifier = modifier.fillMaxSize().safeDrawingPadding(),
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
-            HomeTopBar(
-                currentDirectory = state.currentDirectory,
-                enabled = !state.isWorking,
-                onBack = viewModel::navigateUp,
-                onNavigate = viewModel::openDirectory,
-                onCreateDirectory = { dialog = HomeDialog.CreateDirectory(state.currentDirectory) },
-                onLocalImport = { onOpenLocalImport(state.currentDirectory) },
-                onWifiImport = { onOpenWifiImport(state.currentDirectory) },
-            )
+            if (selectionMode) {
+                SelectionTopBar(
+                    selectedCount = selectedPaths.size,
+                    onClose = { selectedPaths = emptySet() },
+                    actions = {
+                        TextButton(onClick = { selectedPaths = state.entries.map { it.path }.toSet() }) {
+                            Text(stringResource(R.string.home_select_all))
+                        }
+                        TextButton(onClick = { selectedPaths = emptySet() }) {
+                            Text(stringResource(R.string.home_clear_selection))
+                        }
+                        IconButton(onClick = { batchMove = true }, enabled = !state.isWorking) {
+                            Icon(Icons.Outlined.DriveFileMove, contentDescription = stringResource(R.string.home_batch_move))
+                        }
+                        IconButton(onClick = { batchDeleteConfirm = true }, enabled = !state.isWorking) {
+                            Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.home_batch_delete))
+                        }
+                    },
+                )
+            } else {
+                HomeTopBar(
+                    currentDirectory = state.currentDirectory,
+                    enabled = !state.isWorking,
+                    onBack = viewModel::navigateUp,
+                    onNavigate = viewModel::openDirectory,
+                    onCreateDirectory = { dialog = HomeDialog.CreateDirectory(state.currentDirectory) },
+                    onLocalImport = { onOpenLocalImport(state.currentDirectory) },
+                    onWifiImport = { onOpenWifiImport(state.currentDirectory) },
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
@@ -153,8 +193,23 @@ fun HomeScreen(
                         FileTreeRow(
                             entry = entry,
                             enabled = !state.isWorking,
+                            selectionMode = selectionMode,
+                            selected = entry.path in selectedPaths,
+                            onToggleSelect = {
+                                selectedPaths = if (entry.path in selectedPaths) {
+                                    selectedPaths - entry.path
+                                } else {
+                                    selectedPaths + entry.path
+                                }
+                            },
+                            onEnterSelection = { selectedPaths = selectedPaths + entry.path },
                             onOpen = {
                                 when {
+                                    selectionMode -> selectedPaths = if (entry.path in selectedPaths) {
+                                        selectedPaths - entry.path
+                                    } else {
+                                        selectedPaths + entry.path
+                                    }
                                     entry.isDirectory -> viewModel.openDirectory(entry.path)
                                     entry.isVideo -> viewModel.resolveVideo(entry, onPlayMedia)
                                     else -> viewModel.showUnsupportedFileMessage()
@@ -217,6 +272,39 @@ fun HomeScreen(
         )
 
         null -> Unit
+    }
+
+    // F-41：批量删除二次确认（点名数量、不可撤销）。
+    if (batchDeleteConfirm) {
+        val selectedEntries = state.entries.filter { it.path in selectedPaths }
+        ConfirmDialog(
+            title = stringResource(R.string.home_batch_delete_title, selectedEntries.size),
+            message = stringResource(R.string.home_batch_delete_message, selectedEntries.size),
+            confirmLabel = stringResource(R.string.home_batch_delete),
+            destructive = true,
+            onConfirm = {
+                batchDeleteConfirm = false
+                viewModel.deleteBatch(selectedEntries, ::handleBatchResult)
+            },
+            onDismiss = { batchDeleteConfirm = false },
+        )
+    }
+
+    // F-41：批量移动复用目录选择器（以首个选中项约束目标）。
+    if (batchMove) {
+        val selectedEntries = state.entries.filter { it.path in selectedPaths }
+        val anchor = selectedEntries.firstOrNull()
+        if (anchor != null) {
+            MoveDialog(
+                entry = anchor,
+                loadDirectories = viewModel::directoriesForMove,
+                onDismiss = { batchMove = false },
+                onConfirm = { destination ->
+                    batchMove = false
+                    viewModel.moveBatch(selectedEntries, destination, ::handleBatchResult)
+                },
+            )
+        }
     }
 }
 
