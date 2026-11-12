@@ -15,8 +15,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,15 +25,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material.icons.outlined.PlaylistPlay
 import androidx.compose.material.icons.outlined.Repeat
+import androidx.compose.material.icons.outlined.RepeatOne
 import androidx.compose.material.icons.outlined.ScreenRotation
+import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
+import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -56,7 +62,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -69,7 +77,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.design.components.ActionSheet
+import com.privateplayer.core.design.components.ImmersiveSheetWindowEffect
 import com.privateplayer.core.design.components.SheetAction
+import com.privateplayer.core.design.components.SheetActionKind
 import com.privateplayer.core.playback.PlaybackStatus
 import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.abs
@@ -193,12 +203,9 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 弹出底部面板/系统确实可能让系统栏短暂出现，这里在面板状态变化后重新隐藏。
-    LaunchedEffect(showSpeedSheet, showSubtitleSheet, showAudioSheet, showAspectSheet, showMoreSheet) {
-        activity?.window?.let { window ->
-            WindowCompat.getInsetsController(window, view).hide(WindowInsetsCompat.Type.systemBars())
-        }
-    }
+    // 面板是独立窗口，系统栏由各面板自身的窗口处理（见 ActionSheet 的 immersive 参数）。
+    // 这里不再按面板状态重复隐藏 Activity 窗口的系统栏：那是旧实现，
+    // 对面板窗口无效，且与 DisposableEffect 中的恢复逻辑相互竞争。
 
     LaunchedEffect(gestureMessage, gestureMessageRevision) {
         if (gestureMessage != null) {
@@ -484,10 +491,13 @@ fun PlayerScreen(
     if (showSpeedSheet) {
         ActionSheet(
             title = "播放速度",
+            immersive = true,
             actions = SPEED_OPTIONS.map { speed ->
                 SheetAction(
-                    label = if (speed == state.playback.speed) "$speed×（当前）" else "$speed×",
-                    icon = Icons.Outlined.Check,
+                    label = "$speed×",
+                    icon = Icons.Outlined.Speed,
+                    kind = SheetActionKind.SingleChoice,
+                    selected = speed == state.playback.speed,
                     onClick = {
                         viewModel.setSpeed(speed)
                         showSpeedSheet = false
@@ -501,10 +511,13 @@ fun PlayerScreen(
     if (showAspectSheet) {
         ActionSheet(
             title = "画面比例",
+            immersive = true,
             actions = VideoAspect.entries.map { aspect ->
                 SheetAction(
-                    label = if (aspect == state.playback.aspect) "${aspect.labelText}（当前）" else aspect.labelText,
-                    icon = Icons.Outlined.Check,
+                    label = aspect.labelText,
+                    icon = Icons.Outlined.AspectRatio,
+                    kind = SheetActionKind.SingleChoice,
+                    selected = aspect == state.playback.aspect,
                     onClick = {
                         viewModel.setAspect(aspect)
                         showAspectSheet = false
@@ -518,13 +531,24 @@ fun PlayerScreen(
     if (showAudioSheet) {
         ActionSheet(
             title = "音轨",
+            immersive = true,
             actions = if (state.audioTracks.isEmpty()) {
-                listOf(SheetAction(label = "没有可选音轨", icon = Icons.Outlined.Check, enabled = false, onClick = {}))
+                listOf(
+                    SheetAction(
+                        label = "没有可选音轨",
+                        icon = Icons.Outlined.VolumeOff,
+                        kind = SheetActionKind.Status,
+                        enabled = false,
+                        onClick = {},
+                    ),
+                )
             } else {
                 state.audioTracks.map { track ->
                     SheetAction(
-                        label = if (track.id == state.selectedAudioTrackId) "${track.label}（当前）" else track.label,
-                        icon = Icons.Outlined.Check,
+                        label = track.label,
+                        icon = Icons.Outlined.VolumeUp,
+                        kind = SheetActionKind.SingleChoice,
+                        selected = track.id == state.selectedAudioTrackId,
                         supportingText = track.codec,
                         onClick = {
                             viewModel.selectAudioTrack(track.id)
@@ -540,10 +564,12 @@ fun PlayerScreen(
     if (showMoreSheet) {
         ActionSheet(
             title = state.title,
+            immersive = true,
             actions = listOf(
                 SheetAction(
                     label = "锁定屏幕",
                     icon = Icons.Outlined.Lock,
+                    kind = SheetActionKind.Action,
                     supportingText = "隐藏控制，避免误触",
                     onClick = {
                         viewModel.toggleLock()
@@ -553,6 +579,7 @@ fun PlayerScreen(
                 SheetAction(
                     label = "音轨",
                     icon = Icons.Outlined.VolumeUp,
+                    kind = SheetActionKind.Navigation,
                     supportingText = audioLabel(state),
                     onClick = {
                         showMoreSheet = false
@@ -562,6 +589,7 @@ fun PlayerScreen(
                 SheetAction(
                     label = "画面比例",
                     icon = Icons.Outlined.AspectRatio,
+                    kind = SheetActionKind.Navigation,
                     supportingText = state.playback.aspect.labelText,
                     onClick = {
                         showMoreSheet = false
@@ -571,18 +599,12 @@ fun PlayerScreen(
                 SheetAction(
                     label = "旋转屏幕",
                     icon = Icons.Outlined.ScreenRotation,
+                    kind = SheetActionKind.Action,
                     supportingText = "切换横屏 / 竖屏",
                     onClick = {
                         activity?.toggleOrientation()
                         showMoreSheet = false
                     },
-                ),
-                SheetAction(
-                    label = "播放引擎",
-                    icon = Icons.Outlined.Check,
-                    supportingText = state.engineDetail,
-                    enabled = false,
-                    onClick = {},
                 ),
             ),
             onDismiss = { showMoreSheet = false },
@@ -592,11 +614,13 @@ fun PlayerScreen(
     if (showQueueSheet) {
         ActionSheet(
             title = "播放列表 · ${(state.queueIndex + 1).coerceAtLeast(1)}/${state.queue.size.coerceAtLeast(1)}",
+            immersive = true,
             actions = buildList {
                 add(
                     SheetAction(
                         label = "上一集",
                         icon = Icons.Outlined.SkipPrevious,
+                        kind = SheetActionKind.Action,
                         enabled = state.queueIndex > 0,
                         onClick = {
                             viewModel.playPrevious()
@@ -608,6 +632,7 @@ fun PlayerScreen(
                     SheetAction(
                         label = "下一集",
                         icon = Icons.Outlined.SkipNext,
+                        kind = SheetActionKind.Action,
                         enabled = state.hasNext,
                         onClick = {
                             viewModel.playNext()
@@ -618,8 +643,10 @@ fun PlayerScreen(
                 PlayMode.entries.forEach { mode ->
                     add(
                         SheetAction(
-                            label = if (mode == state.playMode) "${mode.label}（当前）" else mode.label,
-                            icon = Icons.Outlined.Repeat,
+                            label = mode.label,
+                            icon = mode.icon,
+                            kind = SheetActionKind.SingleChoice,
+                            selected = mode == state.playMode,
                             onClick = {
                                 viewModel.setPlayMode(mode)
                                 showQueueSheet = false
@@ -661,6 +688,15 @@ private fun audioLabel(state: PlayerUiState): String {
     return track?.label ?: "音轨"
 }
 
+/** 播放模式各自使用语义相符的图标，避免四种模式共用同一个图标。 */
+private val PlayMode.icon: ImageVector
+    get() = when (this) {
+        PlayMode.SEQUENTIAL -> Icons.Outlined.PlaylistPlay
+        PlayMode.REPEAT_ONE -> Icons.Outlined.RepeatOne
+        PlayMode.REPEAT_ALL -> Icons.Outlined.Repeat
+        PlayMode.SHUFFLE -> Icons.Outlined.Shuffle
+    }
+
 private val VideoAspect.labelText: String
     get() = when (this) {
         VideoAspect.FIT -> "适应屏幕"
@@ -685,6 +721,7 @@ private fun SubtitleSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
+        ImmersiveSheetWindowEffect()
         Column(modifier = Modifier.padding(bottom = 24.dp)) {
             Text(
                 text = "字幕",
@@ -744,12 +781,29 @@ private fun SubtitleSheet(
     }
 }
 
+/**
+ * 字幕轨选项行。
+ *
+ * 当前项显示勾选并用容器色高亮，读屏播报“已选中”，与其它面板的
+ * 单选语义保持一致。
+ */
 @Composable
 private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        color = Color.Transparent,
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+    val containerColor = if (selected) {
+        MaterialTheme.colorScheme.secondaryContainer
+    } else {
+        Color.Transparent
+    }
+    val titleColor = if (selected) {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(containerColor)
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -758,12 +812,17 @@ private fun SubtitleRow(label: String, selected: Boolean, onClick: () -> Unit) {
             Text(
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
+                color = titleColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
             if (selected) {
-                Icon(Icons.Outlined.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(
+                    Icons.Outlined.Check,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
             }
         }
     }

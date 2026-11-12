@@ -28,8 +28,10 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.material3)
     implementation(libs.compose.material.icons.extended)
+    implementation(libs.androidx.core.ktx)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.coil.compose)
     implementation(project(":domain"))
     implementation(project(":core:common"))
+    testImplementation(libs.junit)
 }

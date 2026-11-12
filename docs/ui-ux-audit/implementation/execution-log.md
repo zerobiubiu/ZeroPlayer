@@ -298,3 +298,48 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 - 未改动播放器、文件树、导入链路与设计 Token。
 - 范围提示始终显示（F-29）、数值行密度（F-26）、文案资源化（F-14）仍属阶段 2/1E，未在本任务夹带。
 - **可以进入 T-16/F-38/F-17（阶段 1B 播放器面板）。**
+
+---
+
+## 十二、阶段 1B：播放器面板语义与沉浸式（F-16 / F-38 / F-17）
+
+- 时间：2026-11-12
+- 对应任务：T-16、T-38、T-17
+- 变更记录：[changes/0012-player-panels.md](../../changes/0012-player-panels.md)
+
+### 12.1 根因与决策
+
+- **F-38**：`ModalBottomSheet` 是独立对话框窗口，旧实现只隐藏 Activity 窗口的系统栏，对面板窗口无效。改为在面板内容里沿父视图链取 `DialogWindowProvider` 的窗口，单独隐藏其系统栏；幂等、不高频重复。
+- **F-16**：`SheetAction` 无语义类型，所有行传同一 `Check`。引入 `SheetActionKind`（SingleChoice/Action/Navigation/Status）+ `selected`；仅当前单选项勾选+高亮+`Role.RadioButton`；导航带箭头；状态不可点击。
+- **F-17**：删除“更多”面板的“播放引擎”禁用行；引擎信息保留在 设置·关于。
+- 顺序按 1B-1(F-38)→1B-2(F-16)→1B-3(F-17) 执行；因同属 `Dialogs.kt`/`PlayerScreen.kt`，合并为一次改动提交。
+
+### 12.2 验证结果
+
+| 验证 | 结果 |
+|---|---|
+| `:core:design:testDebugUnitTest` | 8 tests，0 failure |
+| `PlayerSheetSemanticsInstrumentedTest` | 6/6 通过 |
+| `PlayerSheetImmersiveInstrumentedTest` | 4/4 通过（dumpsys 断言状态栏隐藏/恢复） |
+| 实机五个面板 | 倍速/比例/音轨/字幕/队列仅当前项勾选+高亮；更多无技术行、导航带箭头；打开/关闭/重开状态栏均隐藏 |
+| `:app:assembleDebug` / `lintDebug` / `testDebugUnitTest` | 见 12.3 |
+| 完整 `connectedDebugAndroidTest` | 见 12.3 |
+
+### 12.3 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功 |
+| `lintDebug` | 0 error（14 模块） |
+| `testDebugUnitTest` | 92 tests，0 failure（原 84，+8） |
+| 完整 `connectedDebugAndroidTest` | **42/42 通过，0 failure/error/skipped**（原 32，+10） |
+
+播放器回归（含于完整套件）：播放/暂停/跳转、音轨/字幕切换、返回停服、重开断点续播、MediaSession 生命周期均通过；未修改 libmpv 核心与会话契约。
+横屏/深色/1.3 字号已复拍（见 evidence/README-1B.md）；手势导航与 TalkBack 手测列为后续真机验证。
+
+### 12.4 阶段结论
+
+- F-16/F-38/F-17 三项验收标准分别由语义单测、沉浸式仪器化测试与实机截图覆盖并通过。
+- 未提前实施 F-19/F-20；顶栏图标与队列渲染保持原样。
+- 手势导航/厂商差异、横屏/深色/1.3 字号复拍与 TalkBack 手测列为后续验证。
+- **阶段 1B 通过验收；不自动进入阶段 1C。**

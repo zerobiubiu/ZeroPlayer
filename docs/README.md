@@ -43,6 +43,7 @@
 | [0009](changes/0009-instrumentation-test-compile-fix.md) | 修复 B-01 仪器化测试编译：设置二级页测试、字幕接口替身、服务启动器构造 |
 | [0010](changes/0010-media-session-test-contract.md) | 更新 MediaSessionLifecycle 测试契约：关闭停服、重开新会话、断点与 playCount |
 | [0011](changes/0011-settings-immediate-save.md) | 设置保存模型统一为即时生效：删除逐行“保存”按钮、非法值不落库、写入串行保序 |
+| [0012](changes/0012-player-panels.md) | 播放器面板语义与沉浸式：单选/动作/导航/状态区分、面板窗口隐藏系统栏、移除技术行 |
 
 ### troubleshooting/（长期可复现的问题）
 
