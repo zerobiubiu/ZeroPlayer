@@ -97,7 +97,7 @@ class HomeViewModelTest {
 
         assertEquals(listOf(91L, 23L), played)
         assertEquals(listOf("新片.mp4"), repository.ensuredPaths)
-        assertEquals(HomeMessage.UnsupportedFile, messages.single())
+        assertEquals(HomeMessage.UnsupportedFile("说明.txt"), messages.single())
 
         repository.failOperations = true
         model.resolveVideo(file("已删除.mp4", video = true)) { played += it }
@@ -184,7 +184,7 @@ class HomeViewModelTest {
     @Test
     fun `消息文案资源映射完整且唯一`() {
         val samples = listOf(
-            HomeMessage.UnsupportedFile, HomeMessage.OpenVideoFailed,
+            HomeMessage.UnsupportedFile("x.txt"), HomeMessage.OpenVideoFailed,
             HomeMessage.CreateFolderFailed, HomeMessage.FolderCreated,
             HomeMessage.RenameFailed, HomeMessage.Renamed,
             HomeMessage.MoveFailed, HomeMessage.Moved,

@@ -156,6 +156,12 @@
   - 面板模式项全部用 `Repeat`，四种模式（顺序/单曲/列表/随机）图标相同。
 - 建议：约定 Filled 仅用于媒体传输（播放/暂停/快进），其余用 Outlined；为视频/字幕/文本提供三种图标；模式项使用各自图标（Repeat/RepeatOne/Shuffle）。
 
+### 7.1 实施后规则（阶段 3，2026-11-13）
+
+- **图标风格规则（F-35）**：导航/操作类图标统一 `Outlined`（返回、菜单、比例、旋转、字幕、更多、文件夹、导入等）；**媒体传输控制**（播放/暂停/快进/快退）用 `Filled`，符合媒体控制语境。详情页播放按钮 `Filled.PlayArrow` 属媒体控制，与顶栏 Outlined 操作图标并存是规则内的有意区分，不再视为混用。
+- **圆角单一刻度（F-35）**：`Radius`（thumbnail=12 / card=16 / sheet=28 / pill=999）为唯一语义来源；`PrivatePlayerShapes` 的 Shapes 由 Radius 派生（extraSmall/small=thumbnail，medium=card，large/extraLarge=sheet），消除原 6/10/22/30 与 12/16/28 两套数值冲突。
+- 播放模式图标已按语义区分（PlaylistPlay/RepeatOne/Repeat/Shuffle，阶段 1C）。
+
 ---
 
 ## 8. 响应式与适配

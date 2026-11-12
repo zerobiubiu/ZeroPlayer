@@ -49,7 +49,7 @@
 
     <!-- 字幕面板 -->
     <string name="player_subtitle_off">关闭字幕</string>
-    <string name="player_subtitle_none_hint">未检测到字幕轨。可在详情页导入外挂字幕（srt / ass / ssa / vtt）。</string>
+    <string name="player_subtitle_none_hint">未检测到字幕轨。可在详情页导入外挂字幕（srt、ass、ssa、vtt）。</string>
     <string name="player_subtitle_delay">字幕延迟</string>
     <string name="player_subtitle_delay_value">%1$d ms</string>
     <string name="player_subtitle_delay_minus">-%1$d ms</string>

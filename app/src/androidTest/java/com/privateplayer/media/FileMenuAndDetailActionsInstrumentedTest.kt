@@ -23,6 +23,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.semantics.SemanticsActions
 import com.privateplayer.core.design.components.FileAction
 import com.privateplayer.core.design.components.FileActionMenuContent
 import com.privateplayer.core.design.components.fileActionMenuGroups
@@ -130,8 +131,10 @@ class FileMenuAndDetailActionsInstrumentedTest {
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText(video.name).fetchSemanticsNodes().isNotEmpty()
             }
-            // 三点按钮打开菜单（与长按共用同一构建器）
-            compose.onNodeWithContentDescription("${video.name}的操作菜单").performClick()
+            // F-28：行尾三点已隐藏，菜单经读屏自定义操作打开（与详情页共用同一构建器）
+            val rowNode = compose.onNodeWithText(video.name).fetchSemanticsNode()
+            val menuAction = rowNode.config[SemanticsActions.CustomActions].first { it.label == "打开操作菜单" }
+            compose.runOnIdle { menuAction.action.invoke() }
             listOf("视频详情", "导出", "分享", "重命名", "移动", "删除").forEach {
                 compose.onNodeWithTag("文件菜单-$it").assertIsDisplayed()
             }

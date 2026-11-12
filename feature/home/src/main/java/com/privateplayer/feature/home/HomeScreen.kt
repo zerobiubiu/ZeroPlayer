@@ -179,8 +179,8 @@ fun HomeScreen(
                         icon = Icons.Outlined.FolderOpen,
                         title = stringResource(R.string.home_empty_title),
                         message = stringResource(R.string.home_empty_message),
-                        actionLabel = if (state.isWorking) null else stringResource(R.string.home_new_folder),
-                        onAction = if (state.isWorking) null else ({ dialog = HomeDialog.CreateDirectory(state.currentDirectory) }),
+                        actionLabel = if (state.isWorking) null else stringResource(R.string.home_empty_import),
+                        onAction = if (state.isWorking) null else ({ onOpenLocalImport(state.currentDirectory) }),
                         modifier = Modifier.padding(horizontal = Spacing.screenHorizontal),
                     )
                 }
@@ -212,7 +212,7 @@ fun HomeScreen(
                                     }
                                     entry.isDirectory -> viewModel.openDirectory(entry.path)
                                     entry.isVideo -> viewModel.resolveVideo(entry, onPlayMedia)
-                                    else -> viewModel.showUnsupportedFileMessage()
+                                    else -> viewModel.showUnsupportedFileMessage(entry)
                                 }
                             },
                             onDetails = { viewModel.resolveVideo(entry, onOpenMedia) },

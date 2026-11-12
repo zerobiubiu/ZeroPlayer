@@ -55,6 +55,7 @@
 | [0021](changes/0021-component-convergence.md) | 开关单目标、播放器 Token、触控 ≥48dp、死组件清理（阶段 2E：F-33/F-34/F-36/F-31，F-32 核验） |
 | [0022](changes/0022-wifi-permission-copy-feedback.md) | Wi-Fi 权限拒绝去设置恢复、复制地址全版本统一反馈（阶段 2F：F-13/F-40） |
 | [0023](changes/0023-multi-select-batch.md) | 文件树长按多选与批量删除/移动、逐项部分失败结果（阶段 2G：F-41） |
+| [0024](changes/0024-copy-details-icon-radius.md) | 空状态/不支持提示/标点/行菜单噪声/图标圆角规则（阶段 3：F-02/F-03/F-05/F-11/F-28/F-35） |
 
 ### troubleshooting/（长期可复现的问题）
 

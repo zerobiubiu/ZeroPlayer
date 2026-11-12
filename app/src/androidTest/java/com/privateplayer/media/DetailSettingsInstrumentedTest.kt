@@ -170,7 +170,7 @@ class DetailSettingsInstrumentedTest {
                 viewModel.uiState.value.subtitles.size == 1 &&
                     viewModel.uiState.value.sameDirectorySubtitles.size == 1
             }
-            compose.onNode(hasScrollAction()).performScrollToNode(hasText("外挂字幕 (2)"))
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText("外挂字幕（2）"))
             compose.onNodeWithText("添加").assertIsDisplayed()
             compose.onNodeWithText("同目录字幕 · 在首页管理").assertExists()
             compose.onNodeWithText("已添加的私有副本").assertExists()
@@ -179,7 +179,7 @@ class DetailSettingsInstrumentedTest {
             compose.onNode(hasText("删除") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
             compose.waitUntil(10_000) { !subtitle.exists() && viewModel.uiState.value.subtitles.isEmpty() }
             assertTrue(siblingSubtitle.isFile)
-            compose.onNodeWithText("外挂字幕 (1)").assertExists()
+            compose.onNodeWithText("外挂字幕（1）").assertExists()
             siblingSubtitle.delete()
             fileTree.notifyChanged()
             compose.waitUntil(10_000) { viewModel.uiState.value.sameDirectorySubtitles.isEmpty() }
@@ -203,7 +203,7 @@ class DetailSettingsInstrumentedTest {
                     compose.waitUntil(10_000) { viewModel.uiState.value.subtitles.size == 1 }
                     val imported = storage.listSubtitles(mediaId).single()
                     assertEquals(contents, imported.readText())
-                    compose.onNode(hasScrollAction()).performScrollToNode(hasText("外挂字幕 (1)"))
+                    compose.onNode(hasScrollAction()).performScrollToNode(hasText("外挂字幕（1）"))
                     compose.onNodeWithContentDescription("删除字幕 ${imported.name}").performClick()
                     compose.onNode(hasText("删除") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
                     compose.waitUntil(10_000) { !imported.exists() && viewModel.uiState.value.subtitles.isEmpty() }

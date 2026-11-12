@@ -90,13 +90,13 @@ class HomeViewModel @Inject constructor(
         reload.update { it + 1 }
     }
 
-    fun showUnsupportedFileMessage() {
-        messageChannel.trySend(HomeMessage.UnsupportedFile)
+    fun showUnsupportedFileMessage(entry: FileTreeEntry) {
+        messageChannel.trySend(HomeMessage.UnsupportedFile(entry.name))
     }
 
     fun resolveVideo(entry: FileTreeEntry, onResolved: (Long) -> Unit) {
         if (entry.isDirectory || !entry.isVideo) {
-            showUnsupportedFileMessage()
+            showUnsupportedFileMessage(entry)
             return
         }
         perform(

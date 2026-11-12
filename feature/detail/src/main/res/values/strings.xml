@@ -32,9 +32,9 @@
     <string name="detail_file_status_missing">文件缺失</string>
     <string name="detail_unknown">未知</string>
     <string name="detail_resolution_dimensions">%1$d×%2$d</string>
-    <string name="detail_subtitles_header">外挂字幕 (%1$d)</string>
+    <string name="detail_subtitles_header">外挂字幕（%1$d）</string>
     <string name="detail_subtitles_add">添加</string>
-    <string name="detail_subtitles_empty">还没有外挂字幕。同目录同名字幕会自动匹配，也可添加 srt / ass / ssa / vtt 字幕副本。</string>
+    <string name="detail_subtitles_empty">还没有外挂字幕。同目录同名字幕会自动匹配，也可添加 srt、ass、ssa、vtt 字幕副本。</string>
     <string name="detail_subtitle_source_same_dir">同目录字幕 · 在首页管理</string>
     <string name="detail_subtitle_source_private">已添加的私有副本</string>
     <string name="detail_subtitle_delete">删除</string>

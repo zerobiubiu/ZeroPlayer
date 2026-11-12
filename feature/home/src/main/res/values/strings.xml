@@ -9,7 +9,8 @@
     <string name="home_import_wifi">通过 Wi-Fi 导入</string>
     <string name="home_loading">正在读取文件夹…</string>
     <string name="home_empty_title">此文件夹为空</string>
-    <string name="home_empty_message">使用右上角的加号导入文件，或新建文件夹。</string>
+    <string name="home_empty_message">导入视频，或从右上角新建文件夹。</string>
+    <string name="home_empty_import">导入文件</string>
     <string name="home_folder_row_label">文件夹</string>
     <string name="home_file_row_format">文件 · %1$s</string>
     <string name="home_row_open_folder">打开文件夹</string>
@@ -23,7 +24,7 @@
     <string name="home_dialog_rename_confirm">保存</string>
     <string name="home_error_root">无法读取文件，请稍后重试。</string>
     <string name="home_error_directory">无法读取此文件夹。请返回上级文件夹或重试。</string>
-    <string name="home_unsupported_file">此文件不支持播放，可通过操作菜单导出或分享。</string>
+    <string name="home_unsupported_file">“%1$s”不是可播放的视频。可从操作菜单导出或分享。</string>
     <string name="home_open_video_failed">无法打开视频，请确认文件仍然存在后重试。</string>
     <string name="home_create_folder_failed">新建文件夹失败，请检查名称是否有效或已存在。</string>
     <string name="home_folder_created">文件夹已创建</string>

@@ -32,7 +32,10 @@ object Spacing {
     val contentBottom = 96.dp
 }
 
-/** 圆角尺度。 */
+/**
+ * 圆角单一语义刻度（F-35）：所有圆角从这里取值，Shapes 由其派生，避免两套数值冲突。
+ * thumbnail=小元素（缩略图/进度条），card=卡片/容器，sheet=底部面板/对话框，pill=胶囊。
+ */
 object Radius {
     val thumbnail = 12.dp
     val card = 16.dp
@@ -42,11 +45,11 @@ object Radius {
 
 object PrivatePlayerShapes {
     val shapes = Shapes(
-        extraSmall = RoundedCornerShape(6.dp),
-        small = RoundedCornerShape(10.dp),
-        medium = RoundedCornerShape(16.dp),
-        large = RoundedCornerShape(22.dp),
-        extraLarge = RoundedCornerShape(30.dp),
+        extraSmall = RoundedCornerShape(Radius.thumbnail),
+        small = RoundedCornerShape(Radius.thumbnail),
+        medium = RoundedCornerShape(Radius.card),
+        large = RoundedCornerShape(Radius.sheet),
+        extraLarge = RoundedCornerShape(Radius.sheet),
     )
 }
 

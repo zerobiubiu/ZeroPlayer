@@ -743,3 +743,39 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-41 验收由批量单测、仪器化回归与截图覆盖；播放安全与生命周期契约不变。
 - **阶段 2G 通过验收；自动进入阶段 3（F-02/F-03/F-05/F-11/F-28/F-35）。**
+
+---
+
+## 二十四、阶段 3：空状态/不支持提示/校验文案/标点/行菜单噪声/图标圆角规则（F-02 / F-03 / F-05 / F-11 / F-28 / F-35）
+
+- 时间：2026-11-13
+- 对应任务：T-02、T-03、T-05、T-11、T-28、T-35
+- 变更记录：[changes/0024-copy-details-icon-radius.md](../../changes/0024-copy-details-icon-radius.md)
+
+### 24.1 实施
+
+- **F-02**：空状态主 CTA“导入文件”，文案去“加号”歧义。
+- **F-03**：UnsupportedFile(name) 点名文件 + 下一步。
+- **F-05**：核验 1E 的 nameErrorReason 文案（无“空字符”）。
+- **F-11**：格式列表顿号、外挂字幕全角括号、延迟单位空格。
+- **F-28**：隐藏行尾三点，菜单经读屏 CustomAccessibilityAction 打开；多选态行尾隐藏。
+- **F-35**：图标规则写入设计系统；Radius 单一刻度，Shapes 派生。
+
+### 24.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10014 / versionName=1.0.14 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 136 tests，2 skipped，0 failure |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 24.3 |
+
+### 24.3 仪器化与截图
+
+- 菜单经读屏自定义操作打开（F-28）；外挂字幕全角括号断言（F-11）；不支持提示含文件名（F-03）。
+- 截图索引见 `evidence/README-3.md`。
+
+### 24.4 阶段结论
+
+- F-02/F-03/F-05/F-11/F-28/F-35 验收由单测、仪器化回归与截图覆盖。
+- **阶段 3 通过验收；自动进入阶段 4（全量回归与交付）。**
