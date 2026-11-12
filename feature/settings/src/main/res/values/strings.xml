@@ -91,8 +91,11 @@
     <string name="settings_about_engine">播放引擎</string>
     <string name="settings_about_engine_status">引擎状态</string>
     <string name="settings_about_notes">说明</string>
-    <string name="settings_about_license_note">本软件部分基于 FreeType 团队的工作。第三方许可随安装包保存在 assets/third-party-licenses；对外分发前须遵守各组件条款。</string>
+    <string name="settings_about_license_note">本软件部分基于 FreeType 团队的工作。第三方许可可在下方查看；对外分发前须遵守各组件条款。</string>
     <string name="settings_about_product_note">ZeroPlayer · 本地优先。视频保存在应用私有存储，不自动扫描系统文件；网页上传仅在手动开启时接收局域网文件。</string>
+    <string name="settings_about_licenses">开源许可</string>
+    <string name="settings_about_licenses_title">第三方许可</string>
+    <string name="settings_about_licenses_load_failed">无法读取许可文本。</string>
 
     <!-- 数值输入与写入反馈 -->
     <string name="settings_numeric_range_hint">允许范围：%1$s</string>

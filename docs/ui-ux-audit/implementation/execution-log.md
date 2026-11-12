@@ -608,3 +608,37 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-25/F-06/F-07/F-15 验收由单测、仪器化回归与截图覆盖。
 - **阶段 2C 通过验收；自动进入阶段 2D（F-08/F-12/F-39）。**
+
+---
+
+## 二十、阶段 2D：关于页技术信息归位、导入通知列表化与错误态恢复（F-08 / F-12 / F-39）
+
+- 时间：2026-11-13
+- 对应任务：T-08、T-12、T-39
+- 变更记录：[changes/0020-about-import-notices-error-state.md](../../changes/0020-about-import-notices-error-state.md)
+
+### 20.1 实施
+
+- **F-08**：关于页只保留版本+引擎名；删引擎状态行；许可说明去 assets 路径，新增“开源许可”按钮（对话框展示随包 NOTICE+LICENSE）。
+- **F-12**：通知逐条渲染；`classifyImportError` 纯函数映射可行动文案，原始错误折叠“详情”；分类关键词登记门禁白名单。
+- **F-39**：ErrorState 增 title+第二动作；首页文案改事实陈述，子目录提供“返回上级”。
+
+### 20.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10010 / versionName=1.0.10 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 132 tests，2 skipped，0 failure（原 126，新增 ImportErrorMapping 6） |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 20.3 |
+
+### 20.3 仪器化与截图
+
+- `ImportErrorMappingTest` 6 例；门禁白名单登记分类关键词。
+- 既有首页/详情/设置用例回归。
+- 截图索引见 `evidence/README-2D.md`。
+
+### 20.4 阶段结论
+
+- F-08/F-12/F-39 验收由单测、门禁、仪器化回归与截图覆盖。
+- **阶段 2D 通过验收；自动进入阶段 2E（F-32/F-33/F-34/F-36/F-31）。**

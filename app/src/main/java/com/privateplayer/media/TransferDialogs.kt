@@ -13,6 +13,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -43,8 +47,12 @@ internal fun ImportTasksDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 val allNotices = notices + state.notices
-                if (allNotices.isNotEmpty()) {
-                    item { Text(allNotices.joinToString("\n"), modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) }
+                items(allNotices.size) { index ->
+                    Text(
+                        allNotices[index],
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                    )
                 }
                 if (state.enqueuing) item { Text(stringResource(R.string.app_import_creating)) }
                 if (tasks.isEmpty() && !state.enqueuing) item { Text(stringResource(R.string.app_import_empty)) }
@@ -77,8 +85,23 @@ private fun ImportTaskRow(
             },
             style = MaterialTheme.typography.bodySmall,
         )
-        task.errorMessage?.takeIf { it.isNotBlank() }?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = if (task.state == ImportTaskState.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        task.errorMessage?.takeIf { it.isNotBlank() }?.let { raw ->
+            if (task.state == ImportTaskState.FAILED) {
+                var showDetail by remember(task.id) { mutableStateOf(false) }
+                Text(
+                    stringResource(classifyImportError(raw).messageRes()),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                TextButton(onClick = { showDetail = !showDetail }) {
+                    Text(stringResource(R.string.app_task_error_detail))
+                }
+                if (showDetail) {
+                    Text(raw, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            } else {
+                Text(raw, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         if (task.state.isActive) {
             val progress = task.progress

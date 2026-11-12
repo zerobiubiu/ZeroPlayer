@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -354,7 +355,7 @@ fun FilterChipRow(
     }
 }
 
-/** 设置页开关行。 */
+/** 设置页开关行（F-33）：整行单一可切换目标，读屏只停一次。 */
 @Composable
 fun SwitchRow(
     title: String,
@@ -367,7 +368,11 @@ fun SwitchRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = modifier
             .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            )
             .padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -381,7 +386,7 @@ fun SwitchRow(
             }
         }
         Spacer(Modifier.width(Spacing.sm))
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

@@ -56,6 +56,7 @@ import com.privateplayer.core.design.components.NameDialog
 import com.privateplayer.core.design.components.ErrorState
 import com.privateplayer.core.design.components.LoadingState
 import com.privateplayer.core.design.theme.Spacing
+import com.privateplayer.core.design.R as DesignR
 import com.privateplayer.domain.repository.FileTreeEntry
 import kotlinx.coroutines.flow.collect
 
@@ -119,7 +120,14 @@ fun HomeScreen(
                         .semantics { liveRegion = LiveRegionMode.Polite },
                     contentAlignment = Alignment.Center,
                 ) {
-                    ErrorState(message = stringResource(state.errorRes!!), onRetry = viewModel::retry)
+                    ErrorState(
+                        message = stringResource(state.errorRes!!),
+                        onRetry = viewModel::retry,
+                        secondaryActionLabel = if (state.currentDirectory.isNotEmpty()) {
+                            stringResource(DesignR.string.design_back_parent)
+                        } else null,
+                        onSecondaryAction = if (state.currentDirectory.isNotEmpty()) viewModel::navigateUp else null,
+                    )
                 }
 
                 state.entries.isEmpty() -> Box(

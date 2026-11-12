@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.PlayCircle
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.TouchApp
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -35,13 +36,17 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -483,28 +488,63 @@ private fun StorageSettings(state: SettingsUiState, viewModel: SettingsViewModel
 
 @Composable
 private fun AboutSettings(state: SettingsUiState) {
+    val context = LocalContext.current
+    var showLicenses by remember { mutableStateOf(false) }
+    var licenseText by remember { mutableStateOf<String?>(null) }
+    val loadFailedText = stringResource(R.string.settings_about_licenses_load_failed)
+
     SettingSection(title = stringResource(R.string.settings_about_version_info)) {
         Column {
             InfoRow(stringResource(R.string.settings_about_version), state.versionName)
             InfoRow(stringResource(R.string.settings_about_engine), state.engineLabel)
-            InfoRow(stringResource(R.string.settings_about_engine_status), state.engineDetail)
         }
     }
     SettingSection(title = stringResource(R.string.settings_about_notes)) {
         Column {
-            Text(
-                text = stringResource(R.string.settings_about_license_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
-            )
             Text(
                 text = stringResource(R.string.settings_about_product_note),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
             )
+            Text(
+                text = stringResource(R.string.settings_about_license_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
+            )
+            TextButton(
+                onClick = {
+                    licenseText = runCatching {
+                        context.assets.open("third-party-licenses/NOTICE.txt").bufferedReader().use { it.readText() } +
+                            "\n\n" +
+                            context.assets.open("third-party-licenses/LICENSE.libmpv-android").bufferedReader().use { it.readText() }
+                    }.getOrElse { loadFailedText }
+                    showLicenses = true
+                },
+                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal),
+            ) { Text(stringResource(R.string.settings_about_licenses)) }
         }
+    }
+
+    if (showLicenses) {
+        AlertDialog(
+            onDismissRequest = { showLicenses = false },
+            title = { Text(stringResource(R.string.settings_about_licenses_title)) },
+            text = {
+                Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                    Text(
+                        text = licenseText.orEmpty(),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showLicenses = false }) {
+                    Text(stringResource(DesignR.string.design_cancel))
+                }
+            },
+        )
     }
 }
 

@@ -100,12 +100,15 @@ fun LoadingState(modifier: Modifier = Modifier, label: String = stringResource(R
     }
 }
 
-/** 错误态：必须给出可重试路径。 */
+/** 错误态：标题 + 事实描述 + 重试 + 可选第二动作（F-39）。文案只陈述可确认事实。 */
 @Composable
 fun ErrorState(
     message: String,
     modifier: Modifier = Modifier,
+    title: String = stringResource(R.string.design_error_title),
     onRetry: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -122,14 +125,27 @@ fun ErrorState(
         )
         Spacer(Modifier.height(Spacing.md))
         Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        Spacer(Modifier.height(Spacing.sm))
+        Text(
             text = message,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
         )
-        if (onRetry != null) {
+        if (onRetry != null || (secondaryActionLabel != null && onSecondaryAction != null)) {
             Spacer(Modifier.height(Spacing.sm))
-            TextButton(onClick = onRetry) { Text(stringResource(R.string.design_retry)) }
+            Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                if (secondaryActionLabel != null && onSecondaryAction != null) {
+                    TextButton(onClick = onSecondaryAction) { Text(secondaryActionLabel) }
+                }
+                if (onRetry != null) {
+                    TextButton(onClick = onRetry) { Text(stringResource(R.string.design_retry)) }
+                }
+            }
         }
     }
 }

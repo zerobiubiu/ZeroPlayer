@@ -70,6 +70,10 @@ class CopyResourceGateTest {
         "app/src/main/java/com/privateplayer/media/playback/PlayerMediaSessionService.kt" to setOf(
             "ZeroPlayer 单引擎播放状态：", // dumpsys 诊断输出
         ),
+        "app/src/main/java/com/privateplayer/media/ImportErrorMapping.kt" to setOf(
+            // 错误分类的匹配关键词（内部逻辑，非用户可见文案）；用户可见文案经 messageRes 资源化。
+            "空间", "来源", "重新选择", "重新分享", "取消", "读写", "磁盘",
+        ),
     )
 
     /** 术语黑名单（F-10）：资源文件 -> 禁用子串列表。 */
