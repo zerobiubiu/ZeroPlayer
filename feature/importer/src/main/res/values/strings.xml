@@ -9,14 +9,15 @@
     <string name="wifi_initial_directory">初始目录：/%1$s</string>
     <string name="wifi_space_port">可用空间 %1$s · 端口 8765</string>
     <string name="wifi_copy_address">复制地址</string>
-    <string name="wifi_address_copied">地址已复制</string>
+    <string name="wifi_address_copied">已复制</string>
     <string name="wifi_clip_label">Wi-Fi 导入地址</string>
     <string name="wifi_start">启动服务</string>
     <string name="wifi_stop">停止服务</string>
     <string name="wifi_usage_note">在同一网络的浏览器中打开地址，可上传、下载和管理文件。传输完成后请停止服务。关闭此面板不会停止服务。</string>
     <string name="wifi_risk_title">同一网络内的设备可读写你的文件</string>
     <string name="wifi_risk_detail">服务没有登录或访问令牌。仅在可信网络使用。</string>
-    <string name="wifi_permission_denied">未获得局域网权限，请在系统设置中允许后重试。</string>
+    <string name="wifi_permission_denied">未获得局域网权限。请在系统设置中允许“附近的设备/本地网络”后重试。</string>
+    <string name="wifi_go_settings">去设置</string>
     <string name="wifi_import_settings">导入设置</string>
     <string name="wifi_uploads_title">本次上传</string>
     <string name="wifi_uploads_waiting">等待上传文件</string>

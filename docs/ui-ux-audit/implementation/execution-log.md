@@ -677,3 +677,35 @@ playCount 语义已核对：`PlaybackSession.persistProgress` 每次装载在 `h
 
 - F-33/F-34/F-36/F-31 验收由编译、仪器化回归与截图覆盖；F-32 核验单实现。
 - **阶段 2E 通过验收；自动进入阶段 2F（F-13/F-40）。**
+
+---
+
+## 二十二、阶段 2F：Wi-Fi 权限恢复路径与统一复制反馈（F-13 / F-40）
+
+- 时间：2026-11-13
+- 对应任务：T-13、T-40
+- 变更记录：[changes/0022-wifi-permission-copy-feedback.md](../../changes/0022-wifi-permission-copy-feedback.md)
+
+### 22.1 实施
+
+- **F-13**：权限拒绝文案补权限名称；新增“去设置”按钮跳转应用详情页（runCatching 兜底），返回可重试。
+- **F-40**：删 Toast 与 API 分支；复制后按钮文案“已复制”2 秒恢复（LaunchedEffect+delay），全版本统一。
+
+### 22.2 门禁与回归
+
+| 验证 | 结果 |
+|---|---|
+| `:app:assembleDebug` | 成功；versionCode=10012 / versionName=1.0.12 |
+| `lintDebug`（14 模块） | 0 error |
+| `testDebugUnitTest`（全模块） | 132 tests，2 skipped，0 failure |
+| 完整 `connectedDebugAndroidTest`（headless） | 见 22.3 |
+
+### 22.3 仪器化与截图
+
+- 既有 Wi-Fi 用例回归（风险块/术语）。
+- 截图索引见 `evidence/README-2F.md`。
+
+### 22.4 阶段结论
+
+- F-13/F-40 验收由仪器化回归与手测/截图覆盖；F-09 风险块保留。
+- **阶段 2F 通过验收；自动进入阶段 2G（F-41 多选批量）。**

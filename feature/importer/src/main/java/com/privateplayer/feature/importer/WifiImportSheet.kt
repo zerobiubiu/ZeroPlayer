@@ -6,7 +6,9 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
-import android.widget.Toast
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -36,6 +38,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.design.R as DesignR
 import com.privateplayer.core.design.theme.Spacing
@@ -75,12 +79,19 @@ fun WifiImportSheet(
     val permissionDeniedText = stringResource(R.string.wifi_permission_denied)
     val clipLabel = stringResource(R.string.wifi_clip_label)
     var permissionError by remember { mutableStateOf<String?>(null) }
+    var copied by remember { mutableStateOf(false) }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             permissionError = null
             viewModel.startWebUpload(directory)
         } else {
             permissionError = permissionDeniedText
+        }
+    }
+    LaunchedEffect(copied) {
+        if (copied) {
+            delay(2000)
+            copied = false
         }
     }
 
@@ -130,13 +141,11 @@ fun WifiImportSheet(
                         }
                         OutlinedButton(onClick = {
                             val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(
-                                ClipData.newPlainText(clipLabel, address),
-                            )
-                            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                                Toast.makeText(context, R.string.wifi_address_copied, Toast.LENGTH_SHORT).show()
-                            }
-                        }) { Text(stringResource(R.string.wifi_copy_address)) }
+                            clipboard.setPrimaryClip(ClipData.newPlainText(clipLabel, address))
+                            copied = true
+                        }) {
+                            Text(stringResource(if (copied) R.string.wifi_address_copied else R.string.wifi_copy_address))
+                        }
                     }
                     val message = permissionError ?: state.message
                     if (!message.isNullOrBlank()) {
@@ -150,6 +159,15 @@ fun WifiImportSheet(
                             },
                             modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
                         )
+                    }
+                    // F-13：权限拒绝后提供“去设置”跳转应用详情页，返回后可重试。
+                    if (permissionError != null) {
+                        TextButton(onClick = {
+                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.fromParts("package", context.packageName, null)
+                            }
+                            runCatching { context.startActivity(intent) }
+                        }) { Text(stringResource(R.string.wifi_go_settings)) }
                     }
 
                     // F-09：无鉴权风险独立成块，紧邻启动按钮；图标 + 文字，不只靠颜色。
