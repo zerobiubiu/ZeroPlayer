@@ -9,7 +9,6 @@ captures/
 *.apk
 *.aab
 *.keystore
-!debug.keystore
 .DS_Store
 .kotlin/
 

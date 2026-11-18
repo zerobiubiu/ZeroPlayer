@@ -78,41 +78,39 @@ jobs:
           } >> "$GITHUB_OUTPUT"
           echo "版本 $name，versionCode $code"
 
-      - name: 导入发行签名材料
+      - name: 使用固定发行密钥构建
         env:
           KEYSTORE_BASE64: ${{ secrets.ZEROPLAYER_KEYSTORE_BASE64 }}
-          STORE_PASSWORD: ${{ secrets.ZEROPLAYER_STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ZEROPLAYER_KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.ZEROPLAYER_KEY_PASSWORD }}
+          ZEROPLAYER_STORE_PASSWORD: ${{ secrets.ZEROPLAYER_STORE_PASSWORD }}
+          ZEROPLAYER_KEY_ALIAS: ${{ secrets.ZEROPLAYER_KEY_ALIAS }}
+          ZEROPLAYER_KEY_PASSWORD: ${{ secrets.ZEROPLAYER_KEY_PASSWORD }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
           set -euo pipefail
-          if [ -z "$KEYSTORE_BASE64" ]; then
-            echo "::warning::没有配置发行签名密钥，本次使用调试签名，安装后无法用后续正式密钥覆盖升级。"
-            exit 0
-          fi
-          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
-          {
-            echo "ZEROPLAYER_STORE_FILE=$RUNNER_TEMP/release.jks"
-            echo "ZEROPLAYER_STORE_PASSWORD=$STORE_PASSWORD"
-            echo "ZEROPLAYER_KEY_ALIAS=$KEY_ALIAS"
-            echo "ZEROPLAYER_KEY_PASSWORD=$KEY_PASSWORD"
-          } >> "$GITHUB_ENV"
-
-      - name: 构建发行包
-        run: |
+          for field in KEYSTORE_BASE64 ZEROPLAYER_STORE_PASSWORD ZEROPLAYER_KEY_ALIAS ZEROPLAYER_KEY_PASSWORD; do
+            if [[ -z "${!field:-}" ]]; then
+              echo "::error::发行签名配置不完整，拒绝构建和发布。"
+              exit 1
+            fi
+          done
+          umask 077
+          export ZEROPLAYER_STORE_FILE="$RUNNER_TEMP/release.jks"
+          trap 'rm -f -- "$ZEROPLAYER_STORE_FILE"' EXIT
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$ZEROPLAYER_STORE_FILE"
+          unset KEYSTORE_BASE64
           ./gradlew :app:assembleRelease \
-            -PversionName="${{ steps.version.outputs.name }}" \
-            -PversionCode="${{ steps.version.outputs.code }}" \
-            --stacktrace
+            -PversionName="$VERSION_NAME" -PversionCode="$VERSION_CODE" --stacktrace
 
       - name: 校验并整理产物
+        env:
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
           set -euo pipefail
           apk="app/build/outputs/apk/release/app-release.apk"
-          tools="$ANDROID_HOME/build-tools/36.0.0"
-          "$tools/apksigner" verify --print-certs "$apk"
-          "$tools/aapt2" dump badging "$apk" | grep -E '^(package|native-code)'
-          out="ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk"
+          bash tools/verify-release-apk.sh "$apk" "$ANDROID_HOME/build-tools/36.0.0" "$VERSION_NAME" "$VERSION_CODE"
+          out="ZeroPlayer-$VERSION_NAME-arm64-v8a.apk"
           cp "$apk" "$out"
           sha256sum "$out" > "$out.sha256"
           cat "$out.sha256"
