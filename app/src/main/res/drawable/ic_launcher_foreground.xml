@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 由 tools/render-launcher-icon.cjs 从原稿路径导出。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <!-- 原稿光学锚点 (607, 624) 落在 (54, 54)，869 个原稿单位高映射为 58dp。 -->
+    <group android:scaleX="0.0667433831990794" android:scaleY="0.0667433831990794"
+        android:translateX="13.486766398158807" android:translateY="12.352128883774455">
+        <clip-path android:fillType="evenOdd" android:pathData="M 600.02 192.38
+            C 550.7 194.09 502.2 205.56 458.71 229.09
+            C 407.77 256.65 363.7 300.74 337.96 351.74
+            C 316.41 394.43 307.72 441.96 305.47 491.88
+            C 303.41 537.49 306.74 585.1 306.8 632.15
+            C 306.84 655.67 306.06 679.06 305.5 702.41
+            C 304.94 725.76 304.61 749.08 306.5 771.57
+            C 310.82 822.8 326.72 869.74 352.76 912.49
+            C 382.66 961.58 425.94 1005.16 477.55 1031.21
+            C 520.51 1052.9 569.26 1062.44 617.58 1060.95
+            C 667.66 1059.41 717.3 1046.03 759.63 1019.69
+            C 784.83 1004.01 807.45 983.73 827.55 961.27
+            C 846.77 939.8 863.71 916.33 876.46 891.32
+            C 898.31 848.44 907.88 801.02 910.36 751.05
+            C 912.62 705.65 909.02 658.14 909.13 610.88
+            C 909.25 563.62 913.07 516.61 909.63 471.55
+            C 905.75 420.77 892.64 372.48 867.24 330.24
+            C 838.04 281.69 792.61 241.15 740.24 217.78
+            C 696.47 198.26 647.86 190.73 600.02 192.38 Z
+            M 539.17 402.51
+            C 550.83 401.01 562.44 406.69 573.17 412.89
+            C 584.92 419.68 595.61 427.1 606.68 434.36
+            C 629.04 449.01 652.96 463 675.45 477.71
+            C 697.94 492.42 719.01 507.86 742.66 521.97
+            C 766.27 536.04 792.46 548.79 805.68 571.67
+            C 817.14 591.51 818.85 618.97 810.64 640.7
+            C 800.98 666.27 777.56 683.89 754.28 700.1
+            C 708.74 731.79 663.71 758.08 619.28 789.02
+            C 596.99 804.54 574.86 821.24 550.58 832.73
+            C 545.1 835.33 539.5 837.66 533.57 837.76
+            C 527.38 837.87 520.82 835.55 515.95 831.84
+            C 506.22 824.4 503.25 811.37 501.19 798.15
+            C 494.33 753.99 497.74 707.87 498.66 663.23
+            C 499.59 617.71 497.95 573.71 497.56 527.24
+            C 497.37 504.42 497.48 481 499.12 459.23
+            C 500.04 447.02 501.44 435.32 507.67 424.96
+            C 514.42 413.75 526.82 404.1 539.17 402.51 Z" />
+        <path android:pathData="M0 0H1254V1254H0Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="425" android:startY="385"
+                    android:endX="450" android:endY="870">
+                    <item android:offset="0" android:color="#9096AC" />
+                    <item android:offset="0.5" android:color="#D1D5E2" />
+                    <item android:offset="1" android:color="#A3A9BF" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M 0 0 H 1254 V 699 H 911
+            C 911 644 855 600 790 554
+            L 550 409
+            C 523 393 497 382 469 383
+            C 388 379 326 442 306 547
+            H 0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="430" android:startY="280"
+                    android:endX="865" android:endY="600">
+                    <item android:offset="0" android:color="#FFFFFF" />
+                    <item android:offset="0.56" android:color="#F6F7FC" />
+                    <item android:offset="1" android:color="#D8DCE9" />
+                </gradient>
+            </aapt:attr>
+        </path>
+        <path android:pathData="M 0 768 H 306
+            C 313 841 354 882 412 881
+            C 458 881 502 862 541 839
+            L 777 687
+            C 804 667 816 634 816 610
+            C 816 589 808 568 790 554
+            C 855 600 911 644 911 699
+            H 1254 V 1254 H 0 Z">
+            <aapt:attr name="android:fillColor">
+                <gradient android:type="linear" android:startX="853" android:startY="585"
+                    android:endX="519" android:endY="1045">
+                    <item android:offset="0" android:color="#9098B2" />
+                    <item android:offset="0.29" android:color="#E5E8F1" />
+                    <item android:offset="0.5" android:color="#F4F5FA" />
+                    <item android:offset="1" android:color="#B9BFD2" />
+                </gradient>
+            </aapt:attr>
+        </path>
+    </group>
+</vector>
