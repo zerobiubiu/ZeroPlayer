@@ -13,7 +13,7 @@
 
 | 事件 | 工作流 | 结果 |
 |---|---|---|
-| 推送 `main`、发起 PR、手动触发 | [ci.yml](../../.github/workflows/ci.yml) | 单元测试、Lint、调试包构建，归档报告 |
+| 推送 `main`、发起 PR、手动触发 | [ci.yml](../../.github/workflows/ci.yml) | 单元测试、Lint、调试包构建；无论成功与否，收集各模块可用的 JVM 测试 HTML/JUnit XML 和 app Lint HTML，保留 14 天 |
 | 推送 `vX.Y.Z` 标签 | [release.yml](../../.github/workflows/release.yml) | 构建并签名发行包，创建 GitHub Release |
 | 手动触发 `Release` 并填写版本号 | release.yml | 补发指定版本；同名标签不存在时自动创建 |
 

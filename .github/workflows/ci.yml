@@ -66,6 +66,7 @@ jobs:
           name: reports
           path: |
             app/build/reports/lint-results-debug.html
-            */build/reports/tests/testDebugUnitTest/**
+            **/build/reports/tests/testDebugUnitTest/**
+            **/build/test-results/testDebugUnitTest/TEST-*.xml
           if-no-files-found: ignore
           retention-days: 14
