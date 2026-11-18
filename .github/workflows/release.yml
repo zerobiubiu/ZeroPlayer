@@ -1,44 +1,44 @@
 name: Release
 
-# 推送 vX.Y.Z 标签即在仓库 Release 中发布 ARM64 安装包；
-# 也可手动指定版本号补发（会补建同名标签）。
+# 标签只创建草稿。人工选择同一标签再次运行此工作流，核验原生材料与所有附件后才公开。
 on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
-    inputs:
-      version:
-        description: "版本号（不含 v 前缀），例如 1.0.0"
-        required: true
-        type: string
 
 permissions:
   contents: write
 
 jobs:
   release:
-    name: 打包并发布
+    if: github.event_name == 'push'
+    name: 签名并准备草稿
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - &checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
-      - uses: actions/setup-java@v5
+      - &java
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: 安装 Android SDK 组件
+      - &sdk
+        name: 安装 Android SDK 组件
         run: |
           set -euo pipefail
           sdkmanager="$(ls -d "${ANDROID_HOME:-/usr/local/lib/android/sdk}"/cmdline-tools/*/bin/sdkmanager | tail -1)"
           yes | "$sdkmanager" --licenses > /dev/null 2>&1 || true
           "$sdkmanager" --install "platform-tools" "build-tools;36.0.0" > /dev/null
+          if [[ "$GITHUB_EVENT_NAME" != push ]]; then exit 0; fi
           installed=0
           for pkg in "platforms;android-37.0" "platforms;android-37"; do
             if "$sdkmanager" --install "$pkg" > /dev/null 2>&1; then
@@ -52,21 +52,17 @@ jobs:
             exit 1
           fi
 
-      - name: 解析版本号
+      - &version
+        name: 解析版本号
         id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
-            name="$INPUT_VERSION"
-          else
-            name="${GITHUB_REF_NAME#v}"
-          fi
-          if ! printf '%s' "$name" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::版本号必须是 X.Y.Z，实际为：$name"
+          if [[ "$GITHUB_REF_TYPE" != tag || ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::请选择已有的 vX.Y.Z 标签；分支不能准备或公开正式版本。"
             exit 1
           fi
+          name=${GITHUB_REF_NAME#v}
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "refs/tags/$GITHUB_REF_NAME^{commit}")"
           major=${name%%.*}
           rest=${name#*.}
           minor=${rest%%.*}
@@ -115,13 +111,58 @@ jobs:
           sha256sum "$out" > "$out.sha256"
           cat "$out.sha256"
 
-      - name: 发布到 GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "v${{ steps.version.outputs.name }}"
-          name: "ZeroPlayer ${{ steps.version.outputs.name }}"
-          generate_release_notes: true
-          fail_on_unmatched_files: true
-          files: |
-            ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk
-            ZeroPlayer-${{ steps.version.outputs.name }}-arm64-v8a.apk.sha256
+      - name: 创建草稿并上传已验证的 APK 和摘要
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          set -euo pipefail
+          tags=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --jq '.[].tag_name')
+          if grep -Fxq "$GITHUB_REF_NAME" <<< "$tags"; then
+            echo "::error::同标签已经有草稿或正式发行，拒绝覆盖。"
+            exit 1
+          fi
+          apk="ZeroPlayer-$VERSION_NAME-arm64-v8a.apk"
+          gh release create "$GITHUB_REF_NAME" "$apk" "$apk.sha256" --repo "$GITHUB_REPOSITORY" \
+            --draft --verify-tag --title "ZeroPlayer $VERSION_NAME" --generate-notes
+
+  publish:
+    if: github.event_name == 'workflow_dispatch'
+    name: 核验完整草稿并公开
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - *checkout
+      - *java
+      - *version
+      - *sdk
+
+      - name: 重新下载并核验四项草稿附件后公开
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          repo="$GITHUB_REPOSITORY"
+          id=$(gh release view "$tag" --repo "$repo" --json databaseId --jq .databaseId)
+          api="repos/$repo/releases/$id"
+          stage=$(mktemp -d "$RUNNER_TEMP/release-check.XXXXXXXX")
+          mkdir "$stage/assets"
+          gh api "$api" > "$stage/before.json"
+          jq -e --arg tag "$tag" '.tag_name == $tag and .draft == true and .prerelease == false' "$stage/before.json" > /dev/null
+          apk="ZeroPlayer-$VERSION_NAME-arm64-v8a.apk"
+          kit="ZeroPlayer-$VERSION_NAME-native-relink-arm64-v8a.tar.xz"
+          gh release download "$tag" --repo "$repo" --dir "$stage/assets" \
+            --pattern "$apk" --pattern "$apk.sha256" --pattern "$kit" --pattern "$kit.sha256"
+          python3 tools/verify-release-materials.py "$tag" "$stage/assets" "$stage/before.json"
+          bash tools/verify-release-apk.sh "$stage/assets/$apk" "$ANDROID_HOME/build-tools/36.0.0" "$VERSION_NAME" "$VERSION_CODE"
+          # 在验证与公开之间若版本、正文或附件变化，本次结果不再适用。忽略下载计数。
+          snapshot='[.id,.tag_name,.draft,.prerelease,.name,.body,(.assets|sort_by(.id)|map({id,name,state,size,digest}))]'
+          gh api "$api" > "$stage/after.json"
+          before=$(jq -cS "$snapshot" "$stage/before.json")
+          after=$(jq -cS "$snapshot" "$stage/after.json")
+          test "$before" = "$after"
+          test "$(gh api "repos/$repo/commits/$tag" --jq .sha)" = "$(git rev-parse HEAD)"
+          gh api --method PATCH "$api" -F draft=false --silent

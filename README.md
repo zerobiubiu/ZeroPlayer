@@ -53,6 +53,7 @@ ZeroPlayer 是一款单机 Android 播放器：不扫描系统媒体库、不申
 - 需要 Android 8.0（API 26）以上、ARM64 设备；不支持 32 位 ARM 或无 ARM64 转译的 x86 模拟器。
 - 正式 APK 使用项目固定的[发行签名](docs/architecture/release-pipeline.md#产物与校验)，可覆盖升级；本地调试包不是正式发行包。
 - 播放器内已静态链接 libmpv、FFmpeg 等库，安装后无需额外下载解码器。
+- 修改或重新链接原生库的开发者可在同一版本下载 `ZeroPlayer-<版本>-native-relink-arm64-v8a.tar.xz` 及其 `.sha256`；日常安装无需这两项。GitHub 自动生成的源码 ZIP 不含完整的原生材料。
 
 ## 构建
 
@@ -84,8 +85,8 @@ keyPassword=******
 ## 发布流程
 
 1. 核对 [`app/build.gradle.kts`](app/build.gradle.kts) 的版本与[更新记录](docs/CHANGELOG.md)，确认签名材料未被 Git 跟踪；
-2. 推送 `main` 并等 CI 通过，再对同一提交打对应的 `vX.Y.Z` 标签，只推送该标签；
-3. [Release 工作流](.github/workflows/release.yml)按标签推导版本，签名后核对固定证书、应用 ID、版本、唯一 ARM64 架构及非调试属性；签名配置不全或校验失败时不发布。
+2. 推送 `main` 并等 CI 通过，再对同一提交单独推送 `vX.Y.Z` 附注标签。[Release 工作流](.github/workflows/release.yml)验签并核对包身份，只把 APK 与摘要放入草稿；
+3. 将该库对应的已验证原生材料及摘要放入同一草稿，在**该标签**上手动运行 Release。只有四项均通过复核才正式公开。
 
 `versionCode = major × 10000 + minor × 100 + patch`，因此版本号必须严格递增。推送 `main` 或发起拉取请求会触发 `ci.yml` 的测试、Lint 与调试包构建。完整说明见 [发布流水线](docs/architecture/release-pipeline.md)。
 
@@ -141,4 +142,4 @@ databases/media.db    Room
 
 本项目以 [GNU General Public License v3.0 only](LICENSE) 发布。
 
-安装包内含静态链接的 libmpv、FFmpeg、libplacebo、libass 等第三方组件（LGPL 等多种许可证），分发时需按各许可证提供源码与重新链接材料：见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 与 `tools/mpv-static/NOTICE.txt`。
+安装包静态链接 libmpv、FFmpeg、libplacebo、libass 等第三方组件。发行页的原生材料包为开发者提供对应源码、原版构建配置、JNI 对象、静态库、许可与替换重链接说明，详见[第三方声明](THIRD_PARTY_NOTICES.md)和[原生分发说明](tools/mpv-static/NOTICE.txt)。

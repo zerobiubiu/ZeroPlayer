@@ -26,7 +26,7 @@ JNI 桥接代码来自 [jarnedemeulemeester/libmpv-android](https://github.com/j
 - 各组件对应的完整源码、所应用的修改与构建配置；
 - 允许接收者替换 LGPL 库并重新链接所需的材料（JNI 目标文件、静态库与重新链接步骤）。
 
-对应材料由 `tools/mpv-static/build.sh` 生成：脚本在工作区保留完整源码、配置、交叉工具链、JNI 对象文件与最终链接产物，并把各下载来源与 SHA-256 记录在 `tools/mpv-static/sources.tsv`。构建细节与逐项许可提示见 `tools/mpv-static/NOTICE.txt`。
+从 1.4.0 起，同一版本的 [GitHub Release](https://github.com/zerobiubiu/ZeroPlayer/releases) 应同时提供 `ZeroPlayer-<版本>-native-relink-arm64-v8a.tar.xz` 和同名 `.sha256`。材料选自生成该原生库的原始构建工作区，含固定版本源码包、当时实际使用的配方和 JNI 源码、JNI 对象、静态库、许可及重链接说明。自行替换库和重链接不需要项目的 APK 签名密钥；使用 Linux 版 Android NDK r29（不随包附送）。当前源码获取清单在 [sources.tsv](tools/mpv-static/sources.tsv)，材料与对应库的核验见[分发说明](tools/mpv-static/NOTICE.txt)。GitHub 自动生成的项目源码归档不代替这些材料。
 
 本软件部分基于 FreeType 团队的工作（This software is based in part on the work of the FreeType Team）。
 

@@ -22,6 +22,14 @@ libmpv/FFmpeg 作为独立动态库分发，故分发单一静态链接的 libpl
 工作区 run-* 含完整经校验源码、具体配置、交叉工具链配置、JNI 对象、各依赖
 静态归档和最终链接产物；downloads/ 含源码压缩包；sources.tsv 记录下载地址与
 SHA-256。请同时归档用于构建的 NDK 版本、JNI 源文件和 tools/mpv-static/build.sh。
+
+从 ZeroPlayer 1.4.0 起，在该版本 GitHub Release 的 Assets 中分别提供正式 APK
+和 ZeroPlayer-<版本>-native-relink-arm64-v8a.tar.xz（各附同名 .sha256）。
+开发者请使用材料包中的自述和原始构建配方；GitHub 自动源码 ZIP、当前仓库的
+build.sh 或单份上游下载都不能代替相应源码、JNI 对象和实际链接的静态库。
+原生库及经独立目录验证的材料包大小/SHA-256 绑定在同标签的 relink-materials.json。
+使用 Linux 版 NDK r29（29.0.14206865）可更换静态库并重链接；不需项目密钥。
+
 本软件部分基于 FreeType 团队的工作（This software is based in part on the work
 of the FreeType Team）。二进制分发时亦须在产品分发文档中保留该致谢。
 FreeType 要求适当署名；libunibreak 包含 Unicode 数据，须查阅该包的许可和数据
