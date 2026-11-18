@@ -56,6 +56,21 @@
 | [0022](changes/0022-wifi-permission-copy-feedback.md) | Wi-Fi 权限拒绝去设置恢复、复制地址全版本统一反馈（阶段 2F：F-13/F-40） |
 | [0023](changes/0023-multi-select-batch.md) | 文件树长按多选与批量删除/移动、逐项部分失败结果（阶段 2G：F-41） |
 | [0024](changes/0024-copy-details-icon-radius.md) | 空状态/不支持提示/标点/行菜单噪声/图标圆角规则（阶段 3：F-02/F-03/F-05/F-11/F-28/F-35） |
+| [0025](changes/0025-private-file-and-import-integrity.md) | 按所选对象删除、本机放弃导入、已提交删除清理字幕与字幕原子发布 |
+| [0026](changes/0026-player-subtitles-and-navigation.md) | 播放手势/反馈/倍速、字幕外观与每片延时、断点策略、设置与根导航；1.1.0 公共验收及历史证据边界 |
+| [0027](changes/0027-observed-duration-and-resume.md) | 未探测到时长的视频在保存进度时补齐实测时长；真实 libmpv 中途续播、片尾重开及 Room 边界验证 |
+| [0028](changes/0028-speed-picker-and-launcher-icon.md) | 左下倍速按钮、轻点选速与按住滑选；新版自适应启动图标及设备验证 |
+| [0029](changes/0029-home-material-file-icons.md) | 首页文件按文件名、扩展名与当前主题显示 Material Icon Theme 图标；选中态保持原有操作 |
+| [0030](changes/0030-wifi-upload-and-interfaces.md) | Wi-Fi 传输的手机面板、浏览器文件管理和多局域网 IPv4 地址监听 |
+| [0031](changes/0031-web-upload-retry-scope.md) | 网页上传的单项重试与批量边界；真实 HTTP、私有文件树和 Room 对照 |
+| [0032](changes/0032-web-upload-save-progress.md) | 网页上传区分发送字节与手机保存状态；打包资源的 WebView 进度回归 |
+| [0033](changes/0033-settings-navigation-hilt-bindings.md) | 修复底部「设置」入口闪退；Hilt 绑定的构建约束、覆盖安装与真实导航回归 |
+| [0034](changes/0034-speed-fan-live-preview.md) | 左下四分之一扇面、按住真实试播与跨档震动；精确原速恢复及实机证据 |
+| [0035](changes/0035-ui-copy-density-audit.md) | 全项目文案密度规范与逐页留删台账；独立风险、错误和无障碍信息保留 |
+| [0036](changes/0036-launcher-vector.md) | 原 SVG 启动图标改用原生矢量；普通/圆形与单色层在同一系统遮罩下对照 |
+| [0037](changes/0037-import-failure-recovery.md) | 导入失败的原因、恢复操作及设备验证 |
+| [0038](changes/0038-compact-speed-fan.md) | 单手倍速扇面、主动滑回 1×、指尖键帽与实时倍速反馈；轨迹和设备证据 |
+| [0039](changes/0039-official-release-verification.md) | 正式发行门禁：缺少签名配置即停止，核对唯一证书、实际包名与版本、ARM64 和可调试属性 |
 
 ### troubleshooting/（长期可复现的问题）
 
@@ -66,6 +81,7 @@
 | [0003](troubleshooting/0003-workmanager-foreground-dataSync.md) | WorkManager 前台导入在 Android 14+ 需要 dataSync 服务类型 |
 | [0004](troubleshooting/0004-module-level-lint-permissions.md) | 模块级 Lint 只看本模块清单，权限与服务类型需在库模块声明 |
 | [0005](troubleshooting/0005-gesture-layer-blocks-buttons.md) | 全屏手势层盖住播放器按钮时，点击事件会被手势识别消费 |
+| [0006](troubleshooting/0006-ksp-parallel-hilt-bindings.md) | 设置页 Hilt 漏注册：KSP 并行构建的上游线索与 2.3.14 验证建议 |
 
 ### ui-ux-audit/（UI/UX 审计与整改）
 

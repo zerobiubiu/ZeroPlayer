@@ -27,4 +27,4 @@ F-37（设置保存模型统一）的 before/after 截图与验证记录。
 
 ## 自动化验证
 
-详见 [变更记录 0011](../../changes/0011-settings-immediate-save.md) 的「执行验证记录」。
+详见 [变更记录 0011](../../../changes/0011-settings-immediate-save.md) 的「执行验证记录」。
