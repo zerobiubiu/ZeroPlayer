@@ -1,11 +1,12 @@
 package com.privateplayer.data.importer
 
 import com.privateplayer.core.database.dao.ImportTaskDao
+import com.privateplayer.core.database.dao.MediaDao
 import com.privateplayer.core.database.entity.ImportTaskEntity
-import com.privateplayer.core.storage.PrivateFileIdentity
 import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.core.storage.moveNoOverwrite
 import com.privateplayer.core.storage.resolveFileInMediaRoot
+import com.privateplayer.domain.model.PrivateFileIdentity
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
@@ -29,16 +30,32 @@ internal fun ImportTaskEntity.isWebUpload(): Boolean = sourceUri == webUploadSou
 internal fun PrivateStorage.webUploadFile(taskId: String): File =
     resolveImportStagedFile(absoluteFile("$WEB_UPLOAD_DIRECTORY/${UUID.fromString(taskId)}.part"))
 
-/** 新任务使用持久目录；旧暂存即使已被移动，恢复时也必须使用日志中的原始位置。 */
-internal fun PrivateStorage.importTempFile(task: ImportTaskEntity): File {
-    ImportCommitJournal(this).read(task)?.let { return resolveImportStagedFile(File(it.sourcePath)) }
-    if (task.isWebUpload()) return webUploadFile(task.id)
-    if (task.tempRelativePath.startsWith("${PrivateStorage.TEMPORARY_DIR}/")) {
-        val legacy = resolveImportStagedFile(absoluteCacheFile(task.tempRelativePath))
-        if (Files.exists(legacy.toPath(), LinkOption.NOFOLLOW_LINKS)) return legacy
+private fun PrivateStorage.localTempFile(taskId: String): File =
+    resolveImportStagedFile(absoluteFile("$LOCAL_IMPORT_DIRECTORY/${UUID.fromString(taskId)}.part"))
+
+private fun PrivateStorage.legacyTempFile(task: ImportTaskEntity): File? =
+    if (!task.isWebUpload() && task.tempRelativePath.startsWith("${PrivateStorage.TEMPORARY_DIR}/"))
+        resolveFileInMediaRoot(temporaryRoot, task.tempRelativePath.substringAfter('/'))
+    else null
+
+private fun File.present(): Boolean = !Files.notExists(toPath(), LinkOption.NOFOLLOW_LINKS)
+
+private fun requireStagingFileOrAbsent(file: File) {
+    if (file.present() && !Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+        throw IOException("暂存位置不是普通文件，已保留文件和记录")
     }
-    val id = UUID.fromString(task.id).toString()
-    return resolveImportStagedFile(absoluteFile("$LOCAL_IMPORT_DIRECTORY/$id.part"))
+}
+
+internal fun hasImportStaging(temp: File): Boolean = temp.present() || importReadyFile(temp).present()
+
+/** 新任务使用持久目录；旧暂存即使已被移动，恢复时也必须使用日志中的原始位置。 */
+internal fun PrivateStorage.importTempFile(
+    task: ImportTaskEntity,
+    prepared: ImportCommitJournal.Prepared? = ImportCommitJournal(this).read(task),
+): File {
+    if (prepared != null) return resolveImportStagedFile(File(prepared.sourcePath))
+    if (task.isWebUpload()) return webUploadFile(task.id)
+    return legacyTempFile(task)?.takeIf(::hasImportStaging) ?: localTempFile(task.id)
 }
 
 /** 只有复制、校验及数据同步完成后才写入完成标记，供失去外部授权后的任务恢复。 */
@@ -94,7 +111,7 @@ class ImportCommitJournal(private val storage: PrivateStorage) {
 
     fun read(task: ImportTaskEntity): Prepared? {
         val marker = marker(task.id)
-        if (!Files.exists(marker.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
+        if (!marker.present()) return null
         if (!Files.isRegularFile(marker.toPath(), LinkOption.NOFOLLOW_LINKS) || marker.length() > 16_384L) {
             throw IOException("导入提交日志异常，已保留文件")
         }
@@ -158,7 +175,7 @@ class ImportCommitJournal(private val storage: PrivateStorage) {
     fun commit(prepared: Prepared): File {
         val current = content(prepared)
         val target = storage.resolveMediaFile(prepared.targetPath)
-        if (storage.hasFileIdentity(target, prepared.identity) && target.length() == prepared.size) return target
+        if (current == target) return target
         return storage.commitTempFileLocked(current, storage.mediaRelativePath(prepared.targetPath))
     }
 
@@ -196,20 +213,48 @@ class ImportCommitJournal(private val storage: PrivateStorage) {
         Files.deleteIfExists(marker(task.id).toPath())
     }
 
+    /** 只用于已确认的本机放弃。先把已发布但未入库的内容退回，再移除日志，最后清暂存。 */
+    internal fun discardLocalStaging(task: ImportTaskEntity, prepared: Prepared?): Boolean {
+        val local = storage.localTempFile(task.id)
+        val legacy = storage.legacyTempFile(task)
+        require(legacy != null || task.tempRelativePath == "$LOCAL_IMPORT_DIRECTORY/${task.id}.part") {
+            "暂存路径与任务不匹配，已保留文件和记录"
+        }
+        val source = storage.importTempFile(task, prepared)
+        if (legacy != null && hasImportStaging(if (source == local) legacy else local)) {
+            throw IOException("存在两份暂存，无法确认归属，已保留文件和记录")
+        }
+        val ready = importReadyFile(source)
+        requireStagingFileOrAbsent(source)
+        requireStagingFileOrAbsent(ready)
+        var changedTree = false
+        if (prepared != null) {
+            val target = storage.resolveMediaFile(prepared.targetPath)
+            changedTree = target.present()
+            if (changedTree && !owns(target, prepared)) {
+                throw IOException("目标文件已变化，无法确认归属，已保留文件和记录")
+            }
+            rollback(prepared)
+            // 中断后仍是可以重试或再次放弃的普通暂存，不会留下指向已删 inode 的日志。
+            Files.delete(marker(task.id).toPath())
+        } else if (legacy != null && source.present()) {
+            val target = storage.resolveMediaFile(task.targetFileName)
+            if (target.present() && Files.isSameFile(source.toPath(), target.toPath())) {
+                throw IOException("旧版提交尚未完成，请先重试保存")
+            }
+        }
+        Files.deleteIfExists(ready.toPath())
+        Files.deleteIfExists(source.toPath())
+        return changedTree
+    }
+
     fun owns(file: File, prepared: Prepared): Boolean =
-        storage.hasFileIdentity(file, prepared.identity) && file.length() == prepared.size
+        storage.hasFileIdentity(file, prepared.identity, prepared.size)
 
     private fun validateSource(task: ImportTaskEntity, source: File): File {
         val checked = storage.resolveImportStagedFile(source)
-        val expected = if (task.isWebUpload()) {
-            storage.webUploadFile(task.id)
-        } else {
-            storage.resolveImportStagedFile(storage.absoluteFile("$LOCAL_IMPORT_DIRECTORY/${UUID.fromString(task.id)}.part"))
-        }
-        val legacy = if (!task.isWebUpload() && task.tempRelativePath.startsWith("${PrivateStorage.TEMPORARY_DIR}/")) {
-            storage.resolveImportStagedFile(storage.absoluteCacheFile(task.tempRelativePath))
-        } else null
-        require(checked == expected || checked == legacy) { "提交来源与导入任务不匹配" }
+        val expected = if (task.isWebUpload()) storage.webUploadFile(task.id) else storage.localTempFile(task.id)
+        require(checked == expected || checked == storage.legacyTempFile(task)) { "提交来源与导入任务不匹配" }
         return checked
     }
 
@@ -226,10 +271,18 @@ class ImportCommitJournal(private val storage: PrivateStorage) {
     }
 }
 
+/** 持有任务锁和树锁时检查；即使任务状态异常，也不回退已经登记为正式媒体的路径。 */
+internal suspend fun requireUnindexedCommit(task: ImportTaskEntity, media: MediaDao, storage: PrivateStorage) {
+    if (task.mediaId != null || media.findByRelativePath(storage.mediaRelativePath(task.targetFileName)) != null) {
+        throw IOException("目标已在媒体库中，已保留文件和导入记录")
+    }
+}
+
 /** 调用方持有任务执行锁和树锁；取消不丢弃已接收内容，仍可显式重试。 */
 internal suspend fun preserveCanceledImport(
     task: ImportTaskEntity,
     tasks: ImportTaskDao,
+    media: MediaDao,
     storage: PrivateStorage,
 ) {
     if (tasks.findState(task.id) != "CANCELED") return
@@ -237,7 +290,10 @@ internal suspend fun preserveCanceledImport(
     var prepared: ImportCommitJournal.Prepared? = null
     try {
         prepared = commits.read(task)
-        if (prepared != null) commits.rollback(prepared)
+        if (prepared != null) {
+            requireUnindexedCommit(task, media, storage)
+            commits.rollback(prepared)
+        }
     } catch (error: Exception) {
         tasks.failIfCanceled(
             task.id, prepared?.size ?: task.bytesCopied,
@@ -245,7 +301,7 @@ internal suspend fun preserveCanceledImport(
         )
         throw error
     }
-    val source = storage.importTempFile(task)
+    val source = storage.importTempFile(task, prepared)
     if (source.isFile || prepared != null) {
         tasks.failIfCanceled(
             task.id, source.takeIf { it.isFile }?.length() ?: prepared!!.size,

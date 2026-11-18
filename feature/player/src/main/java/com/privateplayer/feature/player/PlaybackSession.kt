@@ -13,6 +13,7 @@ import com.privateplayer.core.playback.session.SessionMedia
 import com.privateplayer.domain.model.AppSettings
 import com.privateplayer.domain.model.GesturePreferences
 import com.privateplayer.domain.model.PlaybackPreferences
+import com.privateplayer.domain.model.PlaybackSpeedLimits
 import com.privateplayer.domain.model.SubtitlePreferences
 import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.VideoAspect
@@ -22,6 +23,7 @@ import com.privateplayer.domain.repository.MediaRepository
 import com.privateplayer.domain.repository.SettingsRepository
 import com.privateplayer.domain.repository.SubtitleStore
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.channels.Channel
@@ -63,6 +65,7 @@ data class PlayerUiState(
     val mediaId: Long = 0L,
     val title: String = "",
     val playback: PlaybackSnapshot = PlaybackSnapshot(),
+    val surfaceHoldSpeed: Float? = null,
     val audioTracks: List<MediaTrack> = emptyList(),
     val subtitleTracks: List<MediaTrack> = emptyList(),
     val selectedAudioTrackId: String? = null,
@@ -76,7 +79,6 @@ data class PlayerUiState(
     val queueIndex: Int = 0,
     val playMode: PlayMode = PlayMode.SEQUENTIAL,
     val autoPlayNext: Boolean = true,
-    val rememberProgress: Boolean = true,
     val controlsVisible: Boolean = true,
     val locked: Boolean = false,
     val error: String? = null,
@@ -98,6 +100,8 @@ internal class PlaybackSession(
     private val subtitleStore: SubtitleStore,
     private val settingsRepository: SettingsRepository,
     private val saveProgress: (PlaybackProgress) -> Unit,
+    private val saveSubtitleDelay: (mediaId: Long, delayMs: Long) -> Unit,
+    private val awaitSubtitleWrites: suspend () -> Unit,
     private val scope: CoroutineScope,
     private val ioDispatcher: CoroutineDispatcher,
     private val context: Context,
@@ -105,6 +109,8 @@ internal class PlaybackSession(
     @Volatile private var currentMedia: Media? = null
     /** 本次装载是否已按媒体记录恢复过字幕选择。 */
     private var subtitleSelectionRestored = false
+    private val firstSubtitleStyle = CompletableDeferred<Unit>()
+    private val subtitleDelayLock = Any()
     private var requestedMediaId: Long? = null
     private var loadJob: Job? = null
     @Volatile private var loadStage = "尚未装载"
@@ -118,12 +124,17 @@ internal class PlaybackSession(
     /** 本次装载是否已经计过播放次数：每次装载只 +1，避免每 5 秒保存进度都累加。 */
     private var playCountRecorded = false
     private var hasPlayed = false
-    private data class SpeedRequest(val ticket: Long, val speed: Float, var issued: Boolean = false)
+    private data class SpeedRequest(
+        val ticket: Long, val speed: Float, val remote: Boolean = false,
+        val restoreOnDiscard: Float? = null, var issued: Boolean = false,
+    )
     private val speedLock = Any()
     private var nextTicket = 0L
     private val commandTickets = mutableMapOf<Int, Long>()
     private var pendingSpeed: SpeedRequest? = null
     private var speedBeforeTemporary: Float? = null
+    private var speedPreview: SpeedPreview? = null
+    private var lastIssuedSpeed = 1f
     private var requestedSpeed = 1.0f
     private val speedRequests = Channel<SpeedRequest>(Channel.CONFLATED)
     private val mutableMedia = MutableStateFlow<SessionMedia?>(null)
@@ -235,17 +246,31 @@ internal class PlaybackSession(
 
     private fun observeSettings() {
         scope.launch {
-            settingsRepository.observeSettings().collect { settings ->
-                state.update {
-                    it.copy(
-                        playbackPrefs = settings.playback,
-                        gesturePrefs = settings.gesture,
-                        subtitlePrefs = settings.subtitle,
-                        autoPlayNext = settings.playback.autoPlayNext,
-                        rememberProgress = settings.playback.rememberProgress,
-                    )
+            var appliedStyle: SubtitlePreferences? = null
+            try {
+                // 上一会话关闭前提交的样式，必须赶在新引擎第一次读取 DataStore 之前落盘。
+                awaitSubtitleWrites()
+                settingsRepository.observeSettings().collect { settings ->
+                    val first = appliedStyle == null
+                    if (settings.subtitle != appliedStyle) {
+                        engine.setSubtitleStyle(settings.subtitle)
+                        appliedStyle = settings.subtitle
+                    }
+                    state.update {
+                        it.copy(
+                            playbackPrefs = settings.playback,
+                            gesturePrefs = settings.gesture,
+                            subtitlePrefs = settings.subtitle,
+                            autoPlayNext = settings.playback.autoPlayNext,
+                        )
+                    }
+                    if (first) firstSubtitleStyle.complete(Unit)
                 }
-                engine.setSubtitleStyle(settings.subtitle)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                firstSubtitleStyle.completeExceptionally(error)
+                reportError(error.message ?: context.getString(R.string.player_unknown_error))
             }
         }
     }
@@ -273,12 +298,13 @@ internal class PlaybackSession(
                         )
                     }
                     synchronized(speedLock) {
-                        if (pendingSpeed?.let {
-                                it.issued && snapshot === engine.snapshot.value &&
-                                    kotlin.math.abs(it.speed - snapshot.speed) < 0.001f
-                            } == true
-                        ) pendingSpeed = null
-                        if (pendingSpeed == null && speedBeforeTemporary == null) requestedSpeed = snapshot.speed
+                        if (snapshot === engine.snapshot.value) {
+                            if (pendingSpeed?.let { it.issued && it.speed == snapshot.speed } == true) pendingSpeed = null
+                            if (pendingSpeed == null && speedBeforeTemporary == null && speedPreview == null) {
+                                requestedSpeed = snapshot.speed
+                                lastIssuedSpeed = snapshot.speed
+                            }
+                        }
                     }
                     if (snapshot.status == PlaybackStatus.PLAYING) handlingEnd = false
                     if (previous.status != PlaybackStatus.PLAYING && snapshot.status == PlaybackStatus.PLAYING) {
@@ -339,8 +365,9 @@ internal class PlaybackSession(
     private suspend fun loadInitial(mediaId: Long, autoStart: Boolean) {
         loadStage = "读取播放设置"
         val settings = settingsRepository.observeSettings().first()
+        firstSubtitleStyle.await()
         loadStage = "读取媒体记录"
-        val media = mediaRepository.findById(mediaId) ?: run {
+        val media = findMediaForPlayback(mediaId) ?: run {
             state.update { it.copy(isLoading = false, error = context.getString(R.string.player_error_media_missing)) }
             return
         }
@@ -356,12 +383,16 @@ internal class PlaybackSession(
                 queueIndex = index,
                 playMode = if (currentMedia == null) PlayMode.SEQUENTIAL else it.playMode,
                 autoPlayNext = settings.playback.autoPlayNext,
-                rememberProgress = settings.playback.rememberProgress,
             )
         }
         setSpeed(settings.playback.defaultSpeed)
         engine.setAspect(settings.playback.defaultAspect)
         playMedia(media, settings, autoStart = autoStart)
+    }
+
+    private suspend fun findMediaForPlayback(mediaId: Long): Media? {
+        awaitSubtitleWrites()
+        return mediaRepository.findById(mediaId)
     }
 
     private suspend fun buildQueue(media: Media): List<QueueItem> {
@@ -383,16 +414,19 @@ internal class PlaybackSession(
         if (!fileInfo.exists) {
             persistProgress()
             engine.stop()
-            mutableMedia.value = null
-            currentMedia = null
+            switchSpeedMedia(null)
             hasPlayed = false
-            state.update {
-                it.copy(
-                    isLoading = false,
-                    mediaId = media.id,
-                    title = media.displayName,
-                    error = context.getString(R.string.player_error_file_missing, media.relativePath),
-                )
+            synchronized(subtitleDelayLock) {
+                currentMedia = null
+                state.update {
+                    it.copy(
+                        isLoading = false,
+                        mediaId = media.id,
+                        subtitleDelayMs = media.subtitleDelayMs.coerceIn(-MAX_SUBTITLE_DELAY_MS, MAX_SUBTITLE_DELAY_MS),
+                        title = media.displayName,
+                        error = context.getString(R.string.player_error_file_missing, media.relativePath),
+                    )
+                }
             }
             return
         }
@@ -400,11 +434,9 @@ internal class PlaybackSession(
         loadStage = "发现外挂及同目录字幕"
         val subtitles = (subtitleStore.list(media.id).map { it.absolutePath } +
             fileTreeRepository.matchingSubtitles(treePath)).distinct()
-        val startPosition = retryPosition ?: if (settings.playback.autoResume && settings.playback.rememberProgress) {
-            media.playbackPositionMs.takeIf { it > 5_000L && it < media.durationMs * 0.98 } ?: 0L
-        } else {
-            0L
-        }
+        val startPosition = retryPosition ?: settings.playback.progressMode.positionOnOpen(
+            media.playbackPositionMs, media.durationMs,
+        )
         val source = PlaybackSource(
             mediaId = media.id,
             title = media.displayName,
@@ -432,14 +464,12 @@ internal class PlaybackSession(
             }.getOrNull()
         }
         if (engine.snapshot.value.status != PlaybackStatus.ENDED) persistProgress()
-        mutableMedia.value = SessionMedia(
+        switchSpeedMedia(SessionMedia(
             mediaId = media.id,
             title = media.displayName.substringAfterLast('/').substringAfterLast('\\'),
             durationMs = media.durationMs,
             artworkData = artwork,
-        )
-        currentMedia = media
-        subtitleSelectionRestored = false
+        ))
         watchedDeltaMs = 0L
         lastTickPosition = startPosition
         if (!retry) {
@@ -447,21 +477,30 @@ internal class PlaybackSession(
             hasPlayed = false
         }
         handlingEnd = false
-        state.update {
-            it.copy(
-                isLoading = true,
-                playback = PlaybackSnapshot(),
-                audioTracks = emptyList(),
-                subtitleTracks = emptyList(),
-                selectedAudioTrackId = null,
-                selectedSubtitleTrackId = null,
-                mediaInfo = null,
-                mediaId = media.id,
-                title = media.displayName,
-                subtitleFileNames = subtitles.map { path -> path.substringAfterLast('/') },
-                error = null,
-                ended = false,
-            )
+        synchronized(subtitleDelayLock) {
+            // 同片重试期间仍可收到微调；不能用切源开始时读到的旧记录覆盖它。
+            val delay = if (currentMedia?.id == media.id) state.value.subtitleDelayMs
+                else media.subtitleDelayMs.coerceIn(-MAX_SUBTITLE_DELAY_MS, MAX_SUBTITLE_DELAY_MS)
+            currentMedia = media
+            subtitleSelectionRestored = false
+            engine.setSubtitleDelay(delay)
+            state.update {
+                it.copy(
+                    isLoading = true,
+                    playback = PlaybackSnapshot(),
+                    audioTracks = emptyList(),
+                    subtitleTracks = emptyList(),
+                    selectedAudioTrackId = null,
+                    selectedSubtitleTrackId = null,
+                    subtitleDelayMs = delay,
+                    mediaInfo = null,
+                    mediaId = media.id,
+                    title = media.displayName,
+                    subtitleFileNames = subtitles.map { path -> path.substringAfterLast('/') },
+                    error = null,
+                    ended = false,
+                )
+            }
         }
         try {
             withContext(ioDispatcher) {
@@ -488,7 +527,7 @@ internal class PlaybackSession(
                 ) return@withLock
                 handlingEnd = true
                 try {
-                    persistProgress(endOfPlayback = true)
+                    persistProgress()
                     val settings = settingsRepository.observeSettings().first()
                     val continued = when {
                         state.value.playMode == PlayMode.REPEAT_ONE -> {
@@ -535,7 +574,7 @@ internal class PlaybackSession(
                 return false
             }
         }
-        val media = mediaRepository.findById(mediaId) ?: run {
+        val media = findMediaForPlayback(mediaId) ?: run {
             reportError(context.getString(R.string.player_error_file_gone))
             return false
         }
@@ -569,45 +608,95 @@ internal class PlaybackSession(
         engine.seekTo(target)
     }
 
-    fun registerSpeedRequest(speed: Float): Long = synchronized(speedLock) {
-        val normalized = speed.coerceIn(0.25f, 4.0f)
-        val request = SpeedRequest(++nextTicket, normalized)
+    private fun newSpeedRequestLocked(speed: Float, remote: Boolean = false, restoreOnDiscard: Float? = null): SpeedRequest {
+        val request = SpeedRequest(++nextTicket, speed, remote, restoreOnDiscard)
         pendingSpeed = request
-        requestedSpeed = normalized
-        request.ticket
+        requestedSpeed = speed
+        return request
+    }
+
+    /** 切片或新命令接管时同时撤销旧手势的展示权；撤回基线仍由已有票据顺序保护。 */
+    private fun withdrawSpeedGestureLocked(): Float? {
+        speedPreview?.let {
+            speedPreview = null
+            it.revoke()
+            return it.originalSpeed
+        }
+        val base = speedBeforeTemporary ?: return null
+        speedBeforeTemporary = null
+        state.update { it.copy(surfaceHoldSpeed = null) }
+        return base
+    }
+
+    /** Media3 的新命令取得所有权；若在切片时被丢弃，还需撤回它接手的试播。 */
+    fun registerSpeedRequest(speed: Float): Long = synchronized(speedLock) {
+        val fallback = withdrawSpeedGestureLocked() ?: pendingSpeed?.takeUnless { it.issued }?.restoreOnDiscard
+        newSpeedRequestLocked(speed.coerceIn(PlaybackSpeedLimits.MIN, PlaybackSpeedLimits.MAX), true, fallback).ticket
     }
 
     /** 已持有切源门；旧票据不能覆盖更新的手势或系统命令。 */
     fun applySpeedRequest(ticket: Long, speed: Float) {
-        val current = synchronized(speedLock) {
-            pendingSpeed?.takeIf { it.ticket == ticket }?.let {
-                it.issued = true
-                true
-            } ?: false
+        synchronized(speedLock) {
+            val request = pendingSpeed?.takeIf { it.ticket == ticket && !it.issued && it.speed == speed } ?: return
+            request.issued = true
+            if (lastIssuedSpeed == speed) {
+                if (engine.snapshot.value.speed == speed) pendingSpeed = null
+                return
+            }
+            lastIssuedSpeed = speed
         }
-        if (current) engine.setSpeedFromUi(speed.coerceIn(0.25f, 4.0f))
+        engine.setSpeedFromUi(speed)
     }
 
     fun discardSpeedRequest(ticket: Long) {
         synchronized(speedLock) {
-            if (pendingSpeed?.let { it.ticket == ticket && !it.issued } == true) {
-                pendingSpeed = null
-                if (speedBeforeTemporary == null) requestedSpeed = engine.snapshot.value.speed
+            val request = pendingSpeed?.takeIf { it.ticket == ticket && !it.issued } ?: return
+            pendingSpeed = null
+            val restore = request.restoreOnDiscard
+            if (restore != null) {
+                speedRequests.trySend(newSpeedRequestLocked(restore))
+            } else if (speedBeforeTemporary == null) {
+                requestedSpeed = engine.snapshot.value.speed
             }
         }
     }
 
-    private fun enqueueSpeed(request: SpeedRequest) {
-        synchronized(speedLock) {
-            if (pendingSpeed?.ticket == request.ticket) speedRequests.trySend(request)
+    /** 只在切源门内调用。先撤销旧手势再装载下一片，不让已送入 libmpv 的试播跨片。 */
+    private fun switchSpeedMedia(next: SessionMedia?) {
+        val request = synchronized(speedLock) {
+            mutableMedia.value = next
+            val rollback = withdrawSpeedGestureLocked() ?: pendingSpeed?.takeUnless { it.issued }?.restoreOnDiscard
+            if (rollback != null) newSpeedRequestLocked(rollback) else pendingSpeed?.takeUnless { it.remote || it.issued }
         }
+        if (request != null) applySpeedRequest(request.ticket, request.speed)
     }
 
     fun setSpeed(speed: Float) {
         if (!speed.isFinite()) return
-        val normalized = speed.coerceIn(0.25f, 4.0f)
-        val ticket = registerSpeedRequest(normalized)
-        enqueueSpeed(SpeedRequest(ticket, normalized))
+        synchronized(speedLock) {
+            withdrawSpeedGestureLocked()
+            speedRequests.trySend(newSpeedRequestLocked(speed.coerceIn(PlaybackSpeedLimits.MIN, PlaybackSpeedLimits.MAX)))
+        }
+    }
+
+    fun beginSpeedPreview(mediaId: Long): SpeedPreview? = synchronized(speedLock) {
+        if (mutableMedia.value?.mediaId != mediaId || engine.snapshot.value.mediaId != mediaId ||
+            speedBeforeTemporary != null || speedPreview != null
+        ) return null
+        SpeedPreview(requestedSpeed) { owner, speed, finished ->
+            synchronized(speedLock) {
+                if (speedPreview === owner) {
+                    if (speed != null) speedRequests.trySend(newSpeedRequestLocked(speed))
+                    if (finished) speedPreview = null
+                }
+            }
+        }.also { speedPreview = it }
+    }
+
+    fun cancelSpeedPreview(): Unit = synchronized(speedLock) {
+        val preview = speedPreview ?: return
+        withdrawSpeedGestureLocked()
+        if (requestedSpeed != preview.originalSpeed) speedRequests.trySend(newSpeedRequestLocked(preview.originalSpeed))
     }
 
     fun setAspect(aspect: VideoAspect) = engine.setAspect(aspect)
@@ -642,14 +731,22 @@ internal class PlaybackSession(
         }
     }
 
-    fun adjustSubtitleDelay(deltaMs: Long) {
-        state.update { it.copy(subtitleDelayMs = (it.subtitleDelayMs + deltaMs).coerceIn(-60_000L, 60_000L)) }
-        engine.setSubtitleDelay(state.value.subtitleDelayMs)
+    fun adjustSubtitleDelay(mediaId: Long, deltaMs: Long) = changeSubtitleDelay(mediaId) { previous ->
+        previous + deltaMs.coerceIn(-MAX_SUBTITLE_DELAY_MS - previous, MAX_SUBTITLE_DELAY_MS - previous)
     }
 
-    fun resetSubtitleDelay() {
-        state.update { it.copy(subtitleDelayMs = 0L) }
-        engine.setSubtitleDelay(0L)
+    fun resetSubtitleDelay(mediaId: Long) = changeSubtitleDelay(mediaId) { 0L }
+
+    private inline fun changeSubtitleDelay(mediaId: Long, change: (Long) -> Long) {
+        synchronized(subtitleDelayLock) {
+            val displayed = state.value
+            if (mediaId != displayed.mediaId || mediaId != currentMedia?.id) return
+            val delay = change(displayed.subtitleDelayMs)
+            if (delay == displayed.subtitleDelayMs) return
+            saveSubtitleDelay(mediaId, delay)
+            engine.setSubtitleDelay(delay)
+            state.update { it.copy(subtitleDelayMs = delay) }
+        }
     }
 
     fun toggleControls() {
@@ -735,22 +832,21 @@ internal class PlaybackSession(
     /** 长按临时倍速：按下提高倍速，松开恢复。 */
     fun beginTemporarySpeed(multiplier: Float) {
         if (!multiplier.isFinite()) return
-        val request = synchronized(speedLock) {
-            if (speedBeforeTemporary != null) return
+        synchronized(speedLock) {
+            if (speedBeforeTemporary != null || speedPreview != null) return
             speedBeforeTemporary = requestedSpeed
-            val speed = multiplier.coerceIn(0.25f, 4.0f)
-            SpeedRequest(registerSpeedRequest(speed), speed)
+            val speed = multiplier.coerceIn(PlaybackSpeedLimits.MIN_TEMPORARY, PlaybackSpeedLimits.MAX)
+            state.update { it.copy(surfaceHoldSpeed = speed) }
+            speedRequests.trySend(newSpeedRequestLocked(speed))
         }
-        enqueueSpeed(request)
     }
 
     fun endTemporarySpeed() {
-        val request = synchronized(speedLock) {
+        synchronized(speedLock) {
             val previous = speedBeforeTemporary ?: return
-            speedBeforeTemporary = null
-            SpeedRequest(registerSpeedRequest(previous), previous)
+            withdrawSpeedGestureLocked()
+            speedRequests.trySend(newSpeedRequestLocked(previous))
         }
-        enqueueSpeed(request)
     }
 
     fun consumeError() {
@@ -769,13 +865,18 @@ internal class PlaybackSession(
         }
     }
 
-    private fun persistProgress(endOfPlayback: Boolean = false) {
+    private fun persistProgress() {
         val media = currentMedia ?: return
         val snapshot = engine.snapshot.value
         if (!hasPlayed || snapshot.mediaId != media.id) return
         val watched = watchedDeltaMs
         watchedDeltaMs = 0L
-        val position = if (endOfPlayback && snapshot.durationMs > 0L) snapshot.durationMs else snapshot.positionMs
+        // 片尾后关闭会话也会保存；最后一帧的时间戳可能早于容器时长。
+        val position = if (snapshot.status == PlaybackStatus.ENDED && snapshot.durationMs > 0L) {
+            snapshot.durationMs
+        } else {
+            snapshot.positionMs
+        }
         val playIncrement = if (!playCountRecorded) 1 else 0
         if (playIncrement > 0) playCountRecorded = true
         saveProgress(PlaybackProgress(media.id, position, snapshot.durationMs, watched, playIncrement))
@@ -789,6 +890,7 @@ internal class PlaybackSession(
     suspend fun closeAndRelease() = transitionMutex.withLock {
         persistProgress()
         mutableMedia.value = null
+        synchronized(speedLock) { withdrawSpeedGestureLocked() }
         speedRequests.close()
         engine.pause()
         engine.release()
@@ -796,6 +898,7 @@ internal class PlaybackSession(
 
     companion object {
         private const val PROGRESS_SAVE_INTERVAL_MS = 5_000L
+        private const val MAX_SUBTITLE_DELAY_MS = 60_000L
         private const val MAX_ARTWORK_BYTES = 256 * 1024
     }
 }

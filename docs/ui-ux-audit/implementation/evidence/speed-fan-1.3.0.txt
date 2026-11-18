@@ -1,0 +1,67 @@
+11-18 14:56:24.292  9610  9624 I ZeroPlayerSpeedProof: playing picker held 4530 ms; position=500 → 5167, speed=[1.0, 0.5]
+11-18 14:56:25.341  9610  9624 I ZeroPlayerSpeedProof: portrait viewport=Rect.fromLTRB(0.0, 0.0, 1080.0, 2400.0) font=1.3 origin=Offset(161.0, 2285.0) anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0) cells={0.75=Rect.fromLTRB(107.0, 1954.0, 231.0, 2027.0), 0.5=Rect.fromLTRB(113.0, 1695.0, 320.0, 1812.0), 0.25=Rect.fromLTRB(160.0, 1456.0, 367.0, 1573.0), 2.0=Rect.fromLTRB(238.0, 2009.0, 362.0, 2082.0), 2.5=Rect.fromLTRB(331.0, 1785.0, 538.0, 1902.0), 3.0=Rect.fromLTRB(466.0, 1583.0, 673.0, 1700.0), 3.5=Rect.fromLTRB(337.0, 2109.0, 465.0, 2182.0), 4.0=Rect.fromLTRB(499.0, 1953.0, 706.0, 2070.0), 5.0=Rect.fromLTRB(701.0, 1818.0, 908.0, 1935.0), 6.0=Rect.fromLTRB(357.0, 2241.0, 552.0, 2314.0), 7.0=Rect.fromLTRB(590.0, 2171.0, 797.0, 2288.0), 8.0=Rect.fromLTRB(828.0, 2124.0, 1035.0, 2241.0), 1.0=Rect.fromLTRB(98.0, 2222.0, 224.0, 2348.0)}
+11-18 14:56:25.774  9610  9624 I ZeroPlayerSpeedProof: portrait tap=8× engine=8.0 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0)
+11-18 14:56:26.108  9610  9624 I ZeroPlayerSpeedProof: portrait tap=0.25× engine=0.25 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0)
+11-18 14:56:26.442  9610  9624 I ZeroPlayerSpeedProof: portrait tap=1× engine=1.0 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0)
+11-18 14:56:27.691  9610  9624 I ZeroPlayerSpeedProof: portrait DOWN=Offset(160.5, 2285.0) base=1.375@5250
+11-18 14:56:27.792  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(169.0, 1990.5) held=0.75@5250 PAUSED
+11-18 14:56:27.908  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(216.5, 1753.5) held=0.5@5250 PAUSED
+11-18 14:56:28.025  9610  9624 I ZeroPlayerSpeedProof: portrait held neutral=1.375@5250
+11-18 14:56:28.125  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(263.5, 1514.5) held=0.25@5250 PAUSED
+11-18 14:56:28.242  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(300.0, 2045.5) held=2.0@5250 PAUSED
+11-18 14:56:28.359  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(434.5, 1843.5) held=2.5@5250 PAUSED
+11-18 14:56:28.475  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(569.5, 1641.5) held=3.0@5250 PAUSED
+11-18 14:56:28.591  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(401.0, 2145.5) held=3.5@5250 PAUSED
+11-18 14:56:28.708  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(602.5, 2011.5) held=4.0@5250 PAUSED
+11-18 14:56:28.824  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(804.5, 1876.5) held=5.0@5250 PAUSED
+11-18 14:56:28.942  9610  9624 I ZeroPlayerSpeedProof: portrait held neutral=1.375@5250
+11-18 14:56:29.041  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(454.5, 2277.5) held=6.0@5250 PAUSED
+11-18 14:56:29.158  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(693.5, 2229.5) held=7.0@5250 PAUSED
+11-18 14:56:29.277  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(931.5, 2182.5) held=8.0@5250 PAUSED
+11-18 14:56:29.392  9610  9624 I ZeroPlayerSpeedProof: portrait beforeUP=8.0@5250
+11-18 14:56:29.826  9610  9624 I ZeroPlayerSpeedProof: portrait afterUP=8.0@5250 observed=[1.375, 0.75, 0.5, 1.375, 0.25, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 1.375, 6.0, 7.0, 8.0]
+11-18 14:56:30.508  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(804.5, 1876.5) held=5.0@5250 PAUSED
+11-18 14:56:30.674  9610  9624 I ZeroPlayerSpeedProof: portrait origin after=1.375@5250
+11-18 14:56:31.275  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(804.5, 1876.5) held=5.0@5250 PAUSED
+11-18 14:56:31.442  9610  9624 I ZeroPlayerSpeedProof: portrait arc after=1.375@5250
+11-18 14:56:32.042  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(804.5, 1876.5) held=5.0@5250 PAUSED
+11-18 14:56:32.108  9610  9624 I ZeroPlayerSpeedProof: portrait cancel after=1.375@5250
+11-18 14:56:32.743  9610  9624 I ZeroPlayerSpeedProof: portrait MOVE=Offset(804.5, 1876.5) held=5.0@5250 PAUSED
+11-18 14:56:33.042  9610  9624 I ZeroPlayerSpeedProof: portrait back after=1.375@5250
+11-18 14:56:34.545  9610  9624 I ZeroPlayerSpeedProof: landscape viewport=Rect.fromLTRB(0.0, 0.0, 2400.0, 1080.0) font=1.3 origin=Offset(161.0, 965.0) anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0) cells={0.75=Rect.fromLTRB(108.0, 616.0, 237.0, 692.0), 0.5=Rect.fromLTRB(113.0, 344.0, 330.0, 466.0), 0.25=Rect.fromLTRB(163.0, 94.0, 380.0, 216.0), 2.0=Rect.fromLTRB(245.0, 673.0, 374.0, 749.0), 2.5=Rect.fromLTRB(343.0, 438.0, 560.0, 560.0), 3.0=Rect.fromLTRB(484.0, 227.0, 701.0, 349.0), 3.5=Rect.fromLTRB(348.0, 778.0, 482.0, 854.0), 4.0=Rect.fromLTRB(518.0, 614.0, 735.0, 736.0), 5.0=Rect.fromLTRB(729.0, 473.0, 946.0, 595.0), 6.0=Rect.fromLTRB(370.0, 915.0, 575.0, 991.0), 7.0=Rect.fromLTRB(613.0, 843.0, 830.0, 965.0), 8.0=Rect.fromLTRB(862.0, 793.0, 1079.0, 915.0), 1.0=Rect.fromLTRB(98.0, 902.0, 224.0, 1028.0)}
+11-18 14:56:34.759  9610  9624 I ZeroPlayerSpeedProof: landscape tap=8× engine=8.0 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0)
+11-18 14:56:35.092  9610  9624 I ZeroPlayerSpeedProof: landscape tap=0.25× engine=0.25 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0)
+11-18 14:56:35.425  9610  9624 I ZeroPlayerSpeedProof: landscape tap=1× engine=1.0 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0)
+11-18 14:56:36.659  9610  9624 I ZeroPlayerSpeedProof: landscape DOWN=Offset(160.5, 965.0) base=1.375@5250
+11-18 14:56:36.741  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(172.5, 654.0) held=0.75@5250 PAUSED
+11-18 14:56:36.842  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(221.5, 405.0) held=0.5@5250 PAUSED
+11-18 14:56:36.942  9610  9624 I ZeroPlayerSpeedProof: landscape held neutral=1.375@5250
+11-18 14:56:37.026  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(271.5, 155.0) held=0.25@5250 PAUSED
+11-18 14:56:37.125  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(309.5, 711.0) held=2.0@5250 PAUSED
+11-18 14:56:37.226  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(451.5, 499.0) held=2.5@5250 PAUSED
+11-18 14:56:37.325  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(592.5, 288.0) held=3.0@5250 PAUSED
+11-18 14:56:37.425  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(415.0, 816.0) held=3.5@5250 PAUSED
+11-18 14:56:37.525  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(626.5, 675.0) held=4.0@5250 PAUSED
+11-18 14:56:37.625  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(837.5, 534.0) held=5.0@5250 PAUSED
+11-18 14:56:37.724  9610  9624 I ZeroPlayerSpeedProof: landscape held neutral=1.375@5250
+11-18 14:56:37.808  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(472.5, 953.0) held=6.0@5250 PAUSED
+11-18 14:56:37.908  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(721.5, 904.0) held=7.0@5250 PAUSED
+11-18 14:56:38.024  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(970.5, 854.0) held=8.0@5250 PAUSED
+11-18 14:56:38.092  9610  9624 I ZeroPlayerSpeedProof: landscape beforeUP=8.0@5250
+11-18 14:56:38.525  9610  9624 I ZeroPlayerSpeedProof: landscape afterUP=8.0@5250 observed=[1.375, 0.75, 0.5, 1.375, 0.25, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0, 1.375, 6.0, 7.0, 8.0]
+11-18 14:56:39.208  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(837.5, 534.0) held=5.0@5250 PAUSED
+11-18 14:56:39.358  9610  9624 I ZeroPlayerSpeedProof: landscape origin after=1.375@5250
+11-18 14:56:39.960  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(837.5, 534.0) held=5.0@5250 PAUSED
+11-18 14:56:40.125  9610  9624 I ZeroPlayerSpeedProof: landscape arc after=1.375@5250
+11-18 14:56:40.725  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(837.5, 534.0) held=5.0@5250 PAUSED
+11-18 14:56:40.791  9610  9624 I ZeroPlayerSpeedProof: landscape cancel after=1.375@5250
+11-18 14:56:41.391  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(837.5, 534.0) held=5.0@5250 PAUSED
+11-18 14:56:41.692  9610  9624 I ZeroPlayerSpeedProof: landscape back after=1.375@5250
+11-18 14:56:42.051  9610  9624 I ZeroPlayerSpeedProof: landscape MOVE=Offset(221.5, 405.0) held=0.5@5832 PLAYING
+11-18 14:56:42.452  9610  9624 I ZeroPlayerSpeedProof: landscape playing held beforeUP=0.5@5832→6000
+11-18 14:56:42.541  9610  9624 I ZeroPlayerSpeedProof: landscape playing afterUP=0.5@6082
+11-18 14:56:43.577  9610  9624 I ZeroPlayerSpeedProof: video long press 0.75 → 2 → 0.75; playing 6417 → 6832 ms
+11-18 14:56:50.692  9610  9624 I ZeroPlayerSpeedProof: MainActivity paused Media3 1.375→held 5→background 1.375; default=1.0
+11-18 14:56:51.761  9610  9624 I ZeroPlayerSpeedProof: haptics enabled=true requested=[0, 4, 4] for hold/slow/same×3/fast/cancel
+11-18 14:56:52.843  9610  9624 I ZeroPlayerSpeedProof: haptics enabled=false requested=[] for hold/slow/same×3/fast/cancel
+11-18 14:45:05.871  7943  7957 I ZeroPlayerSpeedProof: source 1→2 held=5 new/afterUP=1.375@82

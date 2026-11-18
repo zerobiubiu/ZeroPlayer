@@ -6,10 +6,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -23,6 +32,11 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.privateplayer.core.design.components.ActionSheet
 import com.privateplayer.domain.model.VideoAspect
+import com.privateplayer.core.playback.PlaybackSnapshot
+import com.privateplayer.core.playback.PlaybackStatus
+import com.privateplayer.feature.player.PlayerBottomControls
+import com.privateplayer.feature.player.PlayerGesture
+import com.privateplayer.feature.player.playerGestures
 import com.privateplayer.feature.player.PlayerTopBar
 import com.privateplayer.feature.player.PlayerUiState
 import com.privateplayer.feature.player.aspectSheetActions
@@ -35,11 +49,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * 顶栏“画面比例 / 旋转屏幕”入口归位（F-19）。
- *
- * 断言用户可见结果：比例图标打开比例面板、旋转一次点击切换横竖屏、
- * 读屏名称准确、“更多”面板不再保留第二个旋转入口。
- * “更多”与“比例”面板内容直接取生产构建器，避免测试复制一份平行实现。
+ * 顶栏保留一键旋转；只有“更多 → 画面比例”进入比例面板。
+ * 使用生产操作构建器验证选中语义、导航与动作。
  */
 @RunWith(AndroidJUnit4::class)
 class PlayerEntriesInstrumentedTest {
@@ -52,23 +63,31 @@ class PlayerEntriesInstrumentedTest {
     )
 
     @Test
-    fun aspectIconOpensAspectPanelWithSingleChoiceSemantics() {
+    fun moreIsTheOnlyRouteToAspectChoices() {
         val aspectOpens = AtomicInteger()
         val picked = mutableListOf<VideoAspect>()
         val showAspect = mutableStateOf(false)
+        val showMore = mutableStateOf(false)
         compose.setContent {
             MaterialTheme {
                 PlayerTopBar(
                     title = "示例视频",
                     onBack = {},
-                    onOpenAspect = {
-                        aspectOpens.incrementAndGet()
-                        showAspect.value = true
-                    },
                     onRotate = {},
                     onOpenSubtitle = {},
-                    onOpenMore = {},
+                    onOpenMore = { showMore.value = true },
                 )
+                if (showMore.value) {
+                    ActionSheet(
+                        title = "示例视频", immersive = true,
+                        actions = moreSheetActions(PlayerUiState(), onLock = {}, onOpenAudio = {}, onOpenAspect = {
+                            aspectOpens.incrementAndGet()
+                            showMore.value = false
+                            showAspect.value = true
+                        }),
+                        onDismiss = { showMore.value = false },
+                    )
+                }
                 if (showAspect.value) {
                     ActionSheet(
                         title = "画面比例",
@@ -86,8 +105,9 @@ class PlayerEntriesInstrumentedTest {
             }
         }
 
-        // 图标语义与结果一致：点“画面比例”打开的是比例面板，不是旋转
-        compose.onNodeWithContentDescription("画面比例").performClick()
+        compose.onNodeWithContentDescription("画面比例").assertDoesNotExist()
+        compose.onNodeWithContentDescription("更多").performClick()
+        compose.onNodeWithText("画面比例").performClick()
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("适应屏幕").fetchSemanticsNodes().isNotEmpty()
         }
@@ -121,7 +141,6 @@ class PlayerEntriesInstrumentedTest {
                         PlayerTopBar(
                             title = "示例视频",
                             onBack = {},
-                            onOpenAspect = {},
                             // 与 PlayerScreen 相同的接线：直接调用既有的横竖屏切换逻辑
                             onRotate = { host.toggleOrientationForTest() },
                             onOpenSubtitle = {},
@@ -175,20 +194,57 @@ class PlayerEntriesInstrumentedTest {
                 PlayerTopBar(
                     title = "示例视频",
                     onBack = {},
-                    onOpenAspect = {},
                     onRotate = {},
                     onOpenSubtitle = {},
                     onOpenMore = {},
                 )
             }
         }
-        listOf("返回", "画面比例", "旋转屏幕", "字幕", "更多").forEach { description ->
+        listOf("返回", "旋转屏幕", "字幕", "更多").forEach { description ->
             compose.onAllNodesWithContentDescription(description).assertCountEquals(1)
         }
         // 旧的混合语义名称不再存在
         compose.onAllNodesWithContentDescription("画面比例与旋转").assertCountEquals(0)
-        // 顶栏保持紧凑：五个图标按钮，没有额外入口
-        compose.onAllNodes(hasClickAction() and hasContentDescription("画面比例")).assertCountEquals(1)
+        compose.onAllNodes(hasClickAction() and hasContentDescription("画面比例")).assertCountEquals(0)
+    }
+
+    @Test
+    fun onlyAPendingTapInTheSamePhysicalZoneCanPair() {
+        val events = java.util.concurrent.CopyOnWriteArrayList<PlayerGesture>()
+        compose.setContent {
+            Box(Modifier.fillMaxSize().testTag("tap-surface").playerGestures { events += it })
+        }
+        val region = compose.onNodeWithTag("tap-surface")
+        region.performTouchInput { click(center) }
+        compose.waitUntil(3_000) { events.size == 1 }
+        region.performTouchInput { doubleClick(center, delayMillis = 80) }
+        compose.waitUntil(3_000) { events.size == 2 }
+        assertEquals(listOf(PlayerGesture.SingleTap, PlayerGesture.DoubleTap.PlayPause), events.toList())
+        region.performTouchInput {
+            val t = (width.toFloat() / height - 1f).coerceIn(0f, 1f)
+            val leftBoundary = width / 3f + (width * 0.30f - width / 3f) * t
+            // 相隔不到触摸 slop 但属于不同分区，不能误配为跳转或播放/暂停。
+            click(Offset(leftBoundary - 1f, centerY))
+            advanceEventTime(80)
+            click(Offset(leftBoundary + 1f, centerY))
+        }
+        compose.waitUntil(3_000) { events.size == 4 }
+        assertEquals(listOf(PlayerGesture.SingleTap, PlayerGesture.SingleTap), events.takeLast(2))
+    }
+
+    @Test
+    fun remainingTimeDistinguishesUnknownFromFinishedWithoutAMinusSign() {
+        val snapshot = mutableStateOf(PlaybackSnapshot(durationMs = 100_000L, positionMs = 17_000L))
+        compose.setContent {
+            MaterialTheme {
+                PlayerBottomControls(snapshot.value, 10, {}, {}, {}, {}, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("剩余 01:23").assertExists()
+        compose.runOnIdle { snapshot.value = snapshot.value.copy(status = PlaybackStatus.ENDED, positionMs = 99_996) }
+        compose.onNodeWithText("剩余 00:00").assertExists()
+        compose.runOnIdle { snapshot.value = PlaybackSnapshot() }
+        compose.onNodeWithText("剩余 --:--").assertExists()
     }
 
     @Test

@@ -1,0 +1,17 @@
+11-18 00:43:07.181 I/ZeroPlayerGeometry(13405): landscape=false bottomGapDp=16.0
+11-18 00:43:07.447 I/ZeroPlayerGeometry(13405): 右双击: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 00:43:07.782 I/ZeroPlayerGeometry(13405): 左双击: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 00:43:08.363 I/ZeroPlayerGeometry(13405): 拖动，菜单=true: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 00:43:08.964 I/ZeroPlayerGeometry(13405): 拖动，菜单=false: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 00:43:09.928 I/ZeroPlayerGeometry(13405): 冻结帧 3167 → 3167ms，匹配 55/55，时间码墨迹 99%，Rect(0, 896 - 1080, 1503) → Rect(240, 0 - 2160, 1080)
+11-18 00:43:09.998 I/ZeroPlayerGeometry(13405): landscape=true bottomGapDp=16.0
+11-18 00:43:10.315 I/ZeroPlayerGeometry(13405): 右双击: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 00:43:10.713 I/ZeroPlayerGeometry(13405): 左双击: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 00:43:11.265 I/ZeroPlayerGeometry(13405): 拖动，菜单=true: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 00:43:11.864 I/ZeroPlayerGeometry(13405): 拖动，菜单=false: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 00:43:12.844 I/ZeroPlayerGeometry(13405): 冻结帧 3332 → 3332ms，匹配 55/55，时间码墨迹 100%，Rect(240, 0 - 2160, 1080) → Rect(0, 896 - 1080, 1503)
+11-18 00:36:30.201 I/ZeroPlayerSessionTest(11977): 恢复短断点：关闭前=4979 关闭后库=4979 首个READY=5005 模式=RESUME
+11-18 00:36:34.130 I/ZeroPlayerSessionTest(11977): 开始等待：仅记录模式保存第二段断点
+11-18 00:36:34.235 I/ZeroPlayerSessionTest(11977): 完成等待：仅记录模式保存第二段断点
+11-18 00:36:35.466 I/ZeroPlayerSessionTest(11977): 开始等待：关闭仅记录会话
+11-18 00:36:35.467 I/ZeroPlayerSessionTest(11977): 完成等待：关闭仅记录会话

@@ -6,7 +6,7 @@
     <string name="app_nav_home">首页</string>
     <string name="app_nav_settings">设置</string>
     <string name="app_import_tasks">导入任务</string>
-    <string name="app_transfer_busy_toast">文件正在导入或导出，请等待完成；也可按主页键切换应用</string>
+    <string name="app_transfer_busy_toast">传输未完成，可按主页键转到后台。</string>
 
     <!-- 文件传输反馈 -->
     <string name="app_transfer_dialog_title">文件操作</string>
@@ -45,12 +45,11 @@
     <string name="app_task_cancel">取消</string>
     <string name="app_task_retry">重试</string>
     <string name="app_task_remove">移除记录</string>
+    <string name="app_task_discard">放弃并清理</string>
+    <string name="app_task_discard_title">放弃这次导入？</string>
+    <string name="app_task_discard_message">“%1$s”的任务记录和应用内暂存将被删除，外部源文件不变。</string>
+    <string name="app_task_discard_confirm">清理暂存</string>
     <string name="app_task_error_detail">详情</string>
-    <string name="app_task_error_space">存储空间不足，请清理空间后重试。</string>
-    <string name="app_task_error_source">来源不可读，请重新选择文件后重试。</string>
-    <string name="app_task_error_io">文件读写失败，请重试。</string>
-    <string name="app_task_error_canceled">导入已取消。</string>
-    <string name="app_task_error_generic">导入失败，请重试。</string>
     <string name="app_exporting_title">正在导出</string>
     <string name="app_exporting_progress">已复制 %1$s / %2$s</string>
     <string name="app_export_cancel">取消导出</string>

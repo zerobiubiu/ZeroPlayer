@@ -41,14 +41,16 @@ android {
         applicationId = "com.privateplayer.media"
         minSdk = 26
         targetSdk = 37
-        // 默认值与标签 v1.0.14 的推导值一致（major*10000 + minor*100 + patch），避免本地安装被降级。
-        versionCode = releaseVersionCode ?: 10014
-        versionName = releaseVersionName ?: "1.0.14"
+        // 默认版本也按 major*10000 + minor*100 + patch 编码，标签构建可以覆盖。
+        versionCode = releaseVersionCode ?: 10400
+        versionName = releaseVersionName ?: "1.4.0"
         ndk {
             abiFilters += "arm64-v8a"
         }
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+
+    sourceSets.getByName("androidTest").assets.srcDir(rootProject.file("core/database/schemas"))
 
     buildFeatures {
         compose = true
@@ -139,6 +141,7 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.test.runner)
     androidTestImplementation(libs.androidx.test.core)
+    androidTestImplementation(libs.androidx.datastore.preferences)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)

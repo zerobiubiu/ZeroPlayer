@@ -24,6 +24,13 @@ interface ImportTaskDao {
     @Query("SELECT * FROM import_tasks WHERE id = :id")
     suspend fun findById(id: String): ImportTaskEntity?
 
+    /** 旧缓存暂存名并非总是 UUID；共享的旧路径不能由单个任务清理。 */
+    @Query("""
+        SELECT EXISTS(SELECT 1 FROM import_tasks WHERE id != :id AND
+            (tempRelativePath = :path OR tempRelativePath = :path || '.ready' OR tempRelativePath || '.ready' = :path))
+    """)
+    suspend fun hasOtherStagingOwner(id: String, path: String): Boolean
+
     @Query("SELECT * FROM import_tasks WHERE state IN ('QUEUED', 'RUNNING', 'COMMITTING') ORDER BY createdAt ASC")
     suspend fun findPending(): List<ImportTaskEntity>
 

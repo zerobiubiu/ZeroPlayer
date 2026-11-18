@@ -2,12 +2,10 @@ package com.privateplayer.feature.player
 
 import android.view.SurfaceHolder
 import android.view.SurfaceView
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Row
@@ -32,7 +30,6 @@ import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
-import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.ClosedCaption
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.MoreVert
@@ -54,17 +51,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.privateplayer.core.common.format.formatDuration
+import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.feature.player.R
 import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackStatus
@@ -114,15 +118,13 @@ fun PlayerVideoLayer(
 }
 
 /**
- * 顶部控制条：返回、片名与四个常驻入口（画面比例、旋转屏幕、字幕、更多）。
- * 画面比例与旋转是两个独立动作：前者打开比例面板，后者直接切换横竖屏。
+ * 顶部控制条：返回、片名、旋转屏幕、字幕与更多。画面比例从更多菜单进入。
  * 安全区只作用于按钮本身，视频画面仍可铺满异形屏的缺口区域。
  */
 @Composable
 fun PlayerTopBar(
     title: String,
     onBack: () -> Unit,
-    onOpenAspect: () -> Unit,
     onRotate: () -> Unit,
     onOpenSubtitle: () -> Unit,
     onOpenMore: () -> Unit,
@@ -151,9 +153,6 @@ fun PlayerTopBar(
                 .weight(1f)
                 .padding(horizontal = 4.dp),
         )
-        IconButton(onClick = onOpenAspect) {
-            Icon(Icons.Outlined.AspectRatio, contentDescription = stringResource(R.string.player_aspect), tint = PlayerText)
-        }
         IconButton(onClick = onRotate) {
             Icon(Icons.Outlined.ScreenRotation, contentDescription = stringResource(R.string.player_rotate), tint = PlayerText)
         }
@@ -179,15 +178,15 @@ fun PlayerBottomControls(
     onSeekBack: () -> Unit,
     onSeekForward: () -> Unit,
     onPlayPause: () -> Unit,
-    onOpenSpeed: () -> Unit,
+    speedControl: @Composable (Modifier) -> Unit,
     onOpenQueue: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var scrubValue by remember { mutableStateOf<Float?>(null) }
-    val duration = snapshot.durationMs.coerceAtLeast(1L)
-    val sliderValue = scrubValue ?: (snapshot.positionMs.toFloat() / duration).coerceIn(0f, 1f)
-    val shownPosition = (sliderValue * duration).toLong()
-    val remaining = (duration - shownPosition).coerceAtLeast(0L)
+    val duration = snapshot.durationMs.coerceAtLeast(0L)
+    val sliderValue = scrubValue ?: if (duration > 0L) (snapshot.positionMs.toFloat() / duration).coerceIn(0f, 1f) else 0f
+    val shownPosition = scrubValue?.let { (it * duration).toLong() } ?: snapshot.positionMs.coerceAtLeast(0L)
+    val remaining = if (snapshot.status == PlaybackStatus.ENDED) 0L else (duration - shownPosition).coerceAtLeast(0L)
     val progressDescription = stringResource(R.string.player_progress)
 
     Column(
@@ -197,20 +196,27 @@ fun PlayerBottomControls(
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
             )
-            .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 8.dp),
+            .padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = PlayerTokens.GapLarge),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text(
-                text = stringResource(R.string.player_time_format, formatDuration(shownPosition), formatDuration(duration)),
+                text = stringResource(R.string.player_time_format, if (shownPosition == 0L) "00:00" else formatDuration(shownPosition), formatDuration(duration)),
                 style = MaterialTheme.typography.labelLarge,
                 color = PlayerText,
             )
             Spacer(Modifier.weight(1f))
             Text(
-                text = stringResource(R.string.player_remaining_format, formatDuration(remaining)),
+                text = stringResource(
+                    R.string.player_remaining_format,
+                    when {
+                        duration == 0L -> formatDuration(duration)
+                        remaining == 0L -> "00:00"
+                        else -> formatDuration(remaining)
+                    },
+                ),
                 style = MaterialTheme.typography.labelLarge,
                 color = PlayerTextSecondary,
             )
@@ -237,55 +243,60 @@ fun PlayerBottomControls(
                 .padding(vertical = 4.dp)
                 .semantics { contentDescription = progressDescription },
         )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            PlayerSpeedPill(speed = snapshot.speed, onClick = onOpenSpeed)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(26.dp),
-            ) {
-                PlayerTransportButton(
-                    icon = Icons.Filled.Replay10,
-                    contentDescription = stringResource(R.string.player_rewind_seconds, seekStepSeconds),
-                    onClick = onSeekBack,
-                )
-                PlayerTransportButton(
-                    icon = if (snapshot.status == PlaybackStatus.PLAYING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                    contentDescription = stringResource(if (snapshot.status == PlaybackStatus.PLAYING) R.string.player_pause else R.string.player_play),
-                    onClick = onPlayPause,
-                    large = true,
-                    loading = snapshot.status == PlaybackStatus.LOADING,
-                )
-                PlayerTransportButton(
-                    icon = Icons.Filled.Forward10,
-                    contentDescription = stringResource(R.string.player_forward_seconds, seekStepSeconds),
-                    onClick = onSeekForward,
-                )
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val transportsWidth = PlayerTokens.TransportSize * 2 + PlayerTokens.TransportLargeSize
+            val doubleEdge = maxWidth - transportsWidth
+            val labelSize = MaterialTheme.typography.labelLarge.fontSize
+            val buttonWidth = maxOf(
+                PlayerTokens.SpeedButtonWidth,
+                with(LocalDensity.current) { labelSize.toDp() } * 3.5f + Spacing.lg,
+            )
+            val transport: @Composable (Dp) -> Unit = { gap ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(gap)) {
+                    PlayerTransportButton(
+                        icon = Icons.Filled.Replay10,
+                        contentDescription = stringResource(R.string.player_rewind_seconds, seekStepSeconds),
+                        onClick = onSeekBack,
+                    )
+                    PlayerTransportButton(
+                        icon = if (snapshot.status == PlaybackStatus.PLAYING) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = stringResource(if (snapshot.status == PlaybackStatus.PLAYING) R.string.player_pause else R.string.player_play),
+                        onClick = onPlayPause,
+                        large = true,
+                        loading = snapshot.status == PlaybackStatus.LOADING,
+                    )
+                    PlayerTransportButton(
+                        icon = Icons.Filled.Forward10,
+                        contentDescription = stringResource(R.string.player_forward_seconds, seekStepSeconds),
+                        onClick = onSeekForward,
+                    )
+                }
             }
-            IconButton(onClick = onOpenQueue) {
-                Icon(Icons.Outlined.QueueMusic, contentDescription = stringResource(R.string.player_queue), tint = PlayerText)
+            val queue: @Composable () -> Unit = {
+                IconButton(onClick = onOpenQueue) {
+                    Icon(Icons.Outlined.QueueMusic, contentDescription = stringResource(R.string.player_queue), tint = PlayerText)
+                }
+            }
+            if (doubleEdge >= PlayerTokens.MinTouchTarget * 2) {
+                val edge = minOf(buttonWidth, doubleEdge / 2)
+                val gap = ((doubleEdge - edge * 2) / 2).coerceAtMost(Spacing.xl)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    speedControl(Modifier.width(edge))
+                    transport(gap)
+                    Box(Modifier.width(edge), contentAlignment = Alignment.CenterEnd) { queue() }
+                }
+            } else {
+                // 分屏等极窄窗口：宁可分行，也不缩小触点或挤掉队列。
+                val edge = minOf(buttonWidth, (maxWidth - PlayerTokens.MinTouchTarget).coerceAtLeast(0.dp))
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                        speedControl(Modifier.width(edge))
+                        queue()
+                    }
+                    transport(0.dp)
+                }
             }
         }
-    }
-}
-
-@Composable
-private fun PlayerSpeedPill(speed: Float, onClick: () -> Unit) {
-    Surface(
-        color = PlayerTokens.PillContainer,
-        shape = RoundedCornerShape(50),
-        onClick = onClick,
-        modifier = Modifier.defaultMinSize(minHeight = PlayerTokens.MinTouchTarget),
-    ) {
-        Text(
-            text = stringResource(R.string.player_speed_format, formatSpeed(speed)),
-            style = MaterialTheme.typography.labelLarge,
-            color = PlayerText,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-        )
     }
 }
 
@@ -322,6 +333,37 @@ private fun PlayerTransportButton(
     }
 }
 
+/** 按手势层实际尺寸定位唯一 HUD，与上下控制条的测量和显隐无关。 */
+@Composable
+internal fun PlayerFeedbackLayer(
+    avoidFan: SpeedFanGeometry? = null,
+    content: @Composable () -> Unit,
+) {
+    val safe = WindowInsets.safeDrawing
+    Layout(content = content, modifier = Modifier.fillMaxSize()) { nodes, bounds ->
+        val width = bounds.maxWidth
+        val height = bounds.maxHeight
+        val left = safe.getLeft(this, layoutDirection)
+        val right = safe.getRight(this, layoutDirection)
+        val safeTop = safe.getTop(this)
+        val bottom = (height - safe.getBottom(this)).coerceAtLeast(safeTop)
+        val child = nodes.single().measure(Constraints(
+            maxWidth = (width - left - right - 2 * PlayerTokens.GapLarge.roundToPx()).coerceAtLeast(0),
+            maxHeight = (bottom - safeTop).coerceAtLeast(0),
+        ))
+        val lastTop = (bottom - child.height).coerceAtLeast(safeTop)
+        val firstTop = (safeTop + PlayerTokens.MinTouchTarget.roundToPx() + PlayerTokens.GapSmall.roundToPx()).coerceAtMost(lastTop)
+        val y = (height / 4 - child.height / 2).coerceIn(firstTop, lastTop)
+        val centered = left + (width - left - right - child.width) / 2
+        val gap = PlayerTokens.GapSmall.roundToPx()
+        layout(width, height) {
+            val x = avoidFan?.speedHudLeft(centered, y, child.width, child.height, width - right - gap, gap,
+                coordinates?.positionInRoot() ?: Offset.Zero) ?: centered
+            child.place(x, y)
+        }
+    }
+}
+
 /** 拖动时显示与真实进度条分离的预览，不拦截播放器控制。 */
 @Composable
 internal fun PlayerSeekGestureOverlay(
@@ -334,17 +376,16 @@ internal fun PlayerSeekGestureOverlay(
     val fraction = (preview.targetMs.toDouble() / preview.durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
     val seekDescription = stringResource(R.string.player_seek_description, targetText, deltaText, mode, preview.tickSeconds)
 
-    Surface(
-        color = Color.Black.copy(alpha = 0.9f),
-        shape = RoundedCornerShape(12.dp),
+    Column(
         modifier = modifier
             .widthIn(max = 380.dp)
             .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.9f), RoundedCornerShape(12.dp))
             .semantics(mergeDescendants = true) {
                 contentDescription = seekDescription
-            },
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
     ) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth(),
@@ -382,7 +423,6 @@ internal fun PlayerSeekGestureOverlay(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
     }
 }
 
@@ -396,30 +436,16 @@ private fun formatSeekDelta(deltaMs: Long): String {
     return stringResource(R.string.player_seek_delta_format, sign, "${magnitude / 1_000L}$decimals")
 }
 
-/** 手势反馈浮层：快进/快退、音量、亮度、临时倍速。 */
+
 @Composable
-fun PlayerGestureOverlay(
-    message: String?,
-    modifier: Modifier = Modifier,
-) {
-    AnimatedVisibility(
-        visible = message != null,
-        enter = fadeIn(),
-        exit = fadeOut(),
-        modifier = modifier,
-    ) {
-        Surface(
-            color = Color.Black.copy(alpha = 0.62f),
-            shape = RoundedCornerShape(12.dp),
-        ) {
-            Text(
-                text = message ?: "",
-                style = MaterialTheme.typography.titleSmall,
-                color = PlayerText,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            )
-        }
-    }
+internal fun PlayerFeedbackPill(message: String) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.titleSmall,
+        color = PlayerText,
+        modifier = Modifier.background(Color.Black.copy(alpha = 0.62f), RoundedCornerShape(12.dp))
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+    )
 }
 
 /** 锁定态提示：单击浮层解锁。 */
@@ -442,31 +468,18 @@ fun LockedIndicator(onUnlock: () -> Unit, modifier: Modifier = Modifier) {
     }
 }
 
-/** 播放器错误提示条。 */
+/** 仅“知道了”按钮拦截触摸，提示底色和正文不挡视频手势。 */
 @Composable
 fun PlayerErrorBanner(message: String, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
-    Surface(
-        color = MaterialTheme.colorScheme.errorContainer,
-        shape = RoundedCornerShape(12.dp),
-        modifier = modifier,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = modifier.background(MaterialTheme.colorScheme.errorContainer, MaterialTheme.shapes.small)
+            .padding(horizontal = PlayerTokens.GapMedium, vertical = PlayerTokens.GapSmall),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-        ) {
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                modifier = Modifier.weight(1f),
-            )
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_dismiss)) }
-        }
+        Text(message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onErrorContainer,
+            modifier = Modifier.weight(1f))
+        TextButton(onClick = onDismiss) { Text(stringResource(R.string.player_dismiss)) }
     }
 }
 
-private fun formatSpeed(speed: Float): String {
-    val rounded = (speed * 100).toInt()
-    return if (rounded % 100 == 0) (rounded / 100).toString() else (rounded / 100f).toString().trimEnd('0').trimEnd('.')
-}
 

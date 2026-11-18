@@ -3,13 +3,18 @@ package com.privateplayer.core.storage
 import android.content.Context
 import android.system.ErrnoException
 import android.system.Os
+import android.system.OsConstants
+import android.system.StructStat
 import com.privateplayer.core.common.files.baseNameOf
 import com.privateplayer.core.common.files.extensionOf
 import com.privateplayer.core.common.files.sanitizeFileName
 import com.privateplayer.core.common.files.uniqueFileName
+import com.privateplayer.domain.model.PrivateFileIdentity
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.IOException
+import java.nio.channels.Channels
+import java.nio.channels.FileChannel
 import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.LinkOption
@@ -17,6 +22,7 @@ import java.nio.file.FileVisitResult
 import java.nio.file.Path
 import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 import java.nio.file.attribute.BasicFileAttributes
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -46,15 +52,31 @@ fun resolveFileInMediaRoot(mediaRoot: File, path: String): File {
 
 private val WINDOWS_ABSOLUTE_PATH = Regex("^[A-Za-z]:/")
 
-/** 同一私有文件系统内的真实身份，路径改名后仍保持不变。 */
-data class PrivateFileIdentity(val device: Long, val inode: Long)
+val StructStat.privateIdentity: PrivateFileIdentity get() = PrivateFileIdentity(st_dev, st_ino)
+fun StructStat.hasIdentity(identity: PrivateFileIdentity): Boolean = st_dev == identity.device && st_ino == identity.inode
+
+/** 不跟随符号链接；无法确认目录不存在时不能跳过清理。 */
+fun deleteTree(root: Path) {
+    if (Files.notExists(root, LinkOption.NOFOLLOW_LINKS)) return
+    Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
+        override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+            Files.delete(file)
+            return FileVisitResult.CONTINUE
+        }
+        override fun postVisitDirectory(dir: Path, error: IOException?): FileVisitResult {
+            if (error != null) throw error
+            Files.delete(dir)
+            return FileVisitResult.CONTINUE
+        }
+    })
+}
 
 /**
  * 调用方必须持有私有文件树锁；应用是该目录的唯一写进程。
  * ATOMIC_MOVE 仅做同文件系统重命名，不允许跨设备时退化成大文件复制。
  */
 fun moveNoOverwrite(source: File, target: File) {
-    if (Files.exists(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
+    if (!Files.notExists(target.toPath(), LinkOption.NOFOLLOW_LINKS)) {
         throw FileAlreadyExistsException(target.path)
     }
     Files.move(source.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE)
@@ -146,16 +168,19 @@ class PrivateStorage @Inject constructor(
         return resolveFileInMediaRoot(base, relative)
     }
 
-    /** lstat 不跟随符号链接；不存在或无法确认身份时明确失败，不能猜测接管同名文件。 */
-    fun fileIdentity(file: File): PrivateFileIdentity = try {
-        val stat = Os.lstat(file.path)
-        PrivateFileIdentity(stat.st_dev, stat.st_ino)
+    /** 一次 lstat 同时读取身份、类型和展示属性；只有确认不存在才返回 null。 */
+    fun fileStat(file: File): StructStat? = try {
+        Os.lstat(file.path)
     } catch (error: ErrnoException) {
-        throw IOException("无法读取文件身份：${file.name}", error)
+        if (error.errno == OsConstants.ENOENT || error.errno == OsConstants.ENOTDIR) null
+        else throw IOException("无法读取文件身份：${file.name}", error)
     }
 
-    fun hasFileIdentity(file: File, identity: PrivateFileIdentity): Boolean =
-        Files.isRegularFile(file.toPath(), LinkOption.NOFOLLOW_LINKS) && fileIdentity(file) == identity
+    fun fileIdentity(file: File): PrivateFileIdentity =
+        fileStat(file)?.privateIdentity ?: throw IOException("文件不存在：${file.name}")
+
+    fun hasFileIdentity(file: File, identity: PrivateFileIdentity, size: Long): Boolean =
+        fileStat(file)?.let { OsConstants.S_ISREG(it.st_mode) && it.hasIdentity(identity) && it.st_size == size } == true
 
     fun tempRelativePath(taskId: String, extension: String?): String {
         val suffix = extension?.let { ".$it" } ?: ".part"
@@ -213,11 +238,9 @@ class PrivateStorage @Inject constructor(
         return !file.exists() || file.delete()
     }
 
-    /** 删除某个媒体的全部外挂字幕（删除媒体时调用）。 */
-    fun deleteSubtitleDir(mediaId: Long): Boolean {
-        val dir = File(subtitlesRoot, mediaId.toString())
-        return !dir.exists() || dir.deleteRecursively()
-    }
+    /** 只清理指定媒体的私有副本；失败由删除日志保留并重试。 */
+    fun deleteSubtitleDir(mediaId: Long) =
+        deleteTree(resolveFileInMediaRoot(subtitlesRoot, mediaId.toString()).toPath())
 
     /** 删除缩略图缓存文件（相对 cacheDir 的路径）。 */
     fun deleteCacheFile(relativePath: String?): Boolean {
@@ -235,19 +258,28 @@ class PrivateStorage @Inject constructor(
             ?: emptyList()
     }
 
-    /** 复制一个字幕到 `subtitles/<mediaId>/`，返回相对路径。 */
+    /** 暂存名不是字幕格式；同步完成后在同目录、同一写锁内选名并发布。 */
     @Throws(IOException::class)
-    fun saveSubtitle(mediaId: Long, fileName: String, input: java.io.InputStream): File {
-        val dir = File(subtitlesRoot, mediaId.toString())
-        if (!dir.isDirectory && !dir.mkdirs()) throw IOException("无法创建字幕目录")
-        val existing = dir.listFiles()?.mapTo(HashSet()) { it.name } ?: HashSet()
-        val unique = uniqueFileName(sanitizeFileName(fileName), existing)
-        val target = File(dir, unique)
-        target.outputStream().use { output ->
-            input.copyTo(output, DEFAULT_BUFFER_SIZE)
-            output.fd.sync()
+    suspend fun saveSubtitle(mediaId: Long, fileName: String, input: java.io.InputStream): File {
+        val dir = resolveFileInMediaRoot(subtitlesRoot, mediaId.toString())
+        val staged = withMediaTreeLock {
+            Files.createDirectories(dir.toPath())
+            File.createTempFile(".subtitle-", ".part", dir)
         }
-        return target
+        try {
+            FileChannel.open(staged.toPath(), StandardOpenOption.WRITE).use { channel ->
+                input.copyTo(Channels.newOutputStream(channel), DEFAULT_BUFFER_SIZE)
+                channel.force(true)
+            }
+            return withMediaTreeLock {
+                val names = dir.list() ?: throw IOException("无法读取字幕目录")
+                val target = File(dir, uniqueFileName(sanitizeFileName(fileName), names.toSet()))
+                moveNoOverwrite(staged, target)
+                target
+            }
+        } finally {
+            Files.deleteIfExists(staged.toPath())
+        }
     }
 
     // ---------------------------------------------------------------- 统计与清理
@@ -277,17 +309,7 @@ class PrivateStorage @Inject constructor(
         val children = dir.listFiles() ?: throw IOException("无法读取待清理目录")
         children.forEach { child ->
             freed += directoryBytes(child)
-            Files.walkFileTree(child.toPath(), object : SimpleFileVisitor<Path>() {
-                override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-                    Files.delete(file)
-                    return FileVisitResult.CONTINUE
-                }
-                override fun postVisitDirectory(directory: Path, error: IOException?): FileVisitResult {
-                    if (error != null) throw error
-                    Files.delete(directory)
-                    return FileVisitResult.CONTINUE
-                }
-            })
+            deleteTree(child.toPath())
         }
         return freed
     }

@@ -22,8 +22,12 @@ import com.privateplayer.core.database.entity.MediaEntity
 import com.privateplayer.core.storage.ImportCopier
 import com.privateplayer.core.storage.MediaProbe
 import com.privateplayer.core.storage.PrivateStorage
+import com.privateplayer.data.mapper.failureKind
 import com.privateplayer.data.repository.ImportRepositoryImpl
 import com.privateplayer.domain.model.ImportTaskState
+import com.privateplayer.domain.model.TARGET_DIRECTORY_GONE_REASON
+import com.privateplayer.domain.model.WEB_STAGING_MISSING_REASON
+import com.privateplayer.domain.model.classifyImportError
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.SettingsRepository
 import dagger.assisted.Assisted
@@ -76,9 +80,11 @@ class ImportWorker @AssistedInject constructor(
             }
         }
         if (task.state == ImportTaskState.CANCELED.name) {
-            storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, storage) }
+            storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, mediaDao, storage) }
             return Result.success()
         }
+        // 升级前已退避的工作仍可能启动，不再认领已知无法恢复的原上传任务。
+        if (task.failureKind?.canRetry == false) return Result.failure()
         if (taskDao.claimForImport(taskId, System.currentTimeMillis()) == 0) return Result.success()
 
         var tempFile: java.io.File? = null
@@ -92,7 +98,7 @@ class ImportWorker @AssistedInject constructor(
             fileTree.requireDirectory(parentPath)
             val mediaPath = storage.mediaRelativePath(targetPath)
             val prepared = storage.withMediaTreeLock { commits.read(task) }
-            val staged = storage.withMediaTreeLock { storage.importTempFile(task) }
+            val staged = storage.withMediaTreeLock { storage.importTempFile(task, prepared) }
             tempFile = staged
             val content = if (prepared != null) {
                 storage.withMediaTreeLock { commits.content(prepared) }
@@ -106,7 +112,7 @@ class ImportWorker @AssistedInject constructor(
             val copied = when {
                 prepared != null -> prepared.size
                 task.isWebUpload() -> {
-                    if (!staged.isFile) throw IOException("上传暂存文件已丢失，请从网页重新上传")
+                    if (!staged.isFile) throw IOException(WEB_STAGING_MISSING_REASON)
                     staged.length()
                 }
                 readySize != null -> readySize
@@ -159,7 +165,7 @@ class ImportWorker @AssistedInject constructor(
                 // requireDirectory 会恢复文件树日志，此处只重验目录，不能在锁内再次调用仓库。
                 val lockedParent = storage.resolveMediaFile(parentPath)
                 if (!java.nio.file.Files.isDirectory(lockedParent.toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-                    throw IOException("目标目录已不存在，暂存已保留，请恢复目录后重试")
+                    throw IOException(TARGET_DIRECTORY_GONE_REASON)
                 }
                 if (taskDao.beginCommit(taskId, System.currentTimeMillis()) == 0) throw ImportCanceledException()
                 val commit = prepared ?: commits.prepare(task, staged)
@@ -252,13 +258,14 @@ class ImportWorker @AssistedInject constructor(
             if (taskDao.failIfActive(taskId, retainedBytes, message, System.currentTimeMillis()) == 0) {
                 return Result.failure()
             }
-            val retryable = error is IOException && error !is FileNotFoundException && runAttemptCount < MAX_AUTO_RETRY
+            val retryable = error is IOException && error !is FileNotFoundException && runAttemptCount < MAX_AUTO_RETRY &&
+                classifyImportError(message, task.isWebUpload()).canRetry
             return if (retryable) Result.retry() else Result.failure()
         }
     }
 
     private suspend fun cleanupCanceled(task: ImportTaskEntity) = withContext(NonCancellable) {
-        storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, storage) }
+        storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, mediaDao, storage) }
         fileTree.notifyChanged()
     }
 
@@ -275,7 +282,7 @@ class ImportWorker @AssistedInject constructor(
                     CHANNEL_ID,
                     "导入进度",
                     NotificationManager.IMPORTANCE_LOW,
-                ).apply { description = "显示文件导入的实时进度" },
+                ),
             )
         }
 

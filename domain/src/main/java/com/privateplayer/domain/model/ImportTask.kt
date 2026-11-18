@@ -14,10 +14,10 @@ enum class ImportTaskState {
     /** 已提交成功，媒体记录已入库。 */
     COMPLETED,
 
-    /** 用户取消，临时文件已清理。 */
+    /** 用户已取消处理；取消不代表已清除暂存。 */
     CANCELED,
 
-    /** 失败，可重试；临时文件保留以支持续传。 */
+    /** 导入失败；能否重试原任务取决于持久化的失败原因。 */
     FAILED,
     ;
 
@@ -38,7 +38,13 @@ data class ImportTask(
     val mediaId: Long?,
     val createdAt: Long,
     val updatedAt: Long,
+    val isWebUpload: Boolean,
 ) {
+    val failureKind: ImportErrorKind? = if (state == ImportTaskState.FAILED) classifyImportError(errorMessage, isWebUpload) else null
+
+    val canDiscardLocal: Boolean
+        get() = !isWebUpload && (state == ImportTaskState.FAILED || state == ImportTaskState.CANCELED)
+
     /** 0f..1f；总大小未知时返回 null，由 UI 显示不确定进度。 */
     val progress: Float?
         get() = when {

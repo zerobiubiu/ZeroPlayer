@@ -1,0 +1,32 @@
+11-18 12:49:51.487  9877  9891 I ZeroPlayerSpeedProof: playing picker held 4615 ms; position=166 → 5000, speed=[1.0, 0.5]
+11-18 12:49:52.570  9877  9891 I ZeroPlayerSpeedProof: portrait viewport=Rect.fromLTRB(0.0, 0.0, 1080.0, 2400.0) font=1.3 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0) options={0.25=Rect.fromLTRB(74.0, 1632.0, 336.0, 1768.0), 0.5=Rect.fromLTRB(341.0, 1632.0, 604.0, 1768.0), 0.75=Rect.fromLTRB(609.0, 1632.0, 872.0, 1768.0), 1.0=Rect.fromLTRB(74.0, 1773.0, 336.0, 1909.0), 1.25=Rect.fromLTRB(341.0, 1773.0, 604.0, 1909.0), 1.5=Rect.fromLTRB(609.0, 1773.0, 872.0, 1909.0), 1.75=Rect.fromLTRB(74.0, 1914.0, 336.0, 2050.0), 2.0=Rect.fromLTRB(341.0, 1914.0, 604.0, 2050.0), 2.5=Rect.fromLTRB(609.0, 1914.0, 872.0, 2050.0), 3.0=Rect.fromLTRB(74.0, 2055.0, 269.0, 2191.0), 4.0=Rect.fromLTRB(274.0, 2055.0, 470.0, 2191.0), 6.0=Rect.fromLTRB(475.0, 2055.0, 671.0, 2191.0), 8.0=Rect.fromLTRB(676.0, 2055.0, 872.0, 2191.0)}
+11-18 12:49:53.070  9877  9891 I ZeroPlayerSpeedProof: portrait tap=8× engine=8.0 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0)
+11-18 12:49:53.422  9877  9891 I ZeroPlayerSpeedProof: portrait tap=0.25× engine=0.25 anchor=Rect.fromLTRB(53.0, 2222.0, 268.0, 2348.0)
+11-18 12:49:54.871  9877  9891 I ZeroPlayerSpeedProof: portrait TARGET DOWN=Offset(160.5, 2285.0) MOVE=Offset(171.5, 2123.0)→Offset(205.0, 1982.0)  beforeUP=0.25@5083
+11-18 12:49:54.954  9877  9891 I ZeroPlayerSpeedProof: portrait TARGET after=1.75@5083
+11-18 12:49:55.872  9877  9891 I ZeroPlayerSpeedProof: portrait OUTSIDE DOWN=Offset(160.5, 2285.0) MOVE=Offset(171.5, 2123.0)→Offset(774.0, 2123.0) →Offset(993.6, 288.0) beforeUP=1.75@5083
+11-18 12:49:55.953  9877  9891 I ZeroPlayerSpeedProof: portrait OUTSIDE after=1.75@5083
+11-18 12:49:56.770  9877  9891 I ZeroPlayerSpeedProof: portrait CANCEL DOWN=Offset(160.5, 2285.0) MOVE=Offset(171.5, 2123.0)→Offset(774.0, 2123.0)  beforeUP=1.75@5083
+11-18 12:49:56.837  9877  9891 I ZeroPlayerSpeedProof: portrait CANCEL after=1.75@5083
+11-18 12:49:58.420  9877  9891 I ZeroPlayerSpeedProof: landscape viewport=Rect.fromLTRB(0.0, 0.0, 2400.0, 1080.0) font=1.3 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0) options={0.25=Rect.fromLTRB(74.0, 312.0, 336.0, 448.0), 0.5=Rect.fromLTRB(341.0, 312.0, 604.0, 448.0), 0.75=Rect.fromLTRB(609.0, 312.0, 872.0, 448.0), 1.0=Rect.fromLTRB(74.0, 453.0, 336.0, 589.0), 1.25=Rect.fromLTRB(341.0, 453.0, 604.0, 589.0), 1.5=Rect.fromLTRB(609.0, 453.0, 872.0, 589.0), 1.75=Rect.fromLTRB(74.0, 594.0, 336.0, 730.0), 2.0=Rect.fromLTRB(341.0, 594.0, 604.0, 730.0), 2.5=Rect.fromLTRB(609.0, 594.0, 872.0, 730.0), 3.0=Rect.fromLTRB(74.0, 735.0, 269.0, 871.0), 4.0=Rect.fromLTRB(274.0, 735.0, 470.0, 871.0), 6.0=Rect.fromLTRB(475.0, 735.0, 671.0, 871.0), 8.0=Rect.fromLTRB(676.0, 735.0, 872.0, 871.0)}
+11-18 12:49:58.654  9877  9891 I ZeroPlayerSpeedProof: landscape tap=8× engine=8.0 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0)
+11-18 12:49:59.021  9877  9891 I ZeroPlayerSpeedProof: landscape tap=0.25× engine=0.25 anchor=Rect.fromLTRB(53.0, 902.0, 268.0, 1028.0)
+11-18 12:50:00.502  9877  9891 I ZeroPlayerSpeedProof: landscape TARGET DOWN=Offset(160.5, 965.0) MOVE=Offset(171.5, 803.0)→Offset(573.0, 803.0)  beforeUP=0.25@5083
+11-18 12:50:00.870  9877  9891 I ZeroPlayerSpeedProof: landscape TARGET after=6.0@5083
+11-18 12:50:01.670  9877  9891 I ZeroPlayerSpeedProof: landscape OUTSIDE DOWN=Offset(160.5, 965.0) MOVE=Offset(171.5, 803.0)→Offset(774.0, 803.0) →Offset(2208.0, 129.6) beforeUP=6.0@5083
+11-18 12:50:01.754  9877  9891 I ZeroPlayerSpeedProof: landscape OUTSIDE after=6.0@5083
+11-18 12:50:02.519  9877  9891 I ZeroPlayerSpeedProof: landscape CANCEL DOWN=Offset(160.5, 965.0) MOVE=Offset(171.5, 803.0)→Offset(774.0, 803.0)  beforeUP=6.0@5083
+11-18 12:50:02.570  9877  9891 I ZeroPlayerSpeedProof: landscape CANCEL after=6.0@5083
+11-18 12:50:04.039  9877  9891 I ZeroPlayerSpeedProof: video long press 0.75 → 2 → 0.75; playing 5417 → 5667 ms
+11-18 12:50:07.636  9877  9891 I ZeroPlayerGeometry: landscape=false bottomGapDp=16.0
+11-18 12:50:07.903  9877  9891 I ZeroPlayerGeometry: 右双击: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 12:50:08.219  9877  9891 I ZeroPlayerGeometry: 左双击: 1080.0x2400.0 center=600.5 fraction=0.25020835
+11-18 12:50:08.821  9877  9891 I ZeroPlayerGeometry: 拖动，菜单=true: 1080.0x2400.0 center=600.0 fraction=0.25
+11-18 12:50:09.419  9877  9891 I ZeroPlayerGeometry: 拖动，菜单=false: 1080.0x2400.0 center=600.0 fraction=0.25
+11-18 12:50:10.383  9877  9891 I ZeroPlayerGeometry: 冻结帧 3167 → 3167ms，匹配 55/55，时间码墨迹 99%，Rect(0, 896 - 1080, 1503) → Rect(240, 0 - 2160, 1080)
+11-18 12:50:10.452  9877  9891 I ZeroPlayerGeometry: landscape=true bottomGapDp=16.0
+11-18 12:50:10.753  9877  9891 I ZeroPlayerGeometry: 右双击: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 12:50:11.119  9877  9891 I ZeroPlayerGeometry: 左双击: 2400.0x1080.0 center=270.5 fraction=0.25046295
+11-18 12:50:11.669  9877  9891 I ZeroPlayerGeometry: 拖动，菜单=true: 2400.0x1080.0 center=270.0 fraction=0.25
+11-18 12:50:12.270  9877  9891 I ZeroPlayerGeometry: 拖动，菜单=false: 2400.0x1080.0 center=270.0 fraction=0.25
+11-18 12:50:13.127  9877  9891 I ZeroPlayerGeometry: 冻结帧 3332 → 3332ms，匹配 55/55，时间码墨迹 100%，Rect(240, 0 - 2160, 1080) → Rect(0, 896 - 1080, 1503)

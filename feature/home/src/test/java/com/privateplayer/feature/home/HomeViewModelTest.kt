@@ -1,7 +1,9 @@
 package com.privateplayer.feature.home
 
 import com.privateplayer.core.design.components.canConfirmName
+import com.privateplayer.domain.model.PrivateFileIdentity
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import java.io.File
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.usecase.NoOpPlaybackStopper
@@ -188,7 +190,7 @@ class HomeViewModelTest {
             HomeMessage.CreateFolderFailed, HomeMessage.FolderCreated,
             HomeMessage.RenameFailed, HomeMessage.Renamed,
             HomeMessage.MoveFailed, HomeMessage.Moved,
-            HomeMessage.DeleteFailed, HomeMessage.Deleted,
+            HomeMessage.DeleteFailed, HomeMessage.DeleteTargetChanged, HomeMessage.Deleted,
         )
         val resources = samples.map { it.labelRes() }
         assertEquals(samples.size, resources.toSet().size)
@@ -207,6 +209,25 @@ class HomeViewModelTest {
         assertFalse(result!!.allSucceeded)
         assertFalse(result!!.allFailed)
         assertFalse(model.uiState.value.isWorking)
+    }
+
+    @Test
+    fun `同名替代项不会被刷新为删除目标且单项和批量均提示变化`() = runTest(dispatcher) {
+        val selected = file("a.txt")
+        val replacement = selected.copy(identity = PrivateFileIdentity(1, 2))
+        val sibling = file("b.txt")
+        val repository = FakeFileTreeRepository().apply { directories[""] = listOf(replacement, sibling) }
+        val model = HomeViewModel(repository, NoOpPlaybackStopper, dispatcher)
+        val messages = mutableListOf<HomeMessage>()
+        backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { model.messages.collect { messages += it } }
+        model.delete(selected)
+        runCurrent()
+        assertEquals(listOf(HomeMessage.DeleteTargetChanged), messages)
+        var result: BatchResult? = null
+        model.deleteBatch(listOf(selected, sibling)) { result = it }
+        runCurrent()
+        assertEquals(setOf(selected.path), result!!.changedTargets)
+        assertEquals(listOf(sibling.path), result!!.succeeded)
     }
 
     @Test
@@ -245,10 +266,12 @@ class HomeViewModelTest {
 
 private fun directory(path: String) = FileTreeEntry(
     name = path.substringAfterLast('/'), path = path, isDirectory = true, sizeBytes = 0, modifiedAt = 0,
+    identity = PrivateFileIdentity(1, path.hashCode().toLong()),
 )
 
 private fun file(path: String, video: Boolean = false, mediaId: Long? = null) = FileTreeEntry(
     name = path.substringAfterLast('/'), path = path, isDirectory = false, sizeBytes = 1, modifiedAt = 0,
+    identity = PrivateFileIdentity(1, path.hashCode().toLong()),
     isVideo = video, mediaId = mediaId,
 )
 
@@ -279,7 +302,10 @@ private class FakeFileTreeRepository : FileTreeRepository {
         if (failOperations || path in failPaths) error("移动失败")
         return directory(path)
     }
-    override suspend fun delete(path: String) {
+    override suspend fun delete(path: String, identity: PrivateFileIdentity, isDirectory: Boolean) {
+        find(path)?.let {
+            if (it.identity != identity || it.isDirectory != isDirectory) throw FileTreeEntryChangedException()
+        }
         if (failOperations || path in failPaths) error("删除失败")
     }
     override suspend fun ensureMedia(path: String): Long {

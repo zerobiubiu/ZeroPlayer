@@ -31,6 +31,7 @@ enum class SubtitleBackground(@StringRes val labelRes: Int) {
     NONE(R.string.option_subtitle_bg_none),
     SEMI_TRANSPARENT(R.string.option_subtitle_bg_semi),
     SOLID(R.string.option_subtitle_bg_solid),
+    NAVY(R.string.option_subtitle_bg_navy),
 }
 
 /** 字幕文字颜色。 */
@@ -40,23 +41,77 @@ enum class SubtitleTextColor(@StringRes val labelRes: Int) {
     CYAN(R.string.option_subtitle_color_cyan),
 }
 
+/** 文本字幕字体。 */
+enum class SubtitleFont(@StringRes val labelRes: Int) {
+    DEFAULT(R.string.option_subtitle_font_default),
+    SERIF(R.string.option_subtitle_font_serif),
+    MONOSPACE(R.string.option_subtitle_font_monospace),
+}
+
+/** 文本字幕字形。 */
+enum class SubtitleFontStyle(@StringRes val labelRes: Int) {
+    NORMAL(R.string.option_subtitle_style_normal),
+    BOLD(R.string.option_subtitle_style_bold),
+    ITALIC(R.string.option_subtitle_style_italic),
+    BOLD_ITALIC(R.string.option_subtitle_style_bold_italic),
+}
+
+/** 记录断点与重新打开视频的策略；不影响播放历史或正在运行的会话。 */
+enum class PlaybackProgressMode(@StringRes val labelRes: Int) {
+    DISABLED(R.string.option_progress_disabled),
+    RECORD_ONLY(R.string.option_progress_record_only),
+    RESUME(R.string.option_progress_resume);
+
+    fun positionToSave(positionMs: Long, durationMs: Long): Long = when {
+        this == DISABLED -> 0L
+        durationMs > 0 -> positionMs.coerceIn(0L, durationMs)
+        else -> positionMs.coerceAtLeast(0L)
+    }
+
+    fun positionOnOpen(positionMs: Long, durationMs: Long): Long = when {
+        this != RESUME || positionMs <= 0 -> 0L
+        // 已知时长的 98%（向上取整），不将未知时长或短断点误判为已看完。
+        durationMs > 0 && positionMs >= durationMs - durationMs / 50 -> 0L
+        else -> positionMs
+    }
+
+    companion object {
+        fun fromStoredFlags(record: Boolean, resume: Boolean): PlaybackProgressMode = when {
+            !record -> DISABLED
+            resume -> RESUME
+            else -> RECORD_ONLY
+        }
+    }
+}
+
+/** 常规播放与长按临时倍速共用的边界。 */
+object PlaybackSpeedLimits {
+    const val MIN = 0.25f
+    const val MAX = 8f
+    const val MIN_TEMPORARY = 1.5f
+}
+
 /** 播放相关偏好。 */
 data class PlaybackPreferences(
     val autoPlayNext: Boolean = true,
-    val rememberProgress: Boolean = true,
-    val autoResume: Boolean = true,
+    val progressMode: PlaybackProgressMode = PlaybackProgressMode.RESUME,
     val defaultSpeed: Float = 1.0f,
     val defaultAspect: VideoAspect = VideoAspect.FIT,
     val seekStepSeconds: Int = 10,
     val longPressSpeed: Float = 2.0f,
 )
 
-/** 字幕显示偏好；ASS 等自带样式的字幕保留原有排版。 */
+/** 文本字幕显示偏好；默认保留 ASS 自带的排版，不改变位图字幕的字形。 */
 data class SubtitlePreferences(
     val fontSizeScale: Float = 1.0f,
     val background: SubtitleBackground = SubtitleBackground.SEMI_TRANSPARENT,
     val textColor: SubtitleTextColor = SubtitleTextColor.WHITE,
     val delayStepMs: Int = 100,
+    val font: SubtitleFont = SubtitleFont.DEFAULT,
+    val fontStyle: SubtitleFontStyle = SubtitleFontStyle.NORMAL,
+    /** 相对默认位置的画面高度百分比（-10～30），正值上移。 */
+    val verticalOffsetPercent: Int = 0,
+    val overrideAss: Boolean = false,
 )
 
 /** 手势偏好。 */

@@ -1,6 +1,7 @@
 package com.privateplayer.feature.player
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.design.theme.Spacing
@@ -28,6 +29,13 @@ object PlayerTokens {
     /** 速度胶囊底：14% 白。 */
     val PillContainer: Color = Color.White.copy(alpha = 0.14f)
 
+    /** 只降低材料的不透明度，数字始终用实白；在亮画面上仍保留深色字底。 */
+    private val SpeedMaterial = PillContainer.compositeOver(Scrim)
+    val SpeedMenuContainer: Color = SpeedMaterial.copy(alpha = 0.72f)
+    val SpeedKeyContainer: Color = SpeedMaterial.copy(alpha = 0.84f)
+    val SpeedKeyActive: Color = Accent.copy(alpha = 0.28f)
+    val SpeedSeam: Color = Text.copy(alpha = 0.16f)
+
     /** 进度条未激活轨道：28% 白。 */
     val TrackInactive: Color = Color.White.copy(alpha = 0.28f)
 
@@ -38,6 +46,10 @@ object PlayerTokens {
     val TransportLargeIcon: Dp = 40.dp
     val TransportLoading: Dp = 22.dp
     val MinTouchTarget: Dp = 48.dp
+    val SpeedButtonWidth: Dp = 64.dp
+    val SpeedPillHeight: Dp = 28.dp
+    val SpeedFanRadius: Dp = 224.dp
+    val SpeedBubbleLift: Dp = 52.dp
 
     // 间距复用应用刻度。
     val GapSmall: Dp = Spacing.sm

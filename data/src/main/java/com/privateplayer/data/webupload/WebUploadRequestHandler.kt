@@ -7,7 +7,10 @@ import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.data.importer.ImportWorkScheduler
 import com.privateplayer.data.importer.isWebUpload
 import com.privateplayer.data.importer.webUploadFile
+import com.privateplayer.data.mapper.failureKind
+import com.privateplayer.domain.model.ImportErrorKind
 import com.privateplayer.domain.model.ImportTaskState
+import com.privateplayer.domain.model.PrivateFileIdentity
 import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.ImportRepository
@@ -20,9 +23,6 @@ import java.io.FileInputStream
 import java.io.FileNotFoundException
 import java.io.FileOutputStream
 import java.io.IOException
-import java.net.Inet4Address
-import java.net.InetSocketAddress
-import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
 import java.net.URI
@@ -31,20 +31,15 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.FileAlreadyExistsException
 import java.util.Locale
 import java.util.UUID
-import java.util.concurrent.ArrayBlockingQueue
-import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.json.JSONArray
 import org.json.JSONObject
 
-/** 只在用户开启时监听局域网；文件与首页共用同一棵私有目录树。 */
-internal class WebUploadHttpServer(
+/** 每次服务共用一个请求处理器；文件与首页共用同一棵私有目录树。 */
+internal class WebUploadRequestHandler(
     private val context: Context,
-    private val address: Inet4Address,
     private val initialPath: String,
     private val storage: PrivateStorage,
     private val tasks: ImportTaskDao,
@@ -52,68 +47,12 @@ internal class WebUploadHttpServer(
     private val imports: ImportRepository,
     private val scheduler: ImportWorkScheduler,
     private val onTransfer: (WebTransferRecord) -> Unit,
-    private val onFailure: (String) -> Unit,
 ) {
-    private val open = AtomicBoolean(false)
-    private val clients = ConcurrentHashMap.newKeySet<Socket>()
-    private val executor = ThreadPoolExecutor(
-        2, 4, 30, TimeUnit.SECONDS, ArrayBlockingQueue(8),
-        ThreadPoolExecutor.AbortPolicy(),
-    )
     private val journal = WebUploadJournal(storage, tasks, scheduler)
-    private var listener: ServerSocket? = null
-    val port: Int get() = listener?.localPort ?: 0
 
-    fun start() {
-        val socket = ServerSocket()
-        try {
-            socket.reuseAddress = true
-            socket.bind(InetSocketAddress(address, PORT))
-            journal.recover()
-            listener = socket
-            open.set(true)
-            Thread({ acceptLoop(socket) }, "web-upload-listener").apply {
-                isDaemon = true
-                start()
-            }
-        } catch (error: Exception) {
-            socket.close()
-            throw error
-        }
-    }
+    fun recover() = journal.recover()
 
-    fun stop() {
-        open.set(false)
-        runCatching { listener?.close() }
-        clients.forEach { runCatching { it.close() } }
-        executor.shutdownNow()
-    }
-
-    private fun acceptLoop(server: ServerSocket) {
-        try {
-            while (open.get()) {
-                val client = server.accept()
-                client.soTimeout = 60_000
-                clients.add(client)
-                try {
-                    executor.execute {
-                        try {
-                            client.use(::handle)
-                        } finally {
-                            clients.remove(client)
-                        }
-                    }
-                } catch (_: java.util.concurrent.RejectedExecutionException) {
-                    clients.remove(client)
-                    client.close()
-                }
-            }
-        } catch (error: IOException) {
-            if (open.get()) onFailure("网页文件服务连接失败：${error.message ?: "未知错误"}")
-        }
-    }
-
-    private fun handle(socket: Socket) {
+    fun handle(socket: Socket) {
         try {
             val input = BufferedInputStream(socket.getInputStream(), 64 * 1024)
             val request = LocalHttpProtocol.readRequest(input)
@@ -145,7 +84,9 @@ internal class WebUploadHttpServer(
                     respond(socket, 200, entryJson(entry).toString())
                 }
                 request.method == "POST" && path == "/api/delete" -> {
-                    runBlocking { tree.delete(required(query, "path")) }
+                    withWebDeleteTarget(query) { targetPath, identity, isDirectory ->
+                        runBlocking { tree.delete(targetPath, identity, isDirectory) }
+                    }
                     respond(socket, 200, JSONObject().put("ok", true).toString())
                 }
                 request.method == "POST" && path == "/api/uploads" -> upload(socket, input, request, query)
@@ -185,12 +126,12 @@ internal class WebUploadHttpServer(
         respond(socket, 200, JSONObject().put("path", normalized).put("entries", items).toString())
     }
 
-    private fun entryJson(entry: FileTreeEntry): JSONObject = JSONObject()
-        .put("name", entry.name)
-        .put("path", entry.path)
-        .put("type", if (entry.isDirectory) "directory" else "file")
-        .put("size", entry.sizeBytes)
-        .put("modifiedAt", entry.modifiedAt)
+    private fun entryJson(entry: FileTreeEntry): JSONObject = JSONObject().apply {
+        put("name", entry.name)
+        entry.writeWebDeleteTarget { key, value -> put(key, value) }
+        put("size", entry.sizeBytes)
+        put("modifiedAt", entry.modifiedAt)
+    }
 
     private fun normalizedDirectory(path: String): String {
         val directory = runBlocking { tree.requireDirectory(path) }.canonicalFile
@@ -249,7 +190,7 @@ internal class WebUploadHttpServer(
                 var remaining = length
                 var lastReport = 0L
                 while (remaining > 0L) {
-                    if (!open.get()) throw SocketException("服务已停止")
+                    if (socket.isClosed) throw SocketException("服务已停止")
                     val read = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
                     if (read < 0) throw EOFException("上传未完成")
                     if (read == 0) continue
@@ -320,8 +261,11 @@ internal class WebUploadHttpServer(
             respond(socket, 404, jsonError("任务不存在"))
             return
         }
+        val failure = task.failureKind
+        val message = taskMessage(failure, task.errorMessage)
         val body = JSONObject().put("state", task.state)
-            .put("errorMessage", task.errorMessage ?: JSONObject.NULL)
+            .put("errorMessage", message ?: JSONObject.NULL)
+            .put("canRetry", failure?.canRetry == true)
             .put("bytesCopied", task.bytesCopied)
             .put("sizeBytes", task.sizeBytes)
         respond(socket, 200, body.toString())
@@ -342,11 +286,15 @@ internal class WebUploadHttpServer(
         if (current == null) {
             respond(socket, 404, jsonError("任务已被移除"))
         } else if (current.state == ImportTaskState.FAILED.name || current.state == ImportTaskState.CANCELED.name) {
-            respond(socket, 409, jsonError(current.errorMessage ?: "任务状态已变化，无法重试"))
+            val reason = taskMessage(current.failureKind, current.errorMessage)
+            respond(socket, 409, jsonError(reason ?: "任务状态已变化，无法重试"))
         } else {
             respond(socket, 202, JSONObject().put("taskId", id).toString())
         }
     }
+
+    private fun taskMessage(failure: ImportErrorKind?, raw: String?): String? =
+        if (failure == null) raw else failure.diagnostic(raw) ?: context.getString(failure.messageRes)
 
     private fun downloadFailed(socket: Socket, id: String) {
         val task = findWebTask(id)
@@ -392,7 +340,7 @@ internal class WebUploadHttpServer(
                 val buffer = ByteArray(PrivateStorage.COPY_BUFFER_SIZE)
                 var remaining = length
                 while (remaining > 0L) {
-                    if (!open.get()) throw SocketException("服务已停止")
+                    if (socket.isClosed) throw SocketException("服务已停止")
                     val count = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
                     if (count < 0) throw EOFException("下载文件已变更")
                     if (count == 0) continue
@@ -413,12 +361,6 @@ internal class WebUploadHttpServer(
         respond(socket, 200, content, type)
     }
 
-    private fun required(query: Map<String, String>, key: String, allowEmpty: Boolean = false): String {
-        val value = query[key] ?: throw BadHttpRequest("缺少参数：$key")
-        if (!allowEmpty && value.isEmpty()) throw BadHttpRequest("参数不能为空：$key")
-        return value
-    }
-
     private fun jsonError(message: String): String = JSONObject().put("error", message).toString()
 
     private fun respond(socket: Socket, code: Int, body: String) =
@@ -434,8 +376,41 @@ internal class WebUploadHttpServer(
     }
 
     companion object {
-        const val PORT = 8765
         private val uploading = AtomicBoolean(false)
         private const val PROGRESS_INTERVAL_NANOS = 200_000_000L
     }
 }
+
+private fun required(query: Map<String, String>, key: String, allowEmpty: Boolean = false): String {
+    val value = query[key] ?: throw BadHttpRequest("缺少参数：$key")
+    if (!allowEmpty && value.isEmpty()) throw BadHttpRequest("参数不能为空：$key")
+    return value
+}
+
+/** 这四个列表字段也是删除请求的参数；身份不经过 JSON 数字，避免浏览器丢失低位。 */
+internal inline fun FileTreeEntry.writeWebDeleteTarget(put: (String, String) -> Unit) {
+    put("path", path)
+    put("type", if (isDirectory) "directory" else "file")
+    put("device", identity.device.toString())
+    put("inode", identity.inode.toString())
+}
+
+internal inline fun withWebDeleteTarget(
+    query: Map<String, String>,
+    delete: (String, PrivateFileIdentity, Boolean) -> Unit,
+) {
+    val path = required(query, "path")
+    val isDirectory = when (required(query, "type")) {
+        "file" -> false
+        "directory" -> true
+        else -> throw BadHttpRequest("文件类型无效")
+    }
+    val identity = PrivateFileIdentity(
+        device = requiredIdentityPart(query, "device"),
+        inode = requiredIdentityPart(query, "inode"),
+    )
+    delete(path, identity, isDirectory)
+}
+
+private fun requiredIdentityPart(query: Map<String, String>, key: String): Long =
+    required(query, key).toLongOrNull() ?: throw BadHttpRequest("文件身份无效：$key")

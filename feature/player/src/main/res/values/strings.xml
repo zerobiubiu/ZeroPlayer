@@ -16,13 +16,13 @@
     <string name="player_queue">播放队列</string>
     <string name="player_speed_format">%1$s×</string>
     <string name="player_time_format">%1$s / %2$s</string>
-    <string name="player_remaining_format">-%1$s</string>
-    <string name="player_ended_replay">播放结束，点击重播</string>
+    <string name="player_remaining_format">剩余 %1$s</string>
+    <string name="player_ended_replay">重播</string>
 
     <!-- 手势反馈 -->
     <string name="player_gesture_volume">音量 %1$d%%</string>
     <string name="player_gesture_brightness">亮度 %1$d%%</string>
-    <string name="player_gesture_temp_speed">%1$s× 临时倍速</string>
+    <string name="player_gesture_temp_speed">%1$s 临时倍速</string>
     <string name="player_seek_target">目标 %1$s</string>
     <string name="player_seek_tick">%1$s · 每格 %2$d 秒</string>
     <string name="player_seek_mode_accelerated">加速</string>
@@ -32,35 +32,38 @@
     <string name="player_seek_delta_format">%1$s%2$s 秒</string>
 
     <!-- 锁定与错误 -->
-    <string name="player_locked_hint">已锁定，点击解锁</string>
+    <string name="player_locked_hint">解锁屏幕</string>
     <string name="player_dismiss">知道了</string>
 
     <!-- 倍速面板 -->
     <string name="player_speed_sheet_title">播放速度</string>
+    <string name="player_speed_current">已选 %1$s</string>
+    <string name="player_speed_approximate">≈%1$s</string>
+    <string name="player_speed_preview">正在试播，松开选定</string>
+    <string name="player_speed_close">关闭播放速度</string>
 
     <!-- 音轨面板 -->
     <string name="player_audio_sheet_title">音轨</string>
     <string name="player_audio_none">没有可选音轨</string>
-    <string name="player_audio_default">音轨</string>
 
     <!-- 更多面板 -->
     <string name="player_lock_screen">锁定屏幕</string>
-    <string name="player_lock_screen_desc">隐藏控制，避免误触</string>
 
     <!-- 字幕面板 -->
     <string name="player_subtitle_off">关闭字幕</string>
-    <string name="player_subtitle_none_hint">未检测到字幕轨。可在详情页导入外挂字幕（srt、ass、ssa、vtt）。</string>
+    <string name="player_subtitle_none_hint">无字幕轨，可在详情页导入外挂字幕。</string>
     <string name="player_subtitle_delay">字幕延迟</string>
     <string name="player_subtitle_delay_value">%1$d ms</string>
     <string name="player_subtitle_delay_minus">-%1$d ms</string>
     <string name="player_subtitle_delay_plus">+%1$d ms</string>
     <string name="player_subtitle_delay_reset">重置</string>
-    <string name="player_subtitle_style_summary">字幕字号 %1$d%% · %2$s · %3$s（在设置中调整）</string>
+    <string name="player_edit_subtitle_appearance">调整字幕外观</string>
+    <string name="player_appearance_done">完成</string>
+    <string name="player_error_subtitle_settings_save">无法保存字幕设置：%1$s</string>
 
     <!-- 播放队列面板 -->
     <string name="player_queue_title">播放队列 · %1$d/%2$d</string>
     <string name="player_queue_empty_title">队列为空</string>
-    <string name="player_queue_empty_message">当前没有可播放的队列条目。</string>
     <string name="player_previous">上一集</string>
     <string name="player_next">下一集</string>
     <string name="player_mode_sequential">顺序播放</string>

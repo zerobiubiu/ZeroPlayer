@@ -41,6 +41,7 @@ import com.privateplayer.domain.model.AppSettings
 import com.privateplayer.domain.model.OperationOutcome
 import com.privateplayer.domain.model.SubtitlePreferences
 import com.privateplayer.domain.model.VideoAspect
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.repository.SettingsRepository
 import com.privateplayer.domain.usecase.SavePlaybackProgressUseCase
 import com.privateplayer.feature.player.PlaybackCoordinator
@@ -49,17 +50,21 @@ import java.io.DataOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Proxy
 import java.nio.file.Files
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
@@ -163,25 +168,36 @@ class FileTreeConsistencyInstrumentedTest {
         File(folder, "电影.mp4").writeText("视频")
         File(nested, "资料.txt").writeText("资料")
         val id = insertMedia("旧目录/电影.mp4", "电影", duration = 9_000L, position = 3_000L)
+        val privateSubtitle = storage.saveSubtitle(id, "私有.srt", "私有字幕".byteInputStream())
+        val sidecar = mediaFile("新片名.srt", "同目录字幕")
+        val containedSubtitles = listOf("旧目录/短片.mp4", "旧目录/子目录/花絮.mp4").map { path ->
+            mediaFile(path, "视频")
+            val containedId = insertMedia(path, "目录内视频")
+            storage.saveSubtitle(containedId, "外挂.srt", "目录内字幕".byteInputStream())
+        }
         database.playbackHistoryDao().insert(PlaybackHistoryEntity(mediaId = id, playedAt = 1L, positionMs = 3_000L, durationMs = 9_000L))
         val playlistId = database.playlistDao().insertPlaylist(PlaylistEntity(name = "旧数据", description = null, createdAt = 1L, updatedAt = 1L))
         database.playlistDao().insertItem(PlaylistItemEntity(playlistId, id, 0, 1L))
 
-        repository.rename("旧目录", "新目录")
+        val renamedDirectory = repository.rename("旧目录", "新目录")
         assertFalse(folder.exists())
         assertEquals("media/新目录/电影.mp4", database.mediaDao().findById(id)?.relativePath)
         assertEquals("资料", File(storage.mediaRoot, "新目录/子目录/资料.txt").readText())
         repository.rename("新目录/电影.mp4", "新片名.mkv")
-        repository.move("新目录/新片名.mkv", "")
+        val movedVideo = repository.move("新目录/新片名.mkv", "")
         val moved = database.mediaDao().findById(id)!!
         assertEquals("media/新片名.mkv", moved.relativePath)
         assertEquals("新片名.mkv", moved.fileName)
         assertEquals("新片名", moved.displayName)
         assertEquals(3_000L, moved.playbackPositionMs)
         assertTrue(repository.openForRead("新片名.mkv").isFile)
-        repository.delete("新目录")
+        repository.delete(renamedDirectory)
+        assertTrue(containedSubtitles.none { it.parentFile!!.exists() })
+        assertTrue(privateSubtitle.isFile)
         assertEquals(1, database.playbackHistoryDao().findForMedia(id).size)
-        repository.delete("新片名.mkv")
+        repository.delete(movedVideo)
+        assertFalse(privateSubtitle.parentFile!!.exists())
+        assertEquals("同目录字幕", sidecar.readText())
         assertNull(database.mediaDao().findById(id))
         assertTrue(database.playbackHistoryDao().findForMedia(id).isEmpty())
         assertTrue(database.playlistDao().observeItems(playlistId).first().isEmpty())
@@ -224,7 +240,7 @@ class FileTreeConsistencyInstrumentedTest {
         val protectedFile = File(outsideDirectory, "保留.txt").apply { writeText("保留") }
         val withLink = File(storage.mediaRoot, "含链接").apply { check(mkdir()) }
         Files.createSymbolicLink(File(withLink, "外部").toPath(), outsideDirectory.toPath())
-        repository.delete("含链接")
+        repository.delete(requireNotNull(repository.find(withLink.name)))
         assertFalse(withLink.exists())
         assertEquals("保留", protectedFile.readText())
     }
@@ -259,6 +275,7 @@ class FileTreeConsistencyInstrumentedTest {
         val folder = File(storage.mediaRoot, "待处理").apply { check(mkdir()) }
         File(folder, "电影.mp4").writeText("视频")
         val id = insertMedia("待处理/电影.mp4", "电影", position = 10L)
+        val subtitle = storage.saveSubtitle(id, "回滚.srt", "保留".byteInputStream())
         database.playbackHistoryDao().insert(PlaybackHistoryEntity(mediaId = id, playedAt = 1L, positionMs = 10L, durationMs = 100L))
         val playlistId = database.playlistDao().insertPlaylist(PlaylistEntity(name = "旧数据", description = null, createdAt = 1L, updatedAt = 1L))
         database.playlistDao().insertItem(PlaylistItemEntity(playlistId, id, 0, 1L))
@@ -273,12 +290,13 @@ class FileTreeConsistencyInstrumentedTest {
         assertEquals("media/待处理/电影.mp4", database.mediaDao().findById(id)?.relativePath)
 
         try {
-            newRepository(failingDao("deleteById")).delete("待处理")
+            newRepository(failingDao("deleteById")).delete(requireNotNull(repository.find(folder.name)))
             fail("应传播数据库故障")
         } catch (_: IllegalStateException) {
         }
         assertTrue(File(folder, "电影.mp4").isFile)
         assertNotNull(database.mediaDao().findById(id))
+        assertEquals("保留", subtitle.readText())
         assertEquals(1, database.playbackHistoryDao().findForMedia(id).size)
         assertEquals(1, database.playlistDao().observeItems(playlistId).first().size)
     }
@@ -292,14 +310,14 @@ class FileTreeConsistencyInstrumentedTest {
         val commits = ImportCommitJournal(storage)
         val prepared = storage.withMediaTreeLock { commits.prepare(task, staging) }
         val target = storage.withMediaTreeLock { commits.commit(prepared) }
-        assertEquals(folder.canonicalFile, target.parentFile)
+        assertTrue(Files.isSameFile(folder.toPath(), target.toPath().parent))
         try {
             repository.rename("导入中", "新目录")
             fail("不应移动尚未恢复的导入")
         } catch (_: IOException) {
         }
         try {
-            repository.delete("导入中/影片.mp4")
+            repository.delete(requireNotNull(repository.find("导入中/影片.mp4")))
             fail("不应删除尚未恢复的导入")
         } catch (_: IOException) {
         }
@@ -317,6 +335,7 @@ class FileTreeConsistencyInstrumentedTest {
         val folder = File(storage.mediaRoot, "原目录").apply { check(mkdir()) }
         File(folder, "电影.mp4").writeText("视频")
         val id = insertMedia("原目录/电影.mp4", "电影", position = 7L)
+        val privateSubtitle = storage.saveSubtitle(id, "私有.srt", "保留至提交".byteInputStream())
         val target = File(storage.mediaRoot, "新目录")
 
         var journal = writeJournal("MOVE", "原目录", "新目录", id to "media/原目录/电影.mp4")
@@ -341,14 +360,91 @@ class FileTreeConsistencyInstrumentedTest {
         assertTrue(File(target, "电影.mp4").isFile)
         assertFalse(journal.exists())
         assertNotNull(database.mediaDao().findById(id))
+        assertEquals("保留至提交", privateSubtitle.readText())
 
         journal = writeJournal("DELETE", "新目录", "", id to "media/新目录/电影.mp4")
         Files.move(target.toPath(), File(journal, "payload").toPath())
         database.mediaDao().deleteById(id)
+        // 兼容旧日志或清理中再次中断：payload 可能已消失，专属字幕仍须清理。
+        check(File(journal, "payload").deleteRecursively())
         repository.list("")
         assertFalse(target.exists())
         assertFalse(journal.exists())
         assertNull(database.mediaDao().findById(id))
+        assertFalse(privateSubtitle.parentFile!!.exists())
+    }
+
+    @Test
+    fun `列表身份拒绝同名替代及类型变更而不阻断其他已选项`() = runBlocking {
+        val siblings = listOf("第一.txt", "第二.txt").map { mediaFile(it, "兄弟项") }
+        val selected = repository.list("")
+        for (wasDirectory in listOf(false, true)) {
+            for (nowDirectory in listOf(false, true)) {
+                val path = "目标-$wasDirectory-$nowDirectory"
+                val mediaPath = if (wasDirectory) "$path/原片.mp4" else path
+                mediaFile(mediaPath, "原件")
+                val id = insertMedia(mediaPath, "原件")
+                val snapshot = repository.list("").single { it.path == path }
+                val source = File(storage.mediaRoot, path)
+                Files.move(source.toPath(), File(testRoot, path).toPath())
+                val replacement = if (nowDirectory) mediaFile("$path/新内容", "替代") else mediaFile(path, "替代")
+                try {
+                    repository.delete(snapshot)
+                    fail("不能删除弹框期间同名出现的另一对象")
+                } catch (_: FileTreeEntryChangedException) {
+                }
+                assertEquals("替代", replacement.readText())
+                assertEquals("media/$mediaPath", database.mediaDao().findById(id)?.relativePath)
+            }
+        }
+        try {
+            repository.delete(selected.first().copy(isDirectory = true))
+            fail("文件身份相同但类型不符，也不能删除")
+        } catch (_: FileTreeEntryChangedException) {
+        }
+        assertTrue(File(storage.backupsRoot, ".file-tree-operations").listFiles()!!.isEmpty())
+        selected.forEach { repository.delete(it) }
+        assertTrue(siblings.none { it.exists() })
+    }
+
+    @Test
+    fun `字幕复制失败不发布半成品且并发同名导入不覆盖`() = runBlocking {
+        val id = 21L
+        val original = storage.saveSubtitle(id, "对白.srt", "原有字幕".byteInputStream())
+        val originalIdentity = storage.fileIdentity(original)
+        val copying = CountDownLatch(1)
+        val finish = CountDownLatch(1)
+        val failed = async(Dispatchers.IO) {
+            val interrupted = object : InputStream() {
+                private var sent = false
+                override fun read(): Int = error("应按块读取")
+                override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                    if (!sent) {
+                        sent = true
+                        buffer[offset] = 1
+                        return 1
+                    }
+                    copying.countDown()
+                    check(finish.await(10, TimeUnit.SECONDS))
+                    throw IOException("模拟来源中断")
+                }
+            }
+            runCatching { storage.saveSubtitle(id, original.name, interrupted) }.exceptionOrNull()
+        }
+        val added = try {
+            assertTrue(copying.await(10, TimeUnit.SECONDS))
+            assertEquals(originalIdentity, storage.fileIdentity(storage.listSubtitles(id).single()))
+            storage.saveSubtitle(id, original.name, "另一份字幕".byteInputStream())
+        } finally {
+            finish.countDown()
+        }
+        assertTrue(failed.await() is IOException)
+        assertEquals("原有字幕", original.readText())
+        assertEquals("另一份字幕", added.readText())
+        val expected = mapOf(original.name to originalIdentity, added.name to storage.fileIdentity(added))
+        assertEquals(2, expected.size)
+        assertEquals(expected, storage.listSubtitles(id).associate { it.name to storage.fileIdentity(it) })
+        assertEquals(expected, original.parentFile!!.listFiles()!!.associate { it.name to storage.fileIdentity(it) })
     }
 
     @Test
@@ -390,7 +486,7 @@ class FileTreeConsistencyInstrumentedTest {
         val afterMove = storage.withMediaTreeLock { recovered.read(task)!! }
         assertEquals(prepared.identity, storage.fileIdentity(recovered.content(afterMove)))
         assertEquals("完整暂存", recovered.content(afterMove).readText())
-        assertEquals(target, storage.withMediaTreeLock { recovered.commit(afterMove) })
+        assertEquals(prepared.identity, storage.fileIdentity(storage.withMediaTreeLock { recovered.commit(afterMove) }))
 
         database.importTaskDao().completeWithNotice(id, null, null, 3L)
         // 数据库已提交、日志尚未清理时重启，只清理日志，不能再回退正式文件。
@@ -480,7 +576,7 @@ class FileTreeConsistencyInstrumentedTest {
             override suspend fun isActive(taskId: String): Boolean = false
         }
         val imports = ImportRepositoryImpl(
-            database.importTaskDao(), storage, repository,
+            database.importTaskDao(), database.mediaDao(), storage, repository,
             SafDocuments(ApplicationProvider.getApplicationContext()), scheduler, Dispatchers.IO,
         )
         imports.cancel(id)
@@ -489,7 +585,12 @@ class FileTreeConsistencyInstrumentedTest {
         assertEquals(prepared.identity, storage.fileIdentity(staged))
         assertEquals("取消后保留", staged.readText())
         assertFalse(File(storage.mediaRoot, "取消.bin").exists())
-        imports.removeTask(id)
+        try {
+            imports.removeTask(id)
+            fail("未清除的网页暂存不能静默移除记录")
+        } catch (error: IOException) {
+            assertTrue(error.message.orEmpty().contains("网页"))
+        }
         assertNotNull(database.importTaskDao().findById(id))
         assertTrue(staged.isFile)
         imports.retry(id)
@@ -524,8 +625,7 @@ class FileTreeConsistencyInstrumentedTest {
         }
         assertFalse(File(storage.mediaRoot, "接收").exists())
         assertEquals(prepared.identity, storage.fileIdentity(staged))
-        repository.createDirectory("", "接收")
-        repository.delete("接收")
+        repository.delete(repository.createDirectory("", "接收"))
         try {
             storage.withMediaTreeLock { commits.commit(prepared) }
             fail("不能把已删除的目标目录重新创建")
@@ -658,13 +758,13 @@ class FileTreeConsistencyInstrumentedTest {
 
         // 移动：进入子目录，记录路径同步
         check(File(storage.mediaRoot, "目标").mkdir())
-        repository.move("改名后.mp4", "目标")
+        val movedEntry = repository.move("改名后.mp4", "目标")
         assertFalse(renamed.exists())
         assertEquals("media/目标/改名后.mp4", database.mediaDao().findById(id)?.relativePath)
         assertTrue(File(storage.mediaRoot, "目标/改名后.mp4").isFile)
 
         // 删除：媒体、播放历史一并清除，磁盘文件消失
-        repository.delete("目标/改名后.mp4")
+        repository.delete(movedEntry)
         assertNull(database.mediaDao().findById(id))
         assertTrue(database.playbackHistoryDao().findForMedia(id).isEmpty())
         assertFalse(File(storage.mediaRoot, "目标/改名后.mp4").exists())
@@ -727,9 +827,10 @@ class FileTreeConsistencyInstrumentedTest {
             assertEquals(2, coordinator.uiState.value.queue.size)
 
             // 删除当前播放媒体：先停服，再删文件
+            val selected = requireNotNull(repository.find(video.name))
             coordinator.stopForFileOperation("播放中.mp4")
             assertEquals("应请求停服一次", 1, stopRequests.get())
-            repository.delete("播放中.mp4")
+            repository.delete(selected)
             assertFalse(video.exists())
             assertNull(database.mediaDao().findById(id))
 
@@ -752,9 +853,10 @@ class FileTreeConsistencyInstrumentedTest {
                 while (coordinator.uiState.value.mediaId != siblingId) delay(50)
             }
             val unrelated = mediaFile("无关.txt", "文本")
+            val selectedUnrelated = requireNotNull(repository.find(unrelated.name))
             coordinator.stopForFileOperation("无关.txt")
             assertEquals(1, stopRequests.get())
-            repository.delete("无关.txt")
+            repository.delete(selectedUnrelated)
             assertFalse(unrelated.exists())
         } finally {
             val cleanup = AtomicReference<Deferred<Unit>?>()
@@ -961,6 +1063,40 @@ class FileTreeConsistencyInstrumentedTest {
     }
 
     @Test
+    fun progressBackfillsOnlyMissingDurationAndCountsEachSaveOnce() = runBlocking {
+        val id = insertMedia("待测.mp4", "待测", duration = -1L)
+        val otherId = insertMedia("未播放.mp4", "未播放", duration = 0L)
+        val dao = database.mediaDao()
+        val other = requireNotNull(dao.findById(otherId))
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val settings = object : SettingsRepository by PreferencesSettingsRepository(context) {
+            override fun observeSettings() = flowOf(AppSettings())
+        }
+        val save = SavePlaybackProgressUseCase(
+            MediaRepositoryImpl(dao, database.folderDao(), storage, repository, Dispatchers.IO),
+            PlaybackHistoryRepositoryImpl(database.playbackHistoryDao(), Dispatchers.IO),
+            settings,
+        )
+        suspend fun record(position: Long, observed: Long, increment: Int = 0) {
+            assertEquals(OperationOutcome.Success, save(id, position, observed, watchedMs = 100L, playIncrement = increment))
+        }
+        record(300L, 0L, increment = 1)
+        assertEquals(-1L, requireNotNull(dao.findById(id)).durationMs)
+        record(400L, -20L)
+        assertEquals(-1L, requireNotNull(dao.findById(id)).durationMs)
+        record(500L, 10_000L)
+        assertEquals(10_000L, requireNotNull(dao.findById(id)).durationMs)
+        record(600L, 20_000L)
+        val saved = requireNotNull(dao.findById(id))
+        assertEquals(10_000L, saved.durationMs)
+        assertEquals(600L, saved.playbackPositionMs)
+        assertEquals(400L, saved.playedDurationMs)
+        assertEquals(1, saved.playCount)
+        assertEquals(1, database.playbackHistoryDao().findForMedia(id, limit = 2).size)
+        assertEquals(other, dao.findById(otherId))
+    }
+
+    @Test
     fun `数据库进度和外部通知均刷新当前目录`() = runBlocking {
         mediaFile("电影.mp4", "视频")
         val id = insertMedia("电影.mp4", "电影", duration = 1000L, position = 10L)
@@ -969,7 +1105,7 @@ class FileTreeConsistencyInstrumentedTest {
         val observer = launch { repository.observeDirectory("").collect { emissions.send(it) } }
         try {
             withTimeout(10_000) { emissions.receive() }
-            database.mediaDao().recordProgress(id, 222L, 0L, 0, 5L)
+            database.mediaDao().recordProgress(id, positionMs = 222L, observedDurationMs = 0L, watchedMs = 0L, playIncrement = 0, now = 5L)
             withTimeout(10_000) {
                 while (emissions.receive().singleOrNull { it.path == "电影.mp4" }?.playbackPositionMs != 222L) Unit
             }

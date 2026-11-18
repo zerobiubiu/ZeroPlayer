@@ -10,6 +10,7 @@ import android.os.SystemClock
 import android.provider.Settings
 import android.view.HapticFeedbackConstants
 import android.view.KeyEvent
+import android.view.ViewTreeObserver
 import android.view.WindowManager
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -26,12 +27,13 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -46,7 +48,6 @@ import androidx.compose.material.icons.outlined.ScreenRotation
 import androidx.compose.material.icons.outlined.Shuffle
 import androidx.compose.material.icons.outlined.SkipNext
 import androidx.compose.material.icons.outlined.SkipPrevious
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.VolumeOff
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,9 +69,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.testTag
@@ -83,11 +88,11 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.privateplayer.core.common.format.formatDuration
 import com.privateplayer.core.design.components.ActionSheet
-import com.privateplayer.core.design.components.EmptyState
 import com.privateplayer.core.design.components.ImmersiveSheetWindowEffect
 import com.privateplayer.core.design.components.SheetAction
 import com.privateplayer.core.design.components.SheetActionKind
@@ -117,9 +122,7 @@ fun PlayerScreen(
     // 手势反馈文案在组合期解析模板，回调中只做格式化，配置变化后仍取最新资源。
     val volumeFormat = stringResource(R.string.player_gesture_volume)
     val brightnessFormat = stringResource(R.string.player_gesture_brightness)
-    val rewindFormat = stringResource(R.string.player_rewind_seconds)
-    val forwardFormat = stringResource(R.string.player_forward_seconds)
-    val tempSpeedFormat = stringResource(R.string.player_gesture_temp_speed)
+    val seekDeltaFormat = stringResource(R.string.player_seek_delta_format)
 
     var brightness by remember { mutableFloatStateOf(readBrightness(activity)) }
     var volume by remember { mutableIntStateOf(audioManager?.getStreamVolume(AudioManager.STREAM_MUSIC) ?: 0) }
@@ -138,12 +141,44 @@ fun PlayerScreen(
     var lastSeekHapticAt by remember { mutableLongStateOf(0L) }
     var gestureMessage by remember { mutableStateOf<String?>(null) }
     var gestureMessageRevision by remember { mutableIntStateOf(0) }
-    var showSpeedSheet by remember { mutableStateOf(false) }
+    fun showFeedback(text: String) {
+        gestureMessage = text
+        gestureMessageRevision++
+    }
     var showSubtitleSheet by remember { mutableStateOf(false) }
+    var editingSubtitleAppearance by remember { mutableStateOf(false) }
     var showAudioSheet by remember { mutableStateOf(false) }
     var showAspectSheet by remember { mutableStateOf(false) }
     var showMoreSheet by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
+    val controlsVisible = state.controlsVisible && !state.locked
+    val speedMediaId = state.mediaId
+    val speedControl = remember(viewModel, view, speedMediaId, controlsVisible, LocalConfiguration.current) {
+        PlayerSpeedControlState(
+            beginPreview = { viewModel.beginSpeedPreview(surfaceOwner, speedMediaId) },
+            hapticsEnabled = { viewModel.uiState.value.gesturePrefs.hapticsEnabled },
+            haptic = { feedback ->
+                view.performHapticFeedback(if (feedback == SpeedHaptic.LongPress) HapticFeedbackConstants.LONG_PRESS else HapticFeedbackConstants.CLOCK_TICK)
+            },
+        )
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_PAUSE) {
+        speedControl.dismiss()
+        viewModel.endTemporarySpeed()
+    }
+    DisposableEffect(view, speedControl) {
+        val listener = ViewTreeObserver.OnWindowFocusChangeListener { focused ->
+            if (!focused) {
+                speedControl.dismiss()
+                viewModel.endTemporarySpeed()
+            }
+        }
+        view.viewTreeObserver.addOnWindowFocusChangeListener(listener)
+        onDispose {
+            if (view.viewTreeObserver.isAlive) view.viewTreeObserver.removeOnWindowFocusChangeListener(listener)
+            speedControl.dismiss()
+        }
+    }
 
     // 关闭播放页即结束播放；按主页键退到桌面不触发返回，后台播放保留。
     val closePlayer = remember(viewModel, onBack) {
@@ -152,7 +187,7 @@ fun PlayerScreen(
             onBack()
         }
     }
-    BackHandler(onBack = closePlayer)
+    BackHandler { if (speedControl.active) speedControl.dismiss() else closePlayer() }
 
     // 沉浸式：隐藏系统栏 + 常亮 + 允许画面进入缺口；离开页面时恢复。
     DisposableEffect(Unit) {
@@ -199,9 +234,8 @@ fun PlayerScreen(
                     audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, 0)
                     maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                     volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, maxVolume)
-                    gestureMessage = volumeFormat.format(volume * 100 / maxVolume)
+                    showFeedback(volumeFormat.format(volume * 100 / maxVolume))
                     if (!seekActive) seekPreview = null
-                    gestureMessageRevision++
                 }
                 true
             }
@@ -222,9 +256,7 @@ fun PlayerScreen(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 面板是独立窗口，系统栏由各面板自身的窗口处理（见 ActionSheet 的 immersive 参数）。
-    // 这里不再按面板状态重复隐藏 Activity 窗口的系统栏：那是旧实现，
-    // 对面板窗口无效，且与 DisposableEffect 中的恢复逻辑相互竞争。
+    // 独立面板由各自窗口维持沉浸式；选速板与视频共用窗口，不改系统栏。
 
     LaunchedEffect(gestureMessage, gestureMessageRevision) {
         if (gestureMessage != null) {
@@ -251,28 +283,33 @@ fun PlayerScreen(
     }
 
     // 播放中 4 秒后自动隐藏控制层。
-    LaunchedEffect(state.controlsVisible, state.playback.status, state.locked, seekActive) {
-        if (state.controlsVisible && state.playback.status == PlaybackStatus.PLAYING && !state.locked && !seekActive) {
+    LaunchedEffect(controlsVisible, state.playback.status, seekActive, speedControl.active) {
+        if (controlsVisible && state.playback.status == PlaybackStatus.PLAYING && !seekActive && !speedControl.active) {
             delay(4_000)
-            viewModel.setControlsVisible(false)
+            if (!speedControl.active) viewModel.setControlsVisible(false)
         }
     }
 
     LaunchedEffect(state.error) {
-        if (state.error != null) viewModel.setControlsVisible(true)
+        if (state.error != null) {
+            speedControl.dismiss()
+            viewModel.setControlsVisible(true)
+        }
     }
 
     val handleGesture: (PlayerGesture) -> Unit = { gesture ->
         when (gesture) {
                     PlayerGesture.SingleTap -> viewModel.toggleControls()
 
-                    is PlayerGesture.DoubleTap -> {
+                    PlayerGesture.DoubleTap.PlayPause -> if (!state.locked) viewModel.playPause()
+
+                    PlayerGesture.DoubleTap.Rewind, PlayerGesture.DoubleTap.Forward -> {
                         if (!state.locked && state.playback.durationMs > 0L) {
-                            val step = state.playbackPrefs.seekStepSeconds * 1_000L
-                            viewModel.seekBy(if (gesture.leftSide) -step else step)
+                            val rewind = gesture == PlayerGesture.DoubleTap.Rewind
+                            val seconds = state.playbackPrefs.seekStepSeconds
+                            viewModel.seekBy((if (rewind) -seconds else seconds) * 1_000L)
                             seekPreview = null
-                            gestureMessage = (if (gesture.leftSide) rewindFormat else forwardFormat)
-                                .format(state.playbackPrefs.seekStepSeconds)
+                            showFeedback(seekDeltaFormat.format(if (rewind) "−" else "+", seconds.toString()))
                         }
                     }
 
@@ -345,14 +382,14 @@ fun PlayerScreen(
                             DragMode.BRIGHTNESS -> {
                                 brightness = (baseBrightness - gesture.dyFraction).coerceIn(0.05f, 1f)
                                 applyBrightness(activity, brightness)
-                                gestureMessage = brightnessFormat.format((brightness * 100).toInt())
+                                showFeedback(brightnessFormat.format((brightness * 100).toInt()))
                             }
 
                             DragMode.VOLUME -> {
                                 volume = (baseVolume - gesture.dyFraction * maxVolume * 1.5f).roundToInt()
                                     .coerceIn(0, maxVolume)
                                 audioManager?.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
-                                gestureMessage = volumeFormat.format(volume * 100 / maxVolume)
+                                showFeedback(volumeFormat.format(volume * 100 / maxVolume))
                             }
                             DragMode.IGNORED -> Unit
                         }
@@ -383,7 +420,6 @@ fun PlayerScreen(
                     PlayerGesture.LongPressStart -> {
                         if (state.gesturePrefs.longPressSpeedEnabled) {
                             viewModel.beginTemporarySpeed(state.playbackPrefs.longPressSpeed)
-                            gestureMessage = tempSpeedFormat.format(state.playbackPrefs.longPressSpeed.toString())
                         }
                     }
 
@@ -393,12 +429,24 @@ fun PlayerScreen(
                 }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    PlayerSpeedMenuHost(speedControl, state.playback.speed, feedback = { candidate ->
+        val error = state.error
+        val fromFan = candidate >= SpeedFanGeometry.Origin
+        val actual = state.playback.speed
+        val confirmed = state.playback.mediaId == state.mediaId &&
+            (if (fromFan) SpeedPresets[candidate] == actual else state.surfaceHoldSpeed == actual)
+        if (error != null || confirmed) PlayerFeedbackLayer(avoidFan = if (fromFan && error == null) speedControl.geometry else null) {
+            if (error != null) PlayerErrorBanner(error, onDismiss = viewModel::consumeError)
+            else PlayerTemporarySpeedHud(actual, describedByFan = fromFan, modifier = if (fromFan) Modifier.onGloballyPositioned {
+                speedControl.bubble.hudInRoot = it.boundsInRoot()
+            } else Modifier)
+        }
+    }) {
         // 手势只盖在视频画面上：按钮所在的控件层在它之上，不会被滑动识别抢走点击。
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .playerGestures(enabled = !state.locked) { gesture ->
+                .playerGestures(enabled = !state.locked && !speedControl.active) { gesture ->
                     handleGesture(gesture)
                 },
         ) {
@@ -414,29 +462,36 @@ fun PlayerScreen(
                 }
             }
         }
+        val preview = seekPreview
+        val message = gestureMessage
+        val showReplay = state.playback.status == PlaybackStatus.ENDED && state.controlsVisible && !state.locked
+        if (state.error == null && state.surfaceHoldSpeed == null && !speedControl.expanded && (preview != null || message != null || showReplay)) {
+            PlayerFeedbackLayer {
+                when {
+                    preview != null -> PlayerSeekGestureOverlay(preview)
+                    message != null -> PlayerFeedbackPill(message)
+                    else -> Surface(color = Color.Black.copy(alpha = 0.7f), shape = MaterialTheme.shapes.medium, onClick = viewModel::playPause) {
+                        Text(stringResource(R.string.player_ended_replay), style = MaterialTheme.typography.titleSmall, color = Color.White,
+                            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md))
+                    }
+                }
+            }
+        }
 
         // 控件层独立：顶部、底部与浮层按钮优先接收触摸。
-        Box(modifier = Modifier.fillMaxSize()) {
-            val controlsVisible = state.controlsVisible && !state.locked
-
+        // 扇面上方不露出被截断的片名或时间；只停绘，按钮布局与 DOWN 已建立的指针链仍在。
+        Box(modifier = Modifier.fillMaxSize().drawWithContent { if (!speedControl.expanded) drawContent() }) {
             Column(modifier = Modifier.fillMaxSize()) {
                 AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
                     PlayerTopBar(
                         title = state.title,
                         onBack = closePlayer,
-                        onOpenAspect = { showAspectSheet = true },
                         onRotate = { activity?.toggleOrientation() },
                         onOpenSubtitle = { showSubtitleSheet = true },
                         onOpenMore = { showMoreSheet = true },
                     )
                 }
                 Spacer(Modifier.weight(1f))
-                PlayerGestureFeedback(
-                    preview = seekPreview,
-                    message = gestureMessage,
-                    modifier = Modifier.align(Alignment.CenterHorizontally)
-                        .padding(horizontal = 16.dp, vertical = 4.dp),
-                )
                 AnimatedVisibility(visible = controlsVisible, enter = fadeIn(), exit = fadeOut()) {
                     PlayerBottomControls(
                         snapshot = state.playback,
@@ -446,7 +501,7 @@ fun PlayerScreen(
                             if (duration > 0) {
                                 seekPreview = null
                                 val target = (fraction * duration).toLong()
-                                gestureMessage = if (target == 0L) "00:00" else formatDuration(target)
+                                showFeedback(if (target == 0L) "00:00" else formatDuration(target))
                             }
                         },
                         onSeekCommit = { fraction ->
@@ -456,11 +511,27 @@ fun PlayerScreen(
                         onSeekBack = { viewModel.seekBy(-state.playbackPrefs.seekStepSeconds * 1_000L) },
                         onSeekForward = { viewModel.seekBy(state.playbackPrefs.seekStepSeconds * 1_000L) },
                         onPlayPause = viewModel::playPause,
-                        onOpenSpeed = { showSpeedSheet = true },
+                        speedControl = { modifier -> PlayerSpeedButton(state.playback.speed, speedControl, modifier) },
                         onOpenQueue = { showQueueSheet = true },
                     )
                 }
             }
+        }
+
+        if (editingSubtitleAppearance) {
+            PlayerSubtitleAppearancePanel(
+                preferences = state.subtitlePrefs,
+                actions = remember(viewModel) {
+                    com.privateplayer.core.design.components.SubtitleAppearanceActions(
+                        viewModel::setSubtitleFontScale, viewModel::setSubtitleFont, viewModel::setSubtitleFontStyle,
+                        viewModel::setSubtitleTextColor, viewModel::setSubtitleBackground,
+                        viewModel::setSubtitleVerticalOffset, viewModel::setSubtitleOverrideAss,
+                    )
+                },
+                onBack = { editingSubtitleAppearance = false; showSubtitleSheet = true },
+                onDone = { editingSubtitleAppearance = false },
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
 
         if (state.locked) {
@@ -472,57 +543,6 @@ fun PlayerScreen(
             )
         }
 
-        state.error?.let { message ->
-            PlayerErrorBanner(
-                message = message,
-                onDismiss = viewModel::consumeError,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 96.dp),
-            )
-        }
-
-        AnimatedVisibility(
-            visible = state.playback.status == PlaybackStatus.ENDED && state.controlsVisible,
-            enter = fadeIn(),
-            exit = fadeOut(),
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 208.dp),
-        ) {
-            Surface(
-                color = Color.Black.copy(alpha = 0.7f),
-                shape = RoundedCornerShape(16.dp),
-                onClick = viewModel::playPause,
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp),
-                ) {
-                    Text(text = stringResource(R.string.player_ended_replay), style = MaterialTheme.typography.titleSmall, color = Color.White)
-                }
-            }
-        }
-    }
-
-    if (showSpeedSheet) {
-        ActionSheet(
-            title = stringResource(R.string.player_speed_sheet_title),
-            immersive = true,
-            actions = SPEED_OPTIONS.map { speed ->
-                SheetAction(
-                    label = stringResource(R.string.player_speed_format, speed.toString()),
-                    icon = Icons.Outlined.Speed,
-                    kind = SheetActionKind.SingleChoice,
-                    selected = speed == state.playback.speed,
-                    onClick = {
-                        viewModel.setSpeed(speed)
-                        showSpeedSheet = false
-                    },
-                )
-            },
-            onDismiss = { showSpeedSheet = false },
-        )
     }
 
     if (showAspectSheet) {
@@ -575,7 +595,7 @@ fun PlayerScreen(
 
     if (showMoreSheet) {
         ActionSheet(
-            title = state.title,
+            title = stringResource(R.string.player_more),
             immersive = true,
             actions = moreSheetActions(
                 state = state,
@@ -622,29 +642,12 @@ fun PlayerScreen(
             onSelectTrack = viewModel::selectSubtitleTrack,
             onAdjustDelay = viewModel::adjustSubtitleDelay,
             onResetDelay = viewModel::resetSubtitleDelay,
+            onAppearance = { showSubtitleSheet = false; editingSubtitleAppearance = true },
             onDismiss = { showSubtitleSheet = false },
         )
     }
 }
 
-@Composable
-private fun PlayerGestureFeedback(
-    preview: SeekGesturePreview?,
-    message: String?,
-    modifier: Modifier = Modifier,
-) {
-    if (preview != null) {
-        PlayerSeekGestureOverlay(preview = preview, modifier = modifier)
-    } else {
-        PlayerGestureOverlay(message = message, modifier = modifier)
-    }
-}
-
-@Composable
-private fun audioLabel(state: PlayerUiState): String {
-    val track = state.audioTracks.firstOrNull { it.id == state.selectedAudioTrackId }
-    return track?.label ?: stringResource(R.string.player_audio_default)
-}
 
 /** 播放模式各自使用语义相符的图标，避免四种模式共用同一个图标。 */
 private val PlayMode.icon: ImageVector
@@ -687,14 +690,13 @@ fun moreSheetActions(
         label = stringResource(R.string.player_lock_screen),
         icon = Icons.Outlined.Lock,
         kind = SheetActionKind.Action,
-        supportingText = stringResource(R.string.player_lock_screen_desc),
         onClick = onLock,
     ),
     SheetAction(
         label = stringResource(R.string.player_audio_sheet_title),
         icon = Icons.Outlined.VolumeUp,
         kind = SheetActionKind.Navigation,
-        supportingText = audioLabel(state),
+        supportingText = state.audioTracks.firstOrNull { it.id == state.selectedAudioTrackId }?.label,
         onClick = onOpenAudio,
     ),
     SheetAction(
@@ -706,85 +708,6 @@ fun moreSheetActions(
     ),
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SubtitleSheet(
-    state: PlayerUiState,
-    onSelectTrack: (String?) -> Unit,
-    onAdjustDelay: (Long) -> Unit,
-    onResetDelay: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    ) {
-        ImmersiveSheetWindowEffect()
-        Column(modifier = Modifier.padding(bottom = 24.dp)) {
-            Text(
-                text = stringResource(R.string.player_subtitle),
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-            )
-            SelectionRow(
-                label = stringResource(R.string.player_subtitle_off),
-                selected = state.selectedSubtitleTrackId == null,
-                onClick = { onSelectTrack(null) },
-            )
-            state.subtitleTracks.forEach { track ->
-                SelectionRow(
-                    label = track.label,
-                    selected = track.id == state.selectedSubtitleTrackId,
-                    onClick = { onSelectTrack(track.id) },
-                )
-            }
-            if (state.subtitleTracks.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.player_subtitle_none_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.player_subtitle_delay), style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        text = stringResource(R.string.player_subtitle_delay_value, state.subtitleDelayMs),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                TextButton(onClick = { onAdjustDelay(-state.subtitlePrefs.delayStepMs.toLong()) }) {
-                    Text(stringResource(R.string.player_subtitle_delay_minus, state.subtitlePrefs.delayStepMs))
-                }
-                TextButton(onClick = { onAdjustDelay(state.subtitlePrefs.delayStepMs.toLong()) }) {
-                    Text(stringResource(R.string.player_subtitle_delay_plus, state.subtitlePrefs.delayStepMs))
-                }
-                TextButton(onClick = onResetDelay) { Text(stringResource(R.string.player_subtitle_delay_reset)) }
-            }
-            Text(
-                text = stringResource(
-                    R.string.player_subtitle_style_summary,
-                    (state.subtitlePrefs.fontSizeScale * 100).toInt(),
-                    stringResource(state.subtitlePrefs.background.labelRes),
-                    stringResource(state.subtitlePrefs.textColor.labelRes),
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-            )
-        }
-    }
-}
 
 /**
  * 单选行：字幕轨、播放队列条目与播放模式共用。
@@ -793,7 +716,7 @@ private fun SubtitleSheet(
  * 单选语义保持一致（F-16）。
  */
 @Composable
-private fun SelectionRow(label: String, selected: Boolean, onClick: () -> Unit) {
+internal fun SelectionRow(label: String, selected: Boolean, maxLines: Int = 1, onClick: () -> Unit) {
     val containerColor = if (selected) {
         MaterialTheme.colorScheme.secondaryContainer
     } else {
@@ -818,7 +741,7 @@ private fun SelectionRow(label: String, selected: Boolean, onClick: () -> Unit) 
                 text = label,
                 style = MaterialTheme.typography.bodyMedium,
                 color = titleColor,
-                maxLines = 1,
+                maxLines = maxLines,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
@@ -864,23 +787,17 @@ fun PlaybackQueueSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         ImmersiveSheetWindowEffect()
-        Column(modifier = Modifier.navigationBarsPadding().padding(bottom = Spacing.lg)) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = Spacing.lg)) {
             Text(
-                text = stringResource(
-                    R.string.player_queue_title,
-                    (state.queueIndex + 1).coerceAtLeast(1),
-                    state.queue.size.coerceAtLeast(1),
-                ),
+                text = when {
+                    state.queue.isEmpty() -> stringResource(R.string.player_queue_empty_title)
+                    state.queueIndex in state.queue.indices -> stringResource(R.string.player_queue_title, state.queueIndex + 1, state.queue.size)
+                    else -> stringResource(R.string.player_queue)
+                },
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
             )
-            if (state.queue.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Outlined.QueueMusic,
-                    title = stringResource(R.string.player_queue_empty_title),
-                    message = stringResource(R.string.player_queue_empty_message),
-                )
-            } else {
+            if (state.queue.isNotEmpty()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier
@@ -961,8 +878,6 @@ private fun QueueActionButton(
         }
     }
 }
-
-private val SPEED_OPTIONS = listOf(0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f, 2.5f, 3.0f)
 
 // ---------------------------------------------------------------- 系统能力
 

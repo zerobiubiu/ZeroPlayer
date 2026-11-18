@@ -9,10 +9,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.KeyboardActions
@@ -145,7 +148,7 @@ fun ActionSheet(
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         if (immersive) ImmersiveSheetWindowEffect()
-        Column(modifier = Modifier.padding(bottom = Spacing.lg)) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = Spacing.lg)) {
             if (title != null) {
                 Text(
                     text = title,
@@ -309,19 +312,20 @@ fun SwitchRow(
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
             )
+            .heightIn(min = 56.dp)
             .padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
             Text(text = title, style = MaterialTheme.typography.bodyLarge)
             if (description != null) {
                 Text(
                     text = description,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
-        Spacer(Modifier.width(Spacing.sm))
+        Spacer(Modifier.width(Spacing.md))
         Switch(checked = checked, onCheckedChange = null)
     }
 }

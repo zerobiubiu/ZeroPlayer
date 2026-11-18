@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.padding
@@ -59,6 +61,7 @@ fun PrivatePlayerRoot(
     val appViewModel: AppViewModel = hiltViewModel()
     val settings by appViewModel.settings.collectAsStateWithLifecycle()
     val importState by imports.uiState.collectAsStateWithLifecycle()
+    val importActionError by imports.taskActionError.collectAsStateWithLifecycle()
     val showImports by externalIntents.showImports.collectAsStateWithLifecycle()
     val externalNotices by externalIntents.notices.collectAsStateWithLifecycle()
     val readyMediaId by externalIntents.readyMediaId.collectAsStateWithLifecycle()
@@ -141,7 +144,7 @@ fun PrivatePlayerRoot(
             },
             floatingActionButton = {
                 val hasTasks = importState.activeTasks.isNotEmpty() ||
-                    importState.finishedTasks.any { it.state == ImportTaskState.FAILED }
+                    importState.finishedTasks.any { it.state == ImportTaskState.FAILED || it.canDiscardLocal }
                 if (currentRoute == Routes.HOME && hasTasks && !showImports) {
                     ExtendedFloatingActionButton(
                         onClick = externalIntents::showImportTasks,
@@ -155,6 +158,10 @@ fun PrivatePlayerRoot(
                 navController = navController,
                 startDestination = Routes.HOME,
                 modifier = if (showBottomBar) Modifier.padding(padding).consumeWindowInsets(padding) else Modifier,
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
+                predictivePopEnterTransition = { _ -> EnterTransition.None },
+                predictivePopExitTransition = { _ -> ExitTransition.None },
             ) {
                 composable(Routes.HOME) {
                     HomeScreen(
@@ -221,16 +228,18 @@ fun PrivatePlayerRoot(
                 },
                 onCancel = { id -> externalIntents.forgetTask(id); imports.cancel(id) },
                 onRetry = imports::retry,
-                onRemove = { id -> externalIntents.forgetTask(id); imports.remove(id) },
+                onRemove = { id -> imports.remove(id, externalIntents::forgetTask) },
+                onDiscardLocal = { id -> imports.discardLocalTask(id, externalIntents::forgetTask) },
             )
         }
         if (transfer.exporting) ExportProgressDialog(transfer, fileTransfers::cancelExport)
-        else transfer.message?.let { message ->
+        else (importActionError ?: transfer.message)?.let { message ->
+            val dismissMessage = if (importActionError != null) imports::dismissTaskActionError else fileTransfers::dismissMessage
             AlertDialog(
-                onDismissRequest = fileTransfers::dismissMessage,
-                title = { Text(stringResource(R.string.app_transfer_dialog_title)) },
+                onDismissRequest = dismissMessage,
+                title = { Text(stringResource(if (importActionError != null) R.string.app_import_tasks_title else R.string.app_transfer_dialog_title)) },
                 text = { Text(message) },
-                confirmButton = { TextButton(onClick = fileTransfers::dismissMessage) { Text(stringResource(R.string.app_transfer_dismiss)) } },
+                confirmButton = { TextButton(onClick = dismissMessage) { Text(stringResource(R.string.app_transfer_dismiss)) } },
             )
         }
     }
@@ -255,8 +264,10 @@ private fun RootBottomBar(navController: NavHostController, currentRoute: String
 }
 
 private fun NavHostController.navigateToTopLevel(route: String) {
+    if (currentDestination?.route == route) return
     navigate(route) {
-        popUpTo(Routes.HOME) { saveState = true }
+        // 一级页互为同级：只保留根图，不把首页留作设置的返回目的地。
+        popUpTo(graph.id) { saveState = true }
         launchSingleTop = true
         restoreState = true
     }

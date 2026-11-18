@@ -1,5 +1,8 @@
 package com.privateplayer.domain.model
 
+/** 私有文件系统中的设备号和 inode；同一对象改名后身份不变。 */
+data class PrivateFileIdentity(val device: Long, val inode: Long)
+
 /** 私有存储中的一个字幕文件。 */
 data class SubtitleFile(
     val name: String,

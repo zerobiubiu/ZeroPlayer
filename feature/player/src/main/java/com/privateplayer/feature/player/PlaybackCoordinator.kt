@@ -8,6 +8,10 @@ import com.privateplayer.core.playback.PlaybackEngine
 import com.privateplayer.core.playback.PlaybackEngineProvider
 import com.privateplayer.core.playback.session.SessionMedia
 import com.privateplayer.domain.model.OperationOutcome
+import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.SubtitleFont
+import com.privateplayer.domain.model.SubtitleFontStyle
+import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.VideoAspect
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaFileLocator
@@ -104,6 +108,7 @@ class PlaybackCoordinator @Inject constructor(
     private val state = MutableStateFlow(PlayerUiState(engineLabel = engineProvider.backendLabel))
     val uiState: StateFlow<PlayerUiState> = state
     private val progress = Channel<ProgressWork>(Channel.UNLIMITED)
+    private val subtitleWrites = Channel<suspend () -> Unit>(Channel.UNLIMITED)
     @Volatile private var active: Active? = null
     private var pendingMediaId: Long? = null
     private var pendingAutoStart = true
@@ -140,6 +145,32 @@ class PlaybackCoordinator @Inject constructor(
                 if (error != null) launch(Dispatchers.Main.immediate) { reportError(context.getString(R.string.player_error_save_progress, error)) }
             }
         }
+        // 字幕写入不依赖页面或引擎的寿命，也不占用播放进度队列。
+        applicationScope.launch(ioDispatcher) {
+            for (write in subtitleWrites) {
+                try {
+                    write()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Exception) {
+                    launch(Dispatchers.Main.immediate) {
+                        reportError(context.getString(R.string.player_error_subtitle_settings_save,
+                            error.message ?: context.getString(R.string.player_unknown_error)))
+                    }
+                }
+            }
+        }
+    }
+
+    private fun writeSubtitle(write: suspend () -> Unit) {
+        subtitleWrites.trySend(write)
+    }
+
+    /** 重读媒体前排空已提交的字幕写入；切回旧片、甚至重建服务都只恢复已落库的值。 */
+    private suspend fun awaitSubtitleWrites() {
+        val done = CompletableDeferred<Unit>()
+        subtitleWrites.send { done.complete(Unit) }
+        done.await()
     }
 
     /** 服务 onCreate 调用；重复创建只借用已有实例，旧服务销毁不能释放新服务的实例。 */
@@ -170,6 +201,8 @@ class PlaybackCoordinator @Inject constructor(
             subtitleStore = subtitleStore,
             settingsRepository = settingsRepository,
             saveProgress = { progress.trySend(ProgressWork.Save(it)) },
+            saveSubtitleDelay = { id, delayMs -> writeSubtitle { mediaRepository.setSubtitleDelayMs(id, delayMs) } },
+            awaitSubtitleWrites = ::awaitSubtitleWrites,
             scope = scope,
             ioDispatcher = ioDispatcher,
             context = context,
@@ -282,6 +315,7 @@ class PlaybackCoordinator @Inject constructor(
                 isLoading = false,
                 playback = com.privateplayer.core.playback.PlaybackSnapshot(),
                 mediaId = 0L,
+                subtitleDelayMs = 0L,
                 title = "",
                 queue = emptyList(),
                 queueIndex = 0,
@@ -409,7 +443,10 @@ class PlaybackCoordinator @Inject constructor(
 
     fun activateSurfaceOwner(owner: Any) {
         if (surfaceOwner === owner) return
-        if (surfaceOwner != null) active?.session?.endTemporarySpeed()
+        if (surfaceOwner != null) {
+            active?.session?.endTemporarySpeed()
+            active?.session?.cancelSpeedPreview()
+        }
         active?.session?.engine?.attachSurface(null)
         surfaceOwner = owner
         surface = null
@@ -419,6 +456,10 @@ class PlaybackCoordinator @Inject constructor(
 
     fun attachSurface(owner: Any, newSurface: Surface) {
         if (surfaceOwner !== owner) return
+        if (surface !== newSurface) {
+            surfaceWidth = 0
+            surfaceHeight = 0
+        }
         surface = newSurface
         active?.session?.engine?.attachSurface(newSurface)
     }
@@ -439,6 +480,7 @@ class PlaybackCoordinator @Inject constructor(
         if (target == null) {
             surfaceOwner = null
             active?.session?.endTemporarySpeed()
+            active?.session?.cancelSpeedPreview()
         }
     }
 
@@ -446,11 +488,21 @@ class PlaybackCoordinator @Inject constructor(
     fun seekTo(positionMs: Long) { active?.session?.seekTo(positionMs) }
     fun seekBy(deltaMs: Long) { active?.session?.seekBy(deltaMs) }
     fun setSpeed(speed: Float) { active?.session?.setSpeed(speed) }
+    internal fun beginSpeedPreview(owner: Any, mediaId: Long): SpeedPreview? =
+        if (surfaceOwner === owner) active?.session?.beginSpeedPreview(mediaId) else null
     fun setAspect(aspect: VideoAspect) { active?.session?.setAspect(aspect) }
     fun selectAudioTrack(id: String?) { active?.session?.selectAudioTrack(id) }
     fun selectSubtitleTrack(id: String?) { active?.session?.selectSubtitleTrack(id) }
-    fun adjustSubtitleDelay(deltaMs: Long) { active?.session?.adjustSubtitleDelay(deltaMs) }
-    fun resetSubtitleDelay() { active?.session?.resetSubtitleDelay() }
+    fun adjustSubtitleDelay(deltaMs: Long) { active?.session?.adjustSubtitleDelay(state.value.mediaId, deltaMs) }
+    fun resetSubtitleDelay() { active?.session?.resetSubtitleDelay(state.value.mediaId) }
+    fun setSubtitleFontScale(scale: Float) = writeSubtitle { settingsRepository.setSubtitleFontScale(scale) }
+    fun setSubtitleFont(font: SubtitleFont) = writeSubtitle { settingsRepository.setSubtitleFont(font) }
+    fun setSubtitleFontStyle(style: SubtitleFontStyle) = writeSubtitle { settingsRepository.setSubtitleFontStyle(style) }
+    fun setSubtitleTextColor(color: SubtitleTextColor) = writeSubtitle { settingsRepository.setSubtitleTextColor(color) }
+    fun setSubtitleBackground(background: SubtitleBackground) =
+        writeSubtitle { settingsRepository.setSubtitleBackground(background) }
+    fun setSubtitleVerticalOffset(percent: Int) = writeSubtitle { settingsRepository.setSubtitleVerticalOffset(percent) }
+    fun setSubtitleOverrideAss(enabled: Boolean) = writeSubtitle { settingsRepository.setSubtitleOverrideAss(enabled) }
     fun toggleControls() { active?.session?.toggleControls() }
     fun setControlsVisible(visible: Boolean) { active?.session?.setControlsVisible(visible) }
     fun toggleLock() { active?.session?.toggleLock() }

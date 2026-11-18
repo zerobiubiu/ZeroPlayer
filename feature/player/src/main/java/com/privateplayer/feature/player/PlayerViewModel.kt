@@ -3,6 +3,10 @@ package com.privateplayer.feature.player
 import android.view.Surface
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.SubtitleFont
+import com.privateplayer.domain.model.SubtitleFontStyle
+import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.VideoAspect
 import dagger.hilt.android.lifecycle.HiltViewModel
 import javax.inject.Inject
@@ -31,11 +35,19 @@ class PlayerViewModel @Inject constructor(
     fun seekTo(positionMs: Long) = coordinator.seekTo(positionMs)
     fun seekBy(deltaMs: Long) = coordinator.seekBy(deltaMs)
     fun setSpeed(speed: Float) = coordinator.setSpeed(speed)
+    internal fun beginSpeedPreview(owner: Any, mediaId: Long) = coordinator.beginSpeedPreview(owner, mediaId)
     fun setAspect(aspect: VideoAspect) = coordinator.setAspect(aspect)
     fun selectAudioTrack(id: String?) = coordinator.selectAudioTrack(id)
     fun selectSubtitleTrack(id: String?) = coordinator.selectSubtitleTrack(id)
     fun adjustSubtitleDelay(deltaMs: Long) = coordinator.adjustSubtitleDelay(deltaMs)
     fun resetSubtitleDelay() = coordinator.resetSubtitleDelay()
+    fun setSubtitleFontScale(scale: Float) = coordinator.setSubtitleFontScale(scale)
+    fun setSubtitleFont(font: SubtitleFont) = coordinator.setSubtitleFont(font)
+    fun setSubtitleFontStyle(style: SubtitleFontStyle) = coordinator.setSubtitleFontStyle(style)
+    fun setSubtitleTextColor(color: SubtitleTextColor) = coordinator.setSubtitleTextColor(color)
+    fun setSubtitleBackground(background: SubtitleBackground) = coordinator.setSubtitleBackground(background)
+    fun setSubtitleVerticalOffset(percent: Int) = coordinator.setSubtitleVerticalOffset(percent)
+    fun setSubtitleOverrideAss(enabled: Boolean) = coordinator.setSubtitleOverrideAss(enabled)
     fun toggleControls() = coordinator.toggleControls()
     fun setControlsVisible(visible: Boolean) = coordinator.setControlsVisible(visible)
     fun toggleLock() = coordinator.toggleLock()

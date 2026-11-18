@@ -1,5 +1,6 @@
 package com.privateplayer.core.design.components
 
+import com.privateplayer.domain.model.PrivateFileIdentity
 import com.privateplayer.domain.repository.FileTreeEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,15 +16,18 @@ class FileActionMenuGroupingTest {
 
     private fun video() = FileTreeEntry(
         name = "影片.mp4", path = "影片.mp4", isDirectory = false, sizeBytes = 1, modifiedAt = 0,
+        identity = PrivateFileIdentity(1, 1),
         mediaId = 1L, isVideo = true,
     )
 
     private fun plainFile() = FileTreeEntry(
         name = "说明.txt", path = "说明.txt", isDirectory = false, sizeBytes = 1, modifiedAt = 0,
+        identity = PrivateFileIdentity(1, 2),
     )
 
     private fun directory() = FileTreeEntry(
         name = "目录", path = "目录", isDirectory = true, sizeBytes = 0, modifiedAt = 0,
+        identity = PrivateFileIdentity(1, 3),
     )
 
     private val allActions = FileAction.entries.toSet()

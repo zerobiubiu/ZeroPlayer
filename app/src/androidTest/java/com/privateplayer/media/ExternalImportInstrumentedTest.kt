@@ -138,8 +138,10 @@ class ExternalImportInstrumentedTest {
             context.stopService(Intent(context, PlayerMediaSessionService::class.java))
             val owned = database.importTaskDao().observeAll().first().filter { task -> sources.any { it.toString() == task.sourceUri } }
             owned.filter { it.state == "COMPLETED" }.forEach { task ->
-                task.mediaId?.let { mediaRepository.delete(listOf(it)) }
-                    ?: File(storage.mediaRoot, task.targetFileName).delete()
+                fileTree.find(task.targetFileName)?.let { entry ->
+                    if (task.mediaId != null && entry.mediaId == task.mediaId) mediaRepository.delete(listOf(entry))
+                    else if (task.mediaId == null && entry.mediaId == null) fileTree.delete(entry)
+                }
                 database.importTaskDao().deleteById(task.id)
             }
             sources.forEach { resolver.delete(it, null, null) }

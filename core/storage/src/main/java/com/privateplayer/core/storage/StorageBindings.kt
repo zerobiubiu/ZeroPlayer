@@ -9,6 +9,7 @@ import com.privateplayer.domain.repository.SubtitleStore
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 
 /** 私有存储到领域接口的适配：UI 只看到路径/文件，不接触 [PrivateStorage] 的目录规则。 */
 @Singleton
@@ -64,12 +65,14 @@ class LocalSubtitleStore @Inject constructor(
         if (extension !in PrivateStorage.SUBTITLE_EXTENSIONS) {
             return OperationOutcome.Failure("不支持的字幕格式：$extension")
         }
-        return runCatching {
+        return try {
             safDocuments.openInput(parsed).use { input ->
                 storage.saveSubtitle(mediaId, info.displayName, input)
             }
             OperationOutcome.Success
-        }.getOrElse { error ->
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
             OperationOutcome.Failure("字幕导入失败：${error.message ?: "未知错误"}")
         }
     }

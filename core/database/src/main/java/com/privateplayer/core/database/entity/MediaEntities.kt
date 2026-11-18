@@ -62,6 +62,7 @@ data class MediaEntity(
     val playCount: Int,
     /** 该视频上次选中的字幕轨 ID；null 表示没选过，"off" 表示用户主动关闭字幕。 */
     val selectedSubtitleTrackId: String? = null,
+    @ColumnInfo(defaultValue = "0") val subtitleDelayMs: Long = 0L,
 ) {
     /** 观看进度 0f..1f，用于首页“继续观看”和详情页进度条。 */
     @get:androidx.room.Ignore

@@ -1,6 +1,7 @@
 package com.privateplayer.core.datastore
 
 import android.content.Context
+import androidx.annotation.VisibleForTesting
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -15,7 +16,11 @@ import com.privateplayer.domain.model.GesturePreferences
 import com.privateplayer.domain.model.GridDensity
 import com.privateplayer.domain.model.ImportPreferences
 import com.privateplayer.domain.model.PlaybackPreferences
+import com.privateplayer.domain.model.PlaybackProgressMode
+import com.privateplayer.domain.model.PlaybackSpeedLimits
 import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.SubtitleFont
+import com.privateplayer.domain.model.SubtitleFontStyle
 import com.privateplayer.domain.model.SubtitlePreferences
 import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.ThemeMode
@@ -28,11 +33,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.enums.enumEntries
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "private_player_settings")
+private val playbackDefaults = PlaybackPreferences()
+private val subtitleDefaults = SubtitlePreferences()
 
 /**
  * 基于 Preferences DataStore 的设置仓库。
@@ -41,30 +49,27 @@ private val Context.settingsDataStore: DataStore<Preferences> by preferencesData
  * 因此新增偏好项不需要数据迁移。
  */
 @Singleton
-class PreferencesSettingsRepository @Inject constructor(
-    @ApplicationContext private val context: Context,
+class PreferencesSettingsRepository @VisibleForTesting constructor(
+    private val store: DataStore<Preferences>,
 ) : SettingsRepository {
 
-    private val store: DataStore<Preferences> get() = context.settingsDataStore
+    @Inject constructor(@ApplicationContext context: Context) : this(context.settingsDataStore)
 
     override fun observeSettings(): Flow<AppSettings> = store.data
         .map { prefs ->
             AppSettings(
                 playback = PlaybackPreferences(
                     autoPlayNext = prefs[Keys.AUTO_PLAY_NEXT] ?: true,
-                    rememberProgress = prefs[Keys.REMEMBER_PROGRESS] ?: true,
-                    autoResume = prefs[Keys.AUTO_RESUME] ?: true,
-                    defaultSpeed = prefs[Keys.DEFAULT_SPEED] ?: 1.0f,
+                    progressMode = PlaybackProgressMode.fromStoredFlags(
+                        record = prefs[Keys.REMEMBER_PROGRESS] ?: true,
+                        resume = prefs[Keys.AUTO_RESUME] ?: true,
+                    ),
+                    defaultSpeed = prefs.playbackSpeed(Keys.DEFAULT_SPEED, PlaybackSpeedLimits.MIN, playbackDefaults.defaultSpeed),
                     defaultAspect = prefs[Keys.DEFAULT_ASPECT].toEnum(VideoAspect.FIT),
                     seekStepSeconds = prefs[Keys.SEEK_STEP] ?: 10,
-                    longPressSpeed = prefs[Keys.LONG_PRESS_SPEED] ?: 2.0f,
+                    longPressSpeed = prefs.playbackSpeed(Keys.LONG_PRESS_SPEED, PlaybackSpeedLimits.MIN_TEMPORARY, playbackDefaults.longPressSpeed),
                 ),
-                subtitle = SubtitlePreferences(
-                    fontSizeScale = prefs[Keys.SUBTITLE_FONT_SCALE] ?: 1.0f,
-                    background = prefs[Keys.SUBTITLE_BACKGROUND].toEnum(SubtitleBackground.SEMI_TRANSPARENT),
-                    textColor = prefs[Keys.SUBTITLE_TEXT_COLOR].toEnum(SubtitleTextColor.WHITE),
-                    delayStepMs = prefs[Keys.SUBTITLE_DELAY_STEP] ?: 100,
-                ),
+                subtitle = prefs.subtitlePreferences(),
                 gesture = GesturePreferences(
                     brightnessGestureEnabled = prefs[Keys.GESTURE_BRIGHTNESS] ?: true,
                     volumeGestureEnabled = prefs[Keys.GESTURE_VOLUME] ?: true,
@@ -84,6 +89,37 @@ class PreferencesSettingsRepository @Inject constructor(
         }
         .distinctUntilChanged()
 
+    private fun Preferences.subtitlePreferences() = SubtitlePreferences(
+        fontSizeScale = typedValue(Keys.SUBTITLE_FONT_SCALE)?.boundedFontScale() ?: subtitleDefaults.fontSizeScale,
+        background = typedValue(Keys.SUBTITLE_BACKGROUND).toEnum(subtitleDefaults.background),
+        textColor = typedValue(Keys.SUBTITLE_TEXT_COLOR).toEnum(subtitleDefaults.textColor),
+        delayStepMs = typedValue(Keys.SUBTITLE_DELAY_STEP)?.boundedDelayStep() ?: subtitleDefaults.delayStepMs,
+        font = typedValue(Keys.SUBTITLE_FONT).toEnum(subtitleDefaults.font),
+        fontStyle = typedValue(Keys.SUBTITLE_FONT_STYLE).toEnum(subtitleDefaults.fontStyle),
+        verticalOffsetPercent = typedValue(Keys.SUBTITLE_VERTICAL_OFFSET)?.boundedOffset() ?: subtitleDefaults.verticalOffsetPercent,
+        overrideAss = typedValue(Keys.SUBTITLE_OVERRIDE_ASS) ?: subtitleDefaults.overrideAss,
+    )
+
+    // 同名旧键即便类型不对，也只回退这一项，不中断整个设置流。
+    private inline fun <reified T : Any> Preferences.typedValue(key: Preferences.Key<T>): T? {
+        val untypedKey: Preferences.Key<*> = key
+        return this[untypedKey] as? T
+    }
+
+    private fun Float.boundedFontScale() = if (isFinite()) coerceIn(0.6f, 2.0f) else subtitleDefaults.fontSizeScale
+    private fun Int.boundedDelayStep() = coerceIn(50, 1000)
+    private fun Int.boundedOffset() = coerceIn(-10, 30)
+
+    private fun Preferences.playbackSpeed(key: Preferences.Key<Float>, minimum: Float, fallback: Float): Float {
+        val speed = typedValue(key) ?: return fallback
+        return if (speed.isFinite()) speed.coerceIn(minimum, PlaybackSpeedLimits.MAX) else fallback
+    }
+
+    private suspend fun writePlaybackSpeed(key: Preferences.Key<Float>, minimum: Float, speed: Float) {
+        if (!speed.isFinite()) return
+        store.edit { it[key] = speed.coerceIn(minimum, PlaybackSpeedLimits.MAX) }
+    }
+
     override suspend fun setThemeMode(mode: ThemeMode) {
         store.edit { it[Keys.THEME_MODE] = mode.name }
     }
@@ -96,16 +132,16 @@ class PreferencesSettingsRepository @Inject constructor(
         store.edit { it[Keys.AUTO_PLAY_NEXT] = enabled }
     }
 
-    override suspend fun setRememberProgress(enabled: Boolean) {
-        store.edit { it[Keys.REMEMBER_PROGRESS] = enabled }
-    }
-
-    override suspend fun setAutoResume(enabled: Boolean) {
-        store.edit { it[Keys.AUTO_RESUME] = enabled }
+    override suspend fun setPlaybackProgressMode(mode: PlaybackProgressMode) {
+        // 沿用两个旧键的磁盘格式；调用方只能一次提交一种完整策略。
+        store.edit {
+            it[Keys.REMEMBER_PROGRESS] = mode != PlaybackProgressMode.DISABLED
+            it[Keys.AUTO_RESUME] = mode == PlaybackProgressMode.RESUME
+        }
     }
 
     override suspend fun setDefaultSpeed(speed: Float) {
-        store.edit { it[Keys.DEFAULT_SPEED] = speed.coerceIn(0.25f, 4.0f) }
+        writePlaybackSpeed(Keys.DEFAULT_SPEED, PlaybackSpeedLimits.MIN, speed)
     }
 
     override suspend fun setDefaultAspect(aspect: VideoAspect) {
@@ -117,11 +153,27 @@ class PreferencesSettingsRepository @Inject constructor(
     }
 
     override suspend fun setLongPressSpeed(speed: Float) {
-        store.edit { it[Keys.LONG_PRESS_SPEED] = speed.coerceIn(1.5f, 4.0f) }
+        writePlaybackSpeed(Keys.LONG_PRESS_SPEED, PlaybackSpeedLimits.MIN_TEMPORARY, speed)
     }
 
     override suspend fun setSubtitleFontScale(scale: Float) {
-        store.edit { it[Keys.SUBTITLE_FONT_SCALE] = scale.coerceIn(0.6f, 2.0f) }
+        store.edit { it[Keys.SUBTITLE_FONT_SCALE] = scale.boundedFontScale() }
+    }
+
+    override suspend fun setSubtitleFont(font: SubtitleFont) {
+        store.edit { it[Keys.SUBTITLE_FONT] = font.name }
+    }
+
+    override suspend fun setSubtitleFontStyle(style: SubtitleFontStyle) {
+        store.edit { it[Keys.SUBTITLE_FONT_STYLE] = style.name }
+    }
+
+    override suspend fun setSubtitleVerticalOffset(percent: Int) {
+        store.edit { it[Keys.SUBTITLE_VERTICAL_OFFSET] = percent.boundedOffset() }
+    }
+
+    override suspend fun setSubtitleOverrideAss(enabled: Boolean) {
+        store.edit { it[Keys.SUBTITLE_OVERRIDE_ASS] = enabled }
     }
 
     override suspend fun setSubtitleBackground(background: SubtitleBackground) {
@@ -133,7 +185,7 @@ class PreferencesSettingsRepository @Inject constructor(
     }
 
     override suspend fun setSubtitleDelayStep(stepMs: Int) {
-        store.edit { it[Keys.SUBTITLE_DELAY_STEP] = stepMs.coerceIn(50, 1000) }
+        store.edit { it[Keys.SUBTITLE_DELAY_STEP] = stepMs.boundedDelayStep() }
     }
 
     override suspend fun setBrightnessGesture(enabled: Boolean) {
@@ -166,7 +218,7 @@ class PreferencesSettingsRepository @Inject constructor(
 
     private inline fun <reified T : Enum<T>> String?.toEnum(default: T): T {
         if (this == null) return default
-        return enumValues<T>().firstOrNull { it.name == this } ?: default
+        return enumEntries<T>().firstOrNull { it.name == this } ?: default
     }
 
     private object Keys {
@@ -186,6 +238,10 @@ class PreferencesSettingsRepository @Inject constructor(
         val SUBTITLE_BACKGROUND = stringPreferencesKey("subtitle_background")
         val SUBTITLE_TEXT_COLOR = stringPreferencesKey("subtitle_text_color")
         val SUBTITLE_DELAY_STEP = intPreferencesKey("subtitle_delay_step")
+        val SUBTITLE_FONT = stringPreferencesKey("subtitle_font")
+        val SUBTITLE_FONT_STYLE = stringPreferencesKey("subtitle_font_style")
+        val SUBTITLE_VERTICAL_OFFSET = intPreferencesKey("subtitle_vertical_offset_percent")
+        val SUBTITLE_OVERRIDE_ASS = booleanPreferencesKey("subtitle_override_ass")
 
         val GESTURE_BRIGHTNESS = booleanPreferencesKey("gesture_brightness")
         val GESTURE_VOLUME = booleanPreferencesKey("gesture_volume")

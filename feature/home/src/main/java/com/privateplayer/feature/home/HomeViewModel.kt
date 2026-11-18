@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.IoDispatcher
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.usecase.PlaybackStopper
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +38,7 @@ data class HomeUiState(
     val isLoading: Boolean = true,
     val isWorking: Boolean = false,
     @StringRes val errorRes: Int? = null,
+    val errorReason: String? = null,
 )
 
 private val entryOrder = Comparator<FileTreeEntry> { left, right ->
@@ -68,7 +70,7 @@ class HomeViewModel @Inject constructor(
                 .catch { error ->
                     if (error is CancellationException) throw error
                     val errorRes = if (path.isEmpty()) R.string.home_error_root else R.string.home_error_directory
-                    emit(HomeUiState(currentDirectory = path, isLoading = false, errorRes = errorRes))
+                    emit(HomeUiState(currentDirectory = path, isLoading = false, errorRes = errorRes, errorReason = error.localizedMessage))
                 }
         }
         .flowOn(ioDispatcher)
@@ -142,7 +144,7 @@ class HomeViewModel @Inject constructor(
             successMessage = HomeMessage.Deleted,
             action = {
                 playbackStopper.stopIfAffected(entry.path)
-                fileTreeRepository.delete(entry.path)
+                fileTreeRepository.delete(entry)
             },
         )
     }
@@ -154,7 +156,7 @@ class HomeViewModel @Inject constructor(
     fun deleteBatch(entries: List<FileTreeEntry>, onResult: (BatchResult) -> Unit) {
         performBatch(entries, onResult) { entry ->
             playbackStopper.stopIfAffected(entry.path)
-            fileTreeRepository.delete(entry.path)
+            fileTreeRepository.delete(entry)
         }
     }
 
@@ -176,6 +178,7 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch {
             val succeeded = mutableListOf<String>()
             val failed = mutableListOf<Pair<String, String>>()
+            val changedTargets = mutableSetOf<String>()
             withContext(ioDispatcher) {
                 entries.forEach { entry ->
                     try {
@@ -184,12 +187,13 @@ class HomeViewModel @Inject constructor(
                     } catch (error: CancellationException) {
                         throw error
                     } catch (error: Exception) {
+                        if (error is FileTreeEntryChangedException) changedTargets += entry.path
                         failed += entry.path to (error.message ?: "")
                     }
                 }
             }
             working.value = false
-            onResult(BatchResult(succeeded.toList(), failed.toList()))
+            onResult(BatchResult(succeeded, failed, changedTargets))
         }
     }
 
@@ -215,6 +219,8 @@ class HomeViewModel @Inject constructor(
                 if (successMessage != null) messageChannel.send(successMessage)
             } catch (error: CancellationException) {
                 throw error
+            } catch (_: FileTreeEntryChangedException) {
+                messageChannel.send(HomeMessage.DeleteTargetChanged)
             } catch (_: Exception) {
                 messageChannel.send(failureMessage)
             } finally {

@@ -5,12 +5,15 @@ import com.privateplayer.core.database.dao.PlaylistSummary
 import com.privateplayer.core.database.entity.ImportTaskEntity
 import com.privateplayer.core.database.entity.MediaEntity
 import com.privateplayer.core.database.entity.PlaybackHistoryEntity
+import com.privateplayer.data.importer.isWebUpload
 import com.privateplayer.domain.model.Folder
+import com.privateplayer.domain.model.ImportErrorKind
 import com.privateplayer.domain.model.ImportTask
 import com.privateplayer.domain.model.ImportTaskState
 import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.PlaybackRecord
 import com.privateplayer.domain.model.Playlist
+import com.privateplayer.domain.model.classifyImportError
 
 /** 数据库实体 → 领域模型。展示层不接触 Room 类型。 */
 
@@ -39,6 +42,7 @@ fun MediaEntity.toDomain(folderName: String?): Media = Media(
     playedDurationMs = playedDurationMs,
     playCount = playCount,
     selectedSubtitleTrackId = selectedSubtitleTrackId,
+    subtitleDelayMs = subtitleDelayMs,
 )
 
 fun FolderSummary.toDomain(): Folder = Folder(
@@ -78,4 +82,8 @@ fun ImportTaskEntity.toDomain(): ImportTask = ImportTask(
     mediaId = mediaId,
     createdAt = createdAt,
     updatedAt = updatedAt,
+    isWebUpload = isWebUpload(),
 )
+
+internal val ImportTaskEntity.failureKind: ImportErrorKind?
+    get() = if (state == ImportTaskState.FAILED.name) classifyImportError(errorMessage, isWebUpload()) else null

@@ -37,7 +37,6 @@ import com.privateplayer.core.design.R
 fun EmptyState(
     icon: ImageVector,
     title: String,
-    message: String,
     modifier: Modifier = Modifier,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
@@ -68,13 +67,6 @@ fun EmptyState(
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(Spacing.sm))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
         if (actionLabel != null && onAction != null) {
             Spacer(Modifier.height(Spacing.lg))
             Button(onClick = onAction) { Text(actionLabel) }
@@ -100,12 +92,12 @@ fun LoadingState(modifier: Modifier = Modifier, label: String = stringResource(R
     }
 }
 
-/** 错误态：标题 + 事实描述 + 重试 + 可选第二动作（F-39）。文案只陈述可确认事实。 */
+/** 错误态只陈述一次失败，恢复入口由所在页面提供。 */
 @Composable
 fun ErrorState(
-    message: String,
+    title: String,
     modifier: Modifier = Modifier,
-    title: String = stringResource(R.string.design_error_title),
+    reason: String? = null,
     onRetry: (() -> Unit)? = null,
     secondaryActionLabel: String? = null,
     onSecondaryAction: (() -> Unit)? = null,
@@ -129,13 +121,10 @@ fun ErrorState(
             style = MaterialTheme.typography.titleMedium,
             textAlign = TextAlign.Center,
         )
-        Spacer(Modifier.height(Spacing.sm))
-        Text(
-            text = message,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center,
-        )
+        if (!reason.isNullOrBlank() && reason != title) {
+            Spacer(Modifier.height(Spacing.sm))
+            Text(reason, textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
+        }
         if (onRetry != null || (secondaryActionLabel != null && onSecondaryAction != null)) {
             Spacer(Modifier.height(Spacing.sm))
             Row(horizontalArrangement = Arrangement.spacedBy(Spacing.sm)) {

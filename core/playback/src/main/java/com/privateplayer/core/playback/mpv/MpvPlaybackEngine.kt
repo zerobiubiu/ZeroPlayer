@@ -11,9 +11,8 @@ import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackSource
 import com.privateplayer.core.playback.PlaybackStatus
 import com.privateplayer.core.playback.TrackKind
-import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.PlaybackSpeedLimits
 import com.privateplayer.domain.model.SubtitlePreferences
-import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.VideoAspect
 import dev.jdtech.mpv.MPVLib
 import java.io.File
@@ -74,6 +73,7 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
     private var requestedAspect = VideoAspect.FIT
     private var requestedSubtitleDelayMs = 0L
     private var requestedSubtitleStyle = SubtitlePreferences()
+    private lateinit var subtitleStyle: MpvSubtitleStyle
 
     private val observer = object : MPVLib.EventObserver {
         override fun eventProperty(property: String) {
@@ -141,7 +141,8 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
                     instance.setPropertyDouble("speed", requestedSpeed.toDouble())
                     instance.setPropertyDouble("volume", requestedVolume.toDouble() * 100.0)
                     instance.setPropertyDouble("sub-delay", requestedSubtitleDelayMs / 1000.0)
-                    applySubtitleStyle(instance, requestedSubtitleStyle)
+                    subtitleStyle = MpvSubtitleStyle()
+                    subtitleStyle.apply(instance, requestedSubtitleStyle, null)
                     applyAspect(instance, requestedAspect)
                     surface?.let { attachLocked(instance, it) }
                     player = instance
@@ -182,6 +183,10 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
             try {
                 val instance = player
                 if (instance != null && surfaceAttached) detachLocked(instance)
+                if (this.surface !== surface) {
+                    surfaceWidth = 0
+                    surfaceHeight = 0
+                }
                 this.surface = surface
                 if (surface != null && instance != null) attachLocked(instance, surface)
             } catch (error: Throwable) {
@@ -196,12 +201,21 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
     override fun resizeSurface(width: Int, height: Int) {
         synchronized(lock) {
             if (released || width <= 0 || height <= 0) return
-            surfaceWidth = width
-            surfaceHeight = height
-            val instance = player ?: return
-            if (surfaceAttached) {
+            if (width == surfaceWidth && height == surfaceHeight) return
+            val instance = player
+            if (instance != null && surfaceAttached) {
                 try {
                     instance.setPropertyString("android-surface-size", "${width}x$height")
+                    // android-surface-size 让 VO 重配 EGL 缓冲。暂停时没有后续解码帧，
+                    // 只在新 Surface 首次定尺寸或尺寸确实变化时补交当前帧。
+                    // 相对 0 由 mpv 按真实播放时钟解析，不会拿 UI 的旧进度覆盖待执行跳转。
+                    if (fileLoaded && playbackRestarted && desiredPaused &&
+                        instance.getPropertyBoolean("pause") == true &&
+                        instance.getPropertyBoolean("seeking") == false &&
+                        instance.getPropertyBoolean("eof-reached") == false
+                    ) {
+                        instance.command(arrayOf("seek", "0", "relative+exact"))
+                    }
                 } catch (error: Throwable) {
                     if (error !is Exception && error !is LinkageError) throw error
                     val message = "更新 Surface 尺寸失败：${error.detail()}"
@@ -209,6 +223,8 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
                     throw IllegalStateException(message, error)
                 }
             }
+            surfaceWidth = width
+            surfaceHeight = height
         }
     }
 
@@ -260,9 +276,11 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
                     bufferedMs = 0L,
                     errorMessage = null,
                 )
-                // 等 FILE_LOADED 后再跳转、添加字幕并恢复用户所请求的暂停状态。
+                // 初始断点属于本次 loadfile；不能先启动零秒处，再用 FILE_LOADED 的异步 seek 补救。
+                // 新文件的默认轨由解复用器选定，在获知 codec 前不沿用上一轨的 ASS 覆盖。
+                subtitleStyle.apply(instance, requestedSubtitleStyle, null)
                 instance.setPropertyBoolean("pause", true)
-                instance.command(arrayOf("loadfile", local.path, "replace"))
+                loadFileAt(instance, local)
             }
         } catch (error: Exception) {
             val message = "加载媒体失败：${error.detail()}"
@@ -305,7 +323,7 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
                         generation++
                         fileStarted = false
                         instance.setPropertyBoolean("pause", true)
-                        instance.command(arrayOf("loadfile", local.path, "replace"))
+                        loadFileAt(instance, local)
                     }
                 }
                 if (fileLoaded) instance.setPropertyBoolean("pause", false)
@@ -376,7 +394,7 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
     override fun setSpeed(speed: Float) {
         synchronized(lock) {
             if (released || !speed.isFinite()) return
-            requestedSpeed = speed.coerceIn(0.25f, 4.0f)
+            requestedSpeed = speed.coerceIn(PlaybackSpeedLimits.MIN, PlaybackSpeedLimits.MAX)
             player?.let { instance ->
                 nativeActionLocked("设置倍速") { instance.setPropertyDouble("speed", requestedSpeed.toDouble()) }
             }
@@ -412,7 +430,10 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
             if (released) return
             requestedSubtitleStyle = preferences
             player?.let { instance ->
-                nativeActionLocked("设置字幕样式") { applySubtitleStyle(instance, preferences) }
+                nativeActionLocked("设置字幕样式") {
+                    val codec = if (fileLoaded) instance.getPropertyString("current-tracks/sub/codec") else null
+                    subtitleStyle.apply(instance, preferences, codec)
+                }
             }
         }
     }
@@ -511,8 +532,6 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
             "sub-use-margins" to "no",
             // 按实际视频而非整个窗口缩放，避免竖屏黑边令普通字幕被放大并挤出画面。
             "sub-scale-with-window" to "no",
-            // 普通文本字幕可使用用户样式，ASS 脚本保持原有排版。
-            "sub-ass-override" to "no",
         )
         options.forEach { (name, value) ->
             val result = instance.setOptionString(name, value)
@@ -634,14 +653,21 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
         }
     }
 
+    private fun loadFileAt(instance: MPVLib, local: LocalSource) {
+        val args = if (local.startPositionMs == 0L) {
+            arrayOf("loadfile", local.path, "replace")
+        } else {
+            // mpv 0.41 的第四个参数才是逐文件选项；replace 不使用前面的插入索引。
+            arrayOf("loadfile", local.path, "replace", "-1", "start=${local.startPositionMs / 1000.0}")
+        }
+        instance.command(args)
+    }
+
     private fun onFileLoadedLocked(instance: MPVLib) {
         val local = source ?: return
         // 替换文件期间，迟到的 FILE_LOADED 不能套用到新的播放源。
         if (instance.getPropertyString("path") != local.path) return
         fileLoaded = true
-        if (local.startPositionMs > 0L) {
-            instance.command(arrayOf("seek", (local.startPositionMs / 1000.0).toString(), "absolute+exact"))
-        }
         local.subtitles.forEach { instance.command(arrayOf("sub-add", it, "auto")) }
         instance.setPropertyBoolean("pause", desiredPaused)
         refreshTracksLocked(instance)
@@ -662,12 +688,13 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
         val position = instance.getPropertyDouble("time-pos").milliseconds() ?: current.positionMs
         val duration = instance.getPropertyDouble("duration").milliseconds() ?: current.durationMs
         val buffered = instance.getPropertyDouble("demuxer-cache-time").milliseconds() ?: 0L
-        val eof = instance.getPropertyBoolean("eof-reached") == true
+        val eof = playbackRestarted && instance.getPropertyBoolean("eof-reached") == true
         val paused = instance.getPropertyBoolean("pause")
         val nextStatus = when {
+            !playbackRestarted -> PlaybackStatus.LOADING
             eof -> PlaybackStatus.ENDED
             paused == true -> PlaybackStatus.PAUSED
-            paused == false && playbackRestarted -> PlaybackStatus.PLAYING
+            paused == false -> PlaybackStatus.PLAYING
             else -> PlaybackStatus.LOADING
         }
         if (eof) desiredPaused = true
@@ -708,10 +735,12 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
             )
             if (type == "audio") audio.add(track) else subtitles.add(track)
         }
+        val selectedSubtitleTrack = subtitles.firstOrNull { it.isDefault }
+        subtitleStyle.apply(instance, requestedSubtitleStyle, selectedSubtitleTrack?.codec)
         _audioTracks.value = audio
         _subtitleTracks.value = subtitles
         val selectedAudio = audio.firstOrNull { it.isDefault }?.id
-        val selectedSubtitle = subtitles.firstOrNull { it.isDefault }?.id
+        val selectedSubtitle = selectedSubtitleTrack?.id
         if (previousAudio != selectedAudio) _events.tryEmit(PlaybackEvent.TrackChanged(TrackKind.AUDIO, selectedAudio))
         if (previousSubtitle != selectedSubtitle) _events.tryEmit(PlaybackEvent.TrackChanged(TrackKind.SUBTITLE, selectedSubtitle))
     }
@@ -721,31 +750,17 @@ class MpvPlaybackEngine(context: Context) : PlaybackEngine {
             if (released || !fileLoaded) return
             val instance = player ?: return
             val available = if (kind == TrackKind.AUDIO) _audioTracks.value else _subtitleTracks.value
-            if (trackId != null && available.none { it.id == trackId }) {
+            val target = available.firstOrNull { it.id == trackId }
+            if (trackId != null && target == null) {
                 _events.tryEmit(PlaybackEvent.Failed("轨道不存在：$trackId"))
                 return
             }
             val property = if (kind == TrackKind.AUDIO) "aid" else "sid"
-            nativeActionLocked("切换轨道") { instance.setPropertyString(property, trackId ?: "no") }
+            nativeActionLocked("切换轨道") {
+                if (kind == TrackKind.SUBTITLE) subtitleStyle.apply(instance, requestedSubtitleStyle, target?.codec)
+                instance.setPropertyString(property, trackId ?: "no")
+            }
         }
-    }
-
-    private fun applySubtitleStyle(instance: MPVLib, preferences: SubtitlePreferences) {
-        val color = when (preferences.textColor) {
-            SubtitleTextColor.WHITE -> "#FFFFFF"
-            SubtitleTextColor.YELLOW -> "#FFFF00"
-            SubtitleTextColor.CYAN -> "#00FFFF"
-        }
-        val borderStyle = if (preferences.background == SubtitleBackground.NONE) "outline-and-shadow" else "background-box"
-        val backgroundColor = when (preferences.background) {
-            SubtitleBackground.NONE -> "#00000000"
-            SubtitleBackground.SEMI_TRANSPARENT -> "#80000000"
-            SubtitleBackground.SOLID -> "#FF000000"
-        }
-        instance.setPropertyDouble("sub-scale", preferences.fontSizeScale.toDouble())
-        instance.setPropertyString("sub-color", color)
-        instance.setPropertyString("sub-border-style", borderStyle)
-        instance.setPropertyString("sub-back-color", backgroundColor)
     }
 
     private fun applyAspect(instance: MPVLib, aspect: VideoAspect) {

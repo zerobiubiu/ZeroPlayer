@@ -8,4 +8,7 @@ internal sealed interface HomeDialog {
     data class Rename(val entry: FileTreeEntry) : HomeDialog
     data class Move(val entry: FileTreeEntry) : HomeDialog
     data class Delete(val entry: FileTreeEntry) : HomeDialog
+    data class BatchMove(val entries: List<FileTreeEntry>) : HomeDialog
+    data class BatchDelete(val entries: List<FileTreeEntry>) : HomeDialog
+    data class BatchFailures(val failures: List<Pair<String, String>>) : HomeDialog
 }

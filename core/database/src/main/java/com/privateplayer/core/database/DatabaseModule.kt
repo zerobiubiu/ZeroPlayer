@@ -24,16 +24,25 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideDatabase(@ApplicationContext context: Context): PrivatePlayerDatabase =
-        Room.databaseBuilder(context, PrivatePlayerDatabase::class.java, PrivatePlayerDatabase.NAME)
+        openDatabase(context, PrivatePlayerDatabase.NAME)
+
+    fun openDatabase(context: Context, name: String): PrivatePlayerDatabase =
+        Room.databaseBuilder(context, PrivatePlayerDatabase::class.java, name)
             // WAL：导入任务在后台写、UI 同时读，避免互相阻塞。
             .setJournalMode(RoomDatabase.JournalMode.WRITE_AHEAD_LOGGING)
-            .addMigrations(MIGRATION_1_2)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
             .build()
 
     /** v2：媒体表记录每个视频上次选中的字幕轨，用于下次打开时恢复。 */
     private val MIGRATION_1_2 = object : Migration(1, 2) {
         override fun migrate(db: SupportSQLiteDatabase) {
             db.execSQL("ALTER TABLE media ADD COLUMN selectedSubtitleTrackId TEXT")
+        }
+    }
+
+    private val MIGRATION_2_3 = object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE media ADD COLUMN subtitleDelayMs INTEGER NOT NULL DEFAULT 0")
         }
     }
 

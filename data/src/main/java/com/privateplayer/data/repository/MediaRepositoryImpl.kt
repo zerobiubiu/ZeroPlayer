@@ -15,6 +15,8 @@ import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.MediaCategory
 import com.privateplayer.domain.model.MediaSort
 import com.privateplayer.domain.model.OperationOutcome
+import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaRepository
 import kotlinx.coroutines.CancellationException
@@ -78,6 +80,10 @@ class MediaRepositoryImpl @Inject constructor(
         }
     }
 
+    override suspend fun setSubtitleDelayMs(mediaId: Long, delayMs: Long) {
+        mediaDao.setSubtitleDelayMs(mediaId, delayMs)
+    }
+
     override suspend fun setFavorite(ids: List<Long>, favorite: Boolean): OperationOutcome =
         withContext(ioDispatcher) {
             val now = System.currentTimeMillis()
@@ -119,19 +125,20 @@ class MediaRepositoryImpl @Inject constructor(
             OperationOutcome.Success
         }
 
-    override suspend fun delete(ids: List<Long>): OperationOutcome = withContext(ioDispatcher) {
+    override suspend fun delete(entries: List<FileTreeEntry>): OperationOutcome = withContext(ioDispatcher) {
         val failed = mutableListOf<String>()
-        ids.forEach { id ->
-            val entity = mediaDao.findById(id) ?: return@forEach
+        entries.forEach { entry ->
             try {
-                require(entity.relativePath.startsWith("${PrivateStorage.MEDIA_DIR}/")) { "媒体路径异常" }
-                fileTree.delete(entity.relativePath.removePrefix("${PrivateStorage.MEDIA_DIR}/"))
+                val entity = entry.mediaId?.let { mediaDao.findById(it) }
+                if (entry.isDirectory || entity == null || entity.relativePath != storage.mediaRelativePath(entry.path)) {
+                    throw FileTreeEntryChangedException()
+                }
+                fileTree.delete(entry)
                 storage.deleteCacheFile(entity.thumbnailPath)
-                storage.deleteSubtitleDir(id)
             } catch (error: CancellationException) {
                 throw error
-            } catch (_: Exception) {
-                failed += entity.displayName
+            } catch (error: Exception) {
+                failed += "${entry.name}：${error.message ?: "删除失败"}"
             }
         }
         if (failed.isEmpty()) {
@@ -144,12 +151,14 @@ class MediaRepositoryImpl @Inject constructor(
     override suspend fun recordPlayback(
         mediaId: Long,
         positionMs: Long,
+        observedDurationMs: Long,
         watchedMs: Long,
         playIncrement: Int,
     ) = withContext(ioDispatcher) {
         mediaDao.recordProgress(
             id = mediaId,
             positionMs = positionMs,
+            observedDurationMs = observedDurationMs,
             watchedMs = watchedMs,
             playIncrement = playIncrement,
             now = System.currentTimeMillis(),

@@ -41,7 +41,7 @@ data class FileActionGroup(val actions: List<FileAction>)
  *
  * 分组顺序固定为 信息（视频详情/文件信息）→ 传输（导出/分享）→ 管理（重命名/移动）→ 危险（删除）；
  * 删除始终位于最后一个独立分组。不同页面按 [available] 取子集：
- * 首页视频行不含“文件信息”，详情页不含“视频详情”，文件夹与非视频文件不含传输/详情项。
+ * 首页不含“文件信息”，详情页不含“视频详情”；普通文件可传输，文件夹只可管理和删除。
  */
 fun fileActionMenuGroups(entry: FileTreeEntry, available: Set<FileAction>): List<FileActionGroup> {
     fun group(vararg actions: FileAction): FileActionGroup? =

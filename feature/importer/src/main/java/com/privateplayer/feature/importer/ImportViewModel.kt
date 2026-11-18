@@ -1,6 +1,7 @@
 package com.privateplayer.feature.importer
 
 import android.content.Context
+import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.privateplayer.core.common.di.IoDispatcher
@@ -51,6 +52,8 @@ class ImportViewModel @Inject constructor(
     )
 
     private val local = MutableStateFlow(Local())
+    private val mutableTaskActionError = MutableStateFlow<String?>(null)
+    val taskActionError: StateFlow<String?> = mutableTaskActionError
 
     val webUploadState: StateFlow<WebUploadState> = webUploadController.state
 
@@ -132,14 +135,41 @@ class ImportViewModel @Inject constructor(
     }
 
     fun cancel(taskId: String) {
-        viewModelScope.launch { importRepository.cancel(taskId) }
+        performTaskAction(R.string.import_cancel_failed) { importRepository.cancel(taskId) }
     }
 
     fun retry(taskId: String) {
-        viewModelScope.launch { importRepository.retry(taskId) }
+        performTaskAction(R.string.import_retry_failed) { importRepository.retry(taskId) }
     }
 
-    fun remove(taskId: String) {
-        viewModelScope.launch { importRepository.removeTask(taskId) }
+    fun remove(taskId: String, onRemoved: (String) -> Unit) {
+        performTaskAction(R.string.import_remove_failed) {
+            importRepository.removeTask(taskId)
+            onRemoved(taskId)
+        }
+    }
+
+    fun discardLocalTask(taskId: String, onDiscarded: (String) -> Unit) {
+        performTaskAction(R.string.import_discard_failed) {
+            importRepository.discardLocalTask(taskId)
+            onDiscarded(taskId)
+        }
+    }
+
+    fun dismissTaskActionError() {
+        mutableTaskActionError.value = null
+    }
+
+    private inline fun performTaskAction(@StringRes failure: Int, crossinline action: suspend () -> Unit) {
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (error: Exception) {
+                val reason = error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.import_unknown_error)
+                mutableTaskActionError.value = context.getString(failure, reason)
+            }
+        }
     }
 }

@@ -29,6 +29,8 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.toggleableState
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.common.format.formatBytes
@@ -40,7 +42,7 @@ import com.privateplayer.feature.home.fileicons.materialFileIcon
 
 /**
  * 文件行（F-28/F-41）：普通态单击打开、长按进入多选；多选态单击/长按切换选中。
- * 行尾三点不再常驻（降低噪声），操作菜单经读屏自定义操作打开，触屏经详情页更多菜单管理。
+ * 单项操作从选择顶栏的“更多”进入；普通态也保留读屏的直接菜单动作。
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -50,29 +52,11 @@ internal fun FileTreeRow(
     selectionMode: Boolean,
     selected: Boolean,
     onToggleSelect: () -> Unit,
-    onEnterSelection: () -> Unit,
     onOpen: () -> Unit,
-    onDetails: () -> Unit,
-    onRename: () -> Unit,
-    onMove: () -> Unit,
-    onDelete: () -> Unit,
-    onExport: () -> Unit,
-    onShare: () -> Unit,
+    onAction: (FileTreeEntry, FileAction) -> Unit,
 ) {
-    var menuExpanded by remember(entry.path) { mutableStateOf(false) }
+    var menuEntry by remember { mutableStateOf<FileTreeEntry?>(null) }
     val menuLabel = stringResource(R.string.home_row_menu)
-    // 首页行菜单取共享分组的子集：视频行不含“文件信息”，文件夹与非视频文件不含传输/详情项。
-    val available = buildSet {
-        if (!entry.isDirectory && entry.isVideo) add(FileAction.Details)
-        if (!entry.isDirectory) {
-            add(FileAction.Export)
-            add(FileAction.Share)
-        }
-        add(FileAction.Rename)
-        add(FileAction.Move)
-        add(FileAction.Delete)
-    }
-    val groups = rememberFileActionMenuGroups(entry, available)
     Box {
         ListItem(
             colors = if (selected) {
@@ -82,8 +66,11 @@ internal fun FileTreeRow(
             },
             modifier = Modifier.fillMaxWidth()
                 .semantics {
-                    // F-28：隐藏行尾三点后，读屏仍可通过自定义操作打开菜单。
-                    customActions = listOf(CustomAccessibilityAction(menuLabel, { menuExpanded = true; true }))
+                    if (selectionMode) {
+                        toggleableState = ToggleableState(selected)
+                    } else if (enabled) {
+                        customActions = listOf(CustomAccessibilityAction(menuLabel) { menuEntry = entry; true })
+                    }
                 }
                 .combinedClickable(
                     enabled = enabled,
@@ -95,10 +82,10 @@ internal fun FileTreeRow(
                         else R.string.home_row_open_file,
                     ),
                     onLongClickLabel = stringResource(
-                        if (selectionMode) R.string.home_row_toggle_select else R.string.home_row_menu,
+                        if (selectionMode) R.string.home_row_toggle_select else R.string.home_row_select,
                     ),
-                    onClick = onOpen,
-                    onLongClick = { if (selectionMode) onToggleSelect() else onEnterSelection() },
+                    onClick = if (selectionMode) onToggleSelect else onOpen,
+                    onLongClick = onToggleSelect,
                 ),
             leadingContent = {
                 if (selectionMode) {
@@ -133,20 +120,27 @@ internal fun FileTreeRow(
             },
             trailingContent = null,
         )
-        // F-28：菜单不再以行尾三点常驻显示，由读屏自定义操作触发；降低列表右侧噪声。
-        DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-            FileActionMenuContent(groups) { action ->
-                menuExpanded = false
-                when (action) {
-                    FileAction.Details -> onDetails()
-                    FileAction.Export -> onExport()
-                    FileAction.Share -> onShare()
-                    FileAction.Rename -> onRename()
-                    FileAction.Move -> onMove()
-                    FileAction.Delete -> onDelete()
-                    FileAction.FileInfo -> Unit
-                }
-            }
+        HomeFileMenu(menuEntry, onDismiss = { menuEntry = null }, onAction = onAction)
+    }
+}
+
+// 具体文件类型的可用项由共享 fileActionMenuGroups 筛选，首页不重复定义分类规则。
+private val homeActions = FileAction.entries.toSet() - FileAction.FileInfo
+private val homeOverflowActions = homeActions - FileAction.Rename
+
+@Composable
+internal fun HomeFileMenu(
+    entry: FileTreeEntry?,
+    renameInToolbar: Boolean = false,
+    onDismiss: () -> Unit,
+    onAction: (FileTreeEntry, FileAction) -> Unit,
+) {
+    if (entry == null) return
+    val groups = rememberFileActionMenuGroups(entry, if (renameInToolbar) homeOverflowActions else homeActions)
+    DropdownMenu(expanded = true, onDismissRequest = onDismiss) {
+        FileActionMenuContent(groups) { action ->
+            onDismiss()
+            onAction(entry, action)
         }
     }
 }

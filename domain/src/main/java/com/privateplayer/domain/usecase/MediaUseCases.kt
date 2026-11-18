@@ -4,6 +4,7 @@ import com.privateplayer.domain.model.LibraryQuery
 import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.OperationOutcome
 import com.privateplayer.domain.model.PlaybackRecord
+import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.MediaRepository
 import com.privateplayer.domain.repository.PlaybackHistoryRepository
 import com.privateplayer.domain.repository.SettingsRepository
@@ -25,8 +26,8 @@ class ToggleFavoriteUseCase @Inject constructor(
 class DeleteMediaUseCase @Inject constructor(
     private val mediaRepository: MediaRepository,
 ) {
-    suspend operator fun invoke(mediaIds: List<Long>): OperationOutcome =
-        mediaRepository.delete(mediaIds)
+    suspend operator fun invoke(entries: List<FileTreeEntry>): OperationOutcome =
+        mediaRepository.delete(entries)
 }
 
 class MoveMediaUseCase @Inject constructor(
@@ -59,8 +60,8 @@ class ObserveLibraryUseCase @Inject constructor(
  * 记录播放进度。
  *
  * 规则：
- * - 关闭“记忆播放进度”时只写播放历史，不写断点；
- * - 位置必须落在 [0, duration] 区间，避免异常跳转让“继续观看”永久残留；
+ * - “不记录”仍保留观看历史和次数；
+ * - 已知时长限制断点上界；未探测到时长时保留真实的非负位置；
  * - 播放时长按实际增量累加，且不超过本次播放的墙钟时间估算上限。
  */
 class SavePlaybackProgressUseCase @Inject constructor(
@@ -80,13 +81,13 @@ class SavePlaybackProgressUseCase @Inject constructor(
             ?: return OperationOutcome.Failure("媒体不存在或已删除")
 
         val boundedDuration = if (durationMs > 0) durationMs else media.durationMs
-        val boundedPosition = positionMs.coerceIn(0L, boundedDuration.coerceAtLeast(0L))
         val boundedWatched = watchedMs.coerceIn(0L, 24L * 60 * 60 * 1000)
-        val savedPosition = if (settings.playback.rememberProgress) boundedPosition else 0L
+        val savedPosition = settings.playback.progressMode.positionToSave(positionMs, boundedDuration)
 
         mediaRepository.recordPlayback(
             mediaId = mediaId,
             positionMs = savedPosition,
+            observedDurationMs = durationMs,
             watchedMs = boundedWatched,
             playIncrement = playIncrement.coerceIn(0, 1),
         )

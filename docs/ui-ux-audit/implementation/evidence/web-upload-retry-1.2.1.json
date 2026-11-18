@@ -1,0 +1,459 @@
+{
+  "run": "XiNobp",
+  "version": {
+    "name": "1.2.1",
+    "code": 10201
+  },
+  "scope": "Installed target APK / independent API 37 AVD / managed Chrome isolated context",
+  "device": {
+    "serial": "emulator-5586",
+    "avd": "ZeroRetryXiNobp",
+    "api": 37,
+    "abi": "x86_64,arm64-v8a",
+    "launchPid": 353764,
+    "headlessQemuPid": 345912,
+    "flags": [
+      "-read-only",
+      "-no-window",
+      "-no-audio",
+      "-no-snapshot-load",
+      "-no-snapshot-save"
+    ],
+    "initialPorts": [],
+    "volume": [
+      "   Muted: true",
+      "   streamVolume:0"
+    ],
+    "permissionMessage": "Allow ZeroPlayer to find, connect to, and determine the relative position of nearby devices?",
+    "endpoint": "http://10.0.2.16:8765/",
+    "ipv4": [
+      [
+        "wlan0",
+        "10.0.2.16/24"
+      ]
+    ],
+    "permission": [
+      "android.permission.ACCESS_LOCAL_NETWORK: granted=true"
+    ],
+    "listeners": [
+      "tcp        0      0 127.0.0.1:19831         0.0.0.0:*               LISTEN",
+      "tcp6       0      0 ::ffff:10.0.2.16:8765   [::]:*                  LISTEN"
+    ],
+    "relayPid": "7026",
+    "adbForward": [
+      "emulator-5586 tcp:61245 tcp:19831"
+    ],
+    "hostLoopback": {
+      "adbAllInterfaces": false,
+      "address": "127.0.0.1:61245",
+      "result": "connected",
+      "otherLocalIPv4ConnectionResults": [
+        "timeout",
+        "timeout"
+      ]
+    }
+  },
+  "packages": {
+    "productionGradle": "BUILD SUCCESSFUL in 3s; 324 tasks: 10 executed, 314 up-to-date",
+    "app": {
+      "file": "app/build/outputs/apk/debug/app-debug.apk",
+      "bytes": 52849575,
+      "sha256": "f0802d5992bd237c6241efddcb61d034c838283f6b8fdd00ce24754d5e0a18f8",
+      "installedMatchesLocal": true,
+      "versionLines": [
+        "versionCode=10201 minSdk=26 targetSdk=37",
+        "versionName=1.2.1"
+      ]
+    },
+    "asset": {
+      "file": "assets/web-upload/app.js",
+      "bytes": 36174,
+      "sourceSha256": "7ad7f6c7ea8080c1023138c3d4652b6d70066d71307f61c19dd3d1ac99bf96be",
+      "apkSha256": "7ad7f6c7ea8080c1023138c3d4652b6d70066d71307f61c19dd3d1ac99bf96be",
+      "servedSha256": "7ad7f6c7ea8080c1023138c3d4652b6d70066d71307f61c19dd3d1ac99bf96be"
+    },
+    "test": {
+      "file": "app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk",
+      "bytes": 2808573,
+      "sha256": "f15bc89e48778b9598c749870373e78b520f4bcf7de66628b4ffae506cbe03be",
+      "installedMatchesLocal": true,
+      "packagedGradle": "BUILD SUCCESSFUL in 5s; 341 tasks: 7 executed, 334 up-to-date",
+      "webJs": "target-assets-only"
+    }
+  },
+  "instrumentation": {
+    "tests": [
+      {
+        "class": "com.privateplayer.media.WebUploadPageInstrumentedTest",
+        "method": "rowRetryUploadsOnlyRejectedFile",
+        "instrumentationStatusCode": 0
+      },
+      {
+        "class": "com.privateplayer.media.WebDeletePageInstrumentedTest",
+        "method": "打包网页确认时原样提交列表身份并显示删除冲突",
+        "instrumentationStatusCode": 0
+      }
+    ],
+    "runnerSummary": "OK (2 tests)",
+    "seconds": 4.805
+  },
+  "browser": {
+    "cold": {
+      "pageId": 4,
+      "url": "http://127.0.0.1:61245/",
+      "isolatedContext": "ZeroPlayerRetry-XiNobp",
+      "queue": {
+        "path": "根目录",
+        "summary": "0 个文件",
+        "batch": {
+          "label": "上传 0 个文件",
+          "visible": false,
+          "disabled": false
+        },
+        "rows": []
+      }
+    },
+    "sourceFiles": [
+      {
+        "name": "retry-A-XiNobp.txt",
+        "size": 47,
+        "sha256": "c90d11de6ef278757966a781d6a280f5a08cdbad2c798fc257b0a0de0255cf2d"
+      },
+      {
+        "name": "retry-B-XiNobp.txt",
+        "size": 58,
+        "sha256": "7e3c5e1d96c405866597fefdd628c28fac372f89d0a004bea55787cd298cd2e0"
+      }
+    ],
+    "actualRequests": [
+      {
+        "reqid": 16,
+        "method": "POST",
+        "url": "http://127.0.0.1:61245/api/uploads?path=RetrySuite-XiNobp%2FTarget-A-XiNobp&name=retry-A-XiNobp.txt",
+        "status": 400
+      },
+      {
+        "reqid": 19,
+        "method": "POST",
+        "url": "http://127.0.0.1:61245/api/uploads?path=RetrySuite-XiNobp%2FTarget-A-XiNobp&name=retry-A-XiNobp.txt",
+        "status": 202
+      },
+      {
+        "reqid": 20,
+        "method": "GET",
+        "url": "http://127.0.0.1:61245/api/uploads/fffdfa04-394d-4827-8178-01b8bcf6ae6f",
+        "status": 200
+      },
+      {
+        "reqid": 21,
+        "method": "GET",
+        "url": "http://127.0.0.1:61245/api/uploads/fffdfa04-394d-4827-8178-01b8bcf6ae6f",
+        "status": 200
+      },
+      {
+        "reqid": 22,
+        "method": "POST",
+        "url": "http://127.0.0.1:61245/api/uploads?path=RetrySuite-XiNobp&name=retry-B-XiNobp.txt",
+        "status": 202
+      },
+      {
+        "reqid": 23,
+        "method": "GET",
+        "url": "http://127.0.0.1:61245/api/uploads/54fa1afa-b9cb-4185-b8ae-d0d97e04d8ac",
+        "status": 200
+      },
+      {
+        "reqid": 24,
+        "method": "GET",
+        "url": "http://127.0.0.1:61245/api/uploads/54fa1afa-b9cb-4185-b8ae-d0d97e04d8ac",
+        "status": 200
+      }
+    ],
+    "phases": [
+      {
+        "action": "upload A with original target absent",
+        "uploadPostIds": [
+          16
+        ],
+        "ui": {
+          "path": "根目录 / RetrySuite-XiNobp",
+          "summary": "1 个文件",
+          "batch": {
+            "label": "上传 0 个文件",
+            "visible": false,
+            "disabled": false
+          },
+          "rows": [
+            {
+              "name": "retry-A-XiNobp.txt",
+              "state": "failed",
+              "status": "上传失败",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp / Target-A-XiNobp",
+                "目录不存在或不是目录"
+              ],
+              "actions": [
+                "重新上传"
+              ]
+            }
+          ]
+        },
+        "serverErrorShown": "目录不存在或不是目录"
+      },
+      {
+        "action": "restore target, select B, no batch click",
+        "uploadPostIds": [],
+        "ui": {
+          "path": "根目录 / RetrySuite-XiNobp",
+          "summary": "2 个文件 · 1 个待上传",
+          "batch": {
+            "label": "上传 1 个文件",
+            "visible": true,
+            "disabled": false
+          },
+          "rows": [
+            {
+              "name": "retry-A-XiNobp.txt",
+              "state": "failed",
+              "status": "上传失败",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp / Target-A-XiNobp",
+                "目录不存在或不是目录"
+              ],
+              "actions": [
+                "重新上传"
+              ]
+            },
+            {
+              "name": "retry-B-XiNobp.txt",
+              "state": "pending",
+              "status": "等待上传",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp"
+              ],
+              "actions": [
+                "移除"
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "action": "click Retry on A only",
+        "uploadPostIds": [
+          19
+        ],
+        "ui": {
+          "path": "根目录 / RetrySuite-XiNobp",
+          "summary": "2 个文件 · 1 个待上传 · 1 个已保存",
+          "batch": {
+            "label": "上传 1 个文件",
+            "visible": true,
+            "disabled": false
+          },
+          "rows": [
+            {
+              "name": "retry-A-XiNobp.txt",
+              "state": "completed",
+              "status": "已保存",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp / Target-A-XiNobp"
+              ],
+              "actions": []
+            },
+            {
+              "name": "retry-B-XiNobp.txt",
+              "state": "pending",
+              "status": "等待上传",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp"
+              ],
+              "actions": [
+                "移除"
+              ]
+            }
+          ]
+        },
+        "finalTaskGet": {
+          "reqid": 21,
+          "method": "GET",
+          "url": "http://127.0.0.1:61245/api/uploads/fffdfa04-394d-4827-8178-01b8bcf6ae6f",
+          "status": 200,
+          "response": {
+            "state": "COMPLETED",
+            "errorMessage": null,
+            "bytesCopied": 47,
+            "sizeBytes": 47
+          }
+        },
+        "storage": {
+          "point": "after-row-retry",
+          "tree": [
+            "files/media/RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt"
+          ],
+          "physical": [
+            {
+              "path": "files/media/RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt",
+              "size": 47,
+              "sha256": "c90d11de6ef278757966a781d6a280f5a08cdbad2c798fc257b0a0de0255cf2d",
+              "equalsSource": true
+            }
+          ],
+          "taskCounts": {
+            "retry-A-XiNobp.txt": 1,
+            "retry-B-XiNobp.txt": 0
+          },
+          "import_tasks": [
+            {
+              "id": "fffdfa04-394d-4827-8178-01b8bcf6ae6f",
+              "displayName": "retry-A-XiNobp.txt",
+              "targetFileName": "RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt",
+              "state": "COMPLETED",
+              "sizeBytes": 47,
+              "bytesCopied": 47,
+              "errorMessage": null
+            }
+          ],
+          "snapshot": {
+            "integrity_check": "ok",
+            "verifiedBeforeAndAfter": [
+              {
+                "file": "media.db",
+                "bytes": 4096,
+                "sha256": "b5f413081830c3a83edcc99b47fbeddb12b5ccf7e2c3983674d94f2f3dd0db0e"
+              },
+              {
+                "file": "media.db-wal",
+                "bytes": 164832,
+                "sha256": "ad9ff489b08949d06a8aec942e78548610a81398953a148459ccb5a5d43a48cc"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "action": "explicit batch click for B",
+        "uploadPostIds": [
+          22
+        ],
+        "ui": {
+          "path": "根目录 / RetrySuite-XiNobp",
+          "summary": "2 个文件 · 2 个已保存",
+          "batch": {
+            "label": "上传 0 个文件",
+            "visible": false,
+            "disabled": false
+          },
+          "rows": [
+            {
+              "name": "retry-A-XiNobp.txt",
+              "state": "completed",
+              "status": "已保存",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp / Target-A-XiNobp"
+              ],
+              "actions": []
+            },
+            {
+              "name": "retry-B-XiNobp.txt",
+              "state": "completed",
+              "status": "已保存",
+              "detail": [
+                "目标：根目录 / RetrySuite-XiNobp"
+              ],
+              "actions": []
+            }
+          ]
+        },
+        "finalTaskGet": {
+          "reqid": 24,
+          "method": "GET",
+          "url": "http://127.0.0.1:61245/api/uploads/54fa1afa-b9cb-4185-b8ae-d0d97e04d8ac",
+          "status": 200,
+          "response": {
+            "state": "COMPLETED",
+            "errorMessage": null,
+            "bytesCopied": 58,
+            "sizeBytes": 58
+          }
+        },
+        "storage": {
+          "point": "after-explicit-batch",
+          "tree": [
+            "files/media/RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt",
+            "files/media/RetrySuite-XiNobp/retry-B-XiNobp.txt"
+          ],
+          "physical": [
+            {
+              "path": "files/media/RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt",
+              "size": 47,
+              "sha256": "c90d11de6ef278757966a781d6a280f5a08cdbad2c798fc257b0a0de0255cf2d",
+              "equalsSource": true
+            },
+            {
+              "path": "files/media/RetrySuite-XiNobp/retry-B-XiNobp.txt",
+              "size": 58,
+              "sha256": "7e3c5e1d96c405866597fefdd628c28fac372f89d0a004bea55787cd298cd2e0",
+              "equalsSource": true
+            }
+          ],
+          "taskCounts": {
+            "retry-A-XiNobp.txt": 1,
+            "retry-B-XiNobp.txt": 1
+          },
+          "import_tasks": [
+            {
+              "id": "fffdfa04-394d-4827-8178-01b8bcf6ae6f",
+              "displayName": "retry-A-XiNobp.txt",
+              "targetFileName": "RetrySuite-XiNobp/Target-A-XiNobp/retry-A-XiNobp.txt",
+              "state": "COMPLETED",
+              "sizeBytes": 47,
+              "bytesCopied": 47,
+              "errorMessage": null
+            },
+            {
+              "id": "54fa1afa-b9cb-4185-b8ae-d0d97e04d8ac",
+              "displayName": "retry-B-XiNobp.txt",
+              "targetFileName": "RetrySuite-XiNobp/retry-B-XiNobp.txt",
+              "state": "COMPLETED",
+              "sizeBytes": 58,
+              "bytesCopied": 58,
+              "errorMessage": null
+            }
+          ],
+          "snapshot": {
+            "integrity_check": "ok",
+            "verifiedBeforeAndAfter": [
+              {
+                "file": "media.db",
+                "bytes": 4096,
+                "sha256": "b5f413081830c3a83edcc99b47fbeddb12b5ccf7e2c3983674d94f2f3dd0db0e"
+              },
+              {
+                "file": "media.db-wal",
+                "bytes": 206032,
+                "sha256": "9261f2bd079e49e617c6bb940cfcda9a3152bd0d540a346a1c839f2a5705f847"
+              }
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "cleanup": {
+    "nativeAction": "停止服务",
+    "status": "服务已停止",
+    "webPageClosed": true,
+    "serviceListenAfterStop": [],
+    "remainingGuestServiceOrRelay": [],
+    "ownedForwardRemoved": true,
+    "hostLoopbackAfterRemoval": "ECONNREFUSED",
+    "serialGone": true,
+    "originalEmulatorAndQemuPidsGone": [
+      353764,
+      345912
+    ],
+    "tempDiskFixturesAndRoomCopiesRemoved": true
+  },
+  "rawReports": "build/reports/web-upload-retry-1.2.1/XiNobp/"
+}

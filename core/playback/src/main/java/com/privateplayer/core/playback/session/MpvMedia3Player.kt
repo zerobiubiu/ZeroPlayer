@@ -17,6 +17,7 @@ import com.google.common.util.concurrent.SettableFuture
 import com.privateplayer.core.playback.PlaybackEngine
 import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackStatus
+import com.privateplayer.domain.model.PlaybackSpeedLimits
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlinx.coroutines.CancellationException
@@ -57,6 +58,9 @@ class MpvMedia3Player(
     private var cachedSeekable = false
     private var cachedItem: MediaItemData? = null
     private var currentError: PlaybackException? = null
+    // 1.11.1 在主线程把 getState 的返回值设为初态或立即发布；getPlaceholderState 的返回值也立即发布。
+    // 有待完成操作时 invalidateState 不读取它，最后一个 Future 完成后才读，因此不在快照收集处推进基线。
+    private var lastReportedState: SessionPlaybackState? = null
 
     init {
         // Player 的状态与监听器只在主 Looper 更新。
@@ -70,6 +74,7 @@ class MpvMedia3Player(
     override fun getState(): State {
         val snapshot = engine.snapshot.value
         val mapped = mapSessionPlayback(snapshot, media.value)
+        val pausedPositionChanged = mapped.hasPausedPositionCorrection(lastReportedState, snapshot.status)
         val error = if (mapped.media != null && snapshot.status == PlaybackStatus.ERROR) {
             // 原始错误可能包含私有路径；外部控制器只能看到错误状态与通用说明。
             currentError ?: PlaybackException(
@@ -103,7 +108,12 @@ class MpvMedia3Player(
             .setContentPositionMs(PositionSupplier.getConstant(mapped.positionMs))
             .setContentBufferedPositionMs(PositionSupplier.getConstant(mapped.bufferedPositionMs))
             .setTotalBufferedDurationMs(PositionSupplier.getConstant(mapped.bufferedDurationMs))
-            .build()
+            .apply {
+                // 1.11.1 默认忽略同一条目不足 1 秒的位移。命令返回并不代表 mpv 已经落帧；
+                // 只用后来实际读到的暂停位置校准控制器，不把请求目标或正常播放 tick 当作跳转。
+                if (pausedPositionChanged) setPositionDiscontinuity(Player.DISCONTINUITY_REASON_INTERNAL, mapped.positionMs)
+            }
+            .build().also { lastReportedState = mapped }
     }
 
     override fun getPlaceholderState(suggestedPlaceholderState: State): State {
@@ -137,11 +147,13 @@ class MpvMedia3Player(
 
     override fun handleSetPlaybackParameters(playbackParameters: PlaybackParameters): ListenableFuture<*> {
         // 引擎只提供倍速，不提供独立音调；拒绝不能完整实现的音调变更。
-        if (!playbackParameters.speed.isFinite() || playbackParameters.speed !in 0.25f..4f || playbackParameters.pitch != 1f) {
-            return Futures.immediateFailedFuture<Void>(IllegalArgumentException("仅支持 0.25 至 4 倍速，不能单独调整音调"))
+        val speed = playbackParameters.speed
+        if (speed !in PlaybackSpeedLimits.MIN..PlaybackSpeedLimits.MAX || playbackParameters.pitch != 1f) {
+            return Futures.immediateFailedFuture<Void>(IllegalArgumentException(
+                "仅支持 ${PlaybackSpeedLimits.MIN} 至 ${PlaybackSpeedLimits.MAX} 倍速，不能单独调整音调",
+            ))
         }
         val mediaId = currentCommandMediaId() ?: return Futures.immediateVoidFuture()
-        val speed = playbackParameters.speed
         val ticket = registerSpeedRequest(speed)
         return enqueue(mediaId, onDiscard = { discardSpeedRequest(ticket) }) {
             applySpeedRequest(ticket, speed)
@@ -356,6 +368,12 @@ internal data class SessionPlaybackState(
     val speed: Float,
     val volume: Float,
 )
+
+/** 对外已经是静止的同一条目；只比较真实落点，速度、缓冲或相同位置的重读不发事件。 */
+internal fun SessionPlaybackState.hasPausedPositionCorrection(previous: SessionPlaybackState?, status: PlaybackStatus): Boolean =
+    status == PlaybackStatus.PAUSED && playbackState == Player.STATE_READY && !playWhenReady && media != null &&
+        previous != null && previous.playbackState == Player.STATE_READY && !previous.playWhenReady &&
+        media.mediaId == previous.media?.mediaId && positionMs != previous.positionMs
 
 internal fun mapSessionPlayback(snapshot: PlaybackSnapshot, media: SessionMedia?): SessionPlaybackState {
     val matchedMedia = media?.takeIf { it.mediaId == snapshot.mediaId }

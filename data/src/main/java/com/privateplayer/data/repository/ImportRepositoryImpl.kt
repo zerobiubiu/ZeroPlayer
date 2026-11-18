@@ -1,27 +1,35 @@
 package com.privateplayer.data.repository
 
+import android.content.ContentResolver
 import android.net.Uri
 import com.privateplayer.core.common.di.IoDispatcher
 import com.privateplayer.core.common.files.extensionOf
 import com.privateplayer.core.common.files.sanitizeFileName
 import com.privateplayer.core.common.files.uniqueFileName
 import com.privateplayer.core.database.dao.ImportTaskDao
+import com.privateplayer.core.database.dao.MediaDao
 import com.privateplayer.core.database.entity.ImportTaskEntity
 import com.privateplayer.core.storage.ImportCopier
 import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.core.storage.SafDocuments
 import com.privateplayer.data.importer.ImportCommitJournal
 import com.privateplayer.data.importer.ImportWorkScheduler
+import com.privateplayer.data.importer.hasImportStaging
 import com.privateplayer.data.importer.importTempFile
+import com.privateplayer.data.importer.isWebUpload
 import com.privateplayer.data.importer.preserveCanceledImport
+import com.privateplayer.data.importer.requireUnindexedCommit
+import com.privateplayer.data.mapper.failureKind
 import com.privateplayer.data.mapper.toDomain
 import com.privateplayer.domain.model.ImportEnqueueResult
 import com.privateplayer.domain.model.ImportTask
 import com.privateplayer.domain.model.ImportTaskState
 import com.privateplayer.domain.model.RejectedImport
+import com.privateplayer.domain.model.WEB_STAGING_MISSING_REASON
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.ImportRepository
 import java.io.File
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,6 +44,7 @@ import kotlinx.coroutines.withContext
 @Singleton
 class ImportRepositoryImpl @Inject constructor(
     private val taskDao: ImportTaskDao,
+    private val mediaDao: MediaDao,
     private val storage: PrivateStorage,
     private val fileTree: FileTreeRepository,
     private val safDocuments: SafDocuments,
@@ -180,7 +189,7 @@ class ImportRepositoryImpl @Inject constructor(
         // 先通知 WorkManager 停止复制，再等旧执行器退出，避免边读写边回退暂存。
         storage.withImportTaskLock(taskId) {
             storage.withMediaTreeLock {
-                taskDao.findById(taskId)?.let { preserveCanceledImport(it, taskDao, storage) }
+                taskDao.findById(taskId)?.let { preserveCanceledImport(it, taskDao, mediaDao, storage) }
             }
         }
         fileTree.notifyChanged()
@@ -188,7 +197,11 @@ class ImportRepositoryImpl @Inject constructor(
 
     override suspend fun retry(taskId: String): Unit = withContext(ioDispatcher) {
         storage.withImportTaskLock(taskId) {
-            val retried = storage.withMediaTreeLock { taskDao.retryFailed(taskId, System.currentTimeMillis()) == 1 }
+            val retried = storage.withMediaTreeLock {
+                val current = taskDao.findById(taskId) ?: return@withMediaTreeLock false
+                check(current.failureKind?.canRetry != false) { WEB_STAGING_MISSING_REASON }
+                taskDao.retryFailed(taskId, System.currentTimeMillis()) == 1
+            }
             if (retried) {
                 scheduler.cancel(taskId)
                 scheduler.schedule(taskId)
@@ -197,19 +210,46 @@ class ImportRepositoryImpl @Inject constructor(
     }
 
     override suspend fun removeTask(taskId: String): Unit = withContext(ioDispatcher) {
-        val task = taskDao.findById(taskId) ?: return@withContext
-        if (ImportTaskState.entries.firstOrNull { it.name == task.state }?.isActive == true) cancel(taskId)
         storage.withImportTaskLock(taskId) {
             storage.withMediaTreeLock {
                 val current = taskDao.findById(taskId) ?: return@withMediaTreeLock
+                require(!ImportTaskState.valueOf(current.state).isActive) { "任务仍在进行，请先取消" }
                 val commits = ImportCommitJournal(storage)
                 val prepared = commits.read(current)
                 if (current.state == ImportTaskState.COMPLETED.name) {
                     if (prepared != null) commits.finish(current, prepared)
-                } else if (prepared != null || storage.importTempFile(current).isFile) {
-                    // 失败暂存和提交身份不能因移除记录变成不可恢复的孤儿。
-                    return@withMediaTreeLock
+                } else if (prepared != null || hasImportStaging(storage.importTempFile(current, null))) {
+                    val message = if (current.isWebUpload()) "网页上传的暂存已保留，可重试保存或从网页下载"
+                    else "任务仍有暂存，请选择「放弃并清理」"
+                    throw IOException(message)
                 }
+                taskDao.deleteById(taskId)
+            }
+        }
+    }
+
+    override suspend fun discardLocalTask(taskId: String): Unit = withContext(ioDispatcher) {
+        storage.withImportTaskLock(taskId) {
+            storage.withMediaTreeLock {
+                val task = taskDao.findById(taskId) ?: return@withMediaTreeLock
+                val scheme = Uri.parse(task.sourceUri).scheme
+                require(!task.isWebUpload() && (scheme == ContentResolver.SCHEME_CONTENT || scheme == ContentResolver.SCHEME_FILE)) {
+                    "只有本机导入可以放弃，网页上传的暂存会保留"
+                }
+                require(task.state == ImportTaskState.FAILED.name || task.state == ImportTaskState.CANCELED.name) {
+                    "只能放弃已失败或已取消的导入"
+                }
+                require(task.mediaId == null) { "任务已关联媒体，已保留文件和记录" }
+                require(UUID.fromString(task.id).toString() == task.id) { "导入任务标识不匹配" }
+                if (task.tempRelativePath.startsWith("${PrivateStorage.TEMPORARY_DIR}/") &&
+                    taskDao.hasOtherStagingOwner(task.id, task.tempRelativePath)
+                ) throw IOException("旧暂存仍被其他任务使用，已保留文件和记录")
+                val commits = ImportCommitJournal(storage)
+                val prepared = commits.read(task)
+                if (prepared != null) requireUnindexedCommit(task, mediaDao, storage)
+                scheduler.cancel(taskId)
+                val changedTree = commits.discardLocalStaging(task, prepared)
+                if (changedTree) fileTree.notifyChanged()
                 taskDao.deleteById(taskId)
             }
         }
@@ -219,7 +259,7 @@ class ImportRepositoryImpl @Inject constructor(
         // 进程可能在写下取消状态后退出；先补做回退，保留可重试任务。
         taskDao.observeAll().first().filter { it.state == ImportTaskState.CANCELED.name }.forEach { task ->
             storage.withImportTaskLock(task.id) {
-                storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, storage) }
+                storage.withMediaTreeLock { preserveCanceledImport(task, taskDao, mediaDao, storage) }
             }
         }
         taskDao.findPending().forEach { task ->

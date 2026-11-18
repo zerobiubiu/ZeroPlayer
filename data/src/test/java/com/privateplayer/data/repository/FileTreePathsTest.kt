@@ -1,5 +1,6 @@
 package com.privateplayer.data.repository
 
+import com.privateplayer.core.storage.deleteTree
 import com.privateplayer.core.storage.moveNoOverwrite
 import com.privateplayer.core.storage.resolveFileInMediaRoot
 import java.io.File

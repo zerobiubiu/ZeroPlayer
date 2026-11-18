@@ -8,6 +8,7 @@ package com.privateplayer.feature.home
 data class BatchResult(
     val succeeded: List<String>,
     val failed: List<Pair<String, String>>,
+    val changedTargets: Set<String> = emptySet(),
 ) {
     val total: Int get() = succeeded.size + failed.size
     val allSucceeded: Boolean get() = failed.isEmpty()

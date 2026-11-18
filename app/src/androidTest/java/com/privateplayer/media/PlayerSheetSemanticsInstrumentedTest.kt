@@ -4,7 +4,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material.icons.outlined.Check
 import androidx.compose.material.icons.outlined.Lock
-import androidx.compose.material.icons.outlined.Speed
 import androidx.compose.material.icons.outlined.VolumeUp
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.mutableStateOf
@@ -49,17 +48,17 @@ class PlayerSheetSemanticsInstrumentedTest {
 
     @Test
     fun singleChoiceSheetMarksOnlyCurrentOption() {
-        val speeds = listOf("0.5×", "1.0×", "1.5×", "2.0×")
+        val tracks = listOf("音轨 1", "音轨 2", "音轨 3")
         compose.setContent {
             MaterialTheme {
                 ActionSheet(
-                    title = "播放速度",
-                    actions = speeds.map { speed ->
+                    title = "音轨",
+                    actions = tracks.map { track ->
                         SheetAction(
-                            label = speed,
-                            icon = Icons.Outlined.Speed,
+                            label = track,
+                            icon = Icons.Outlined.VolumeUp,
                             kind = SheetActionKind.SingleChoice,
-                            selected = speed == "1.5×",
+                            selected = track == "音轨 2",
                             onClick = {},
                         )
                     },
@@ -68,20 +67,20 @@ class PlayerSheetSemanticsInstrumentedTest {
             }
         }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("播放速度").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("音轨").fetchSemanticsNodes().isNotEmpty()
         }
 
         // 只有一个条目处于选中态，其余都不是
         selectedNodes().assertCountEquals(1)
-        compose.onNodeWithText("1.5×").assertIsDisplayed()
+        compose.onNodeWithText("音轨 2").assertIsDisplayed()
 
         // 选中项带单选语义，读屏可播报“已选中”
-        val selectedNode = compose.onNodeWithText("1.5×").fetchSemanticsNode()
+        val selectedNode = compose.onNodeWithText("音轨 2").fetchSemanticsNode()
         assertEquals(Role.RadioButton, selectedNode.config[SemanticsProperties.Role])
         assertTrue(selectedNode.config[SemanticsProperties.Selected])
 
         // 未选中项同样带单选语义，但状态为未选中
-        val unselected = compose.onNodeWithText("0.5×").fetchSemanticsNode()
+        val unselected = compose.onNodeWithText("音轨 1").fetchSemanticsNode()
         assertEquals(Role.RadioButton, unselected.config[SemanticsProperties.Role])
         assertEquals(false, unselected.config[SemanticsProperties.Selected])
     }
@@ -189,21 +188,21 @@ class PlayerSheetSemanticsInstrumentedTest {
 
     @Test
     fun selectingOptionInvokesCallbackAndSheetCanBeReopened() {
-        val picked = mutableListOf<String>()
+        val picked = mutableStateOf("音轨 1")
         val visible = mutableStateOf(true)
         compose.setContent {
             MaterialTheme {
                 if (visible.value) {
                     ActionSheet(
-                        title = "播放速度",
-                        actions = listOf("1.0×", "2.0×").map { speed ->
+                        title = "音轨",
+                        actions = listOf("音轨 1", "音轨 2").map { track ->
                             SheetAction(
-                                label = speed,
-                                icon = Icons.Outlined.Speed,
+                                label = track,
+                                icon = Icons.Outlined.VolumeUp,
                                 kind = SheetActionKind.SingleChoice,
-                                selected = speed == "1.0×",
+                                selected = track == picked.value,
                                 onClick = {
-                                    picked += speed
+                                    picked.value = track
                                     visible.value = false
                                 },
                             )
@@ -214,35 +213,36 @@ class PlayerSheetSemanticsInstrumentedTest {
             }
         }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("2.0×").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("音轨 2").fetchSemanticsNodes().isNotEmpty()
         }
 
-        compose.onNodeWithText("2.0×").performClick()
-        compose.waitUntil(10_000) { picked == listOf("2.0×") }
+        compose.onNodeWithText("音轨 2").performClick()
+        compose.waitUntil(10_000) { picked.value == "音轨 2" && compose.onAllNodesWithText("音轨").fetchSemanticsNodes().isEmpty() }
         compose.waitForIdle()
 
         // 关闭后重新打开，选中态跟随新的当前值
         compose.runOnIdle { visible.value = true }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("播放速度").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("音轨").fetchSemanticsNodes().isNotEmpty()
         }
         selectedNodes().assertCountEquals(1)
+        assertTrue(compose.onNodeWithText("音轨 2").fetchSemanticsNode().config[SemanticsProperties.Selected])
     }
 
     @Test
     fun switchingBetweenSheetsKeepsExactlyOneSelectedOption() {
-        val sheet = mutableStateOf("speed")
+        val sheet = mutableStateOf("audio")
         compose.setContent {
             MaterialTheme {
                 when (sheet.value) {
-                    "speed" -> ActionSheet(
-                        title = "播放速度",
-                        actions = listOf("1.0×", "2.0×").map { speed ->
+                    "audio" -> ActionSheet(
+                        title = "音轨",
+                        actions = listOf("音轨 1", "音轨 2").map { track ->
                             SheetAction(
-                                label = speed,
-                                icon = Icons.Outlined.Speed,
+                                label = track,
+                                icon = Icons.Outlined.VolumeUp,
                                 kind = SheetActionKind.SingleChoice,
-                                selected = speed == "1.0×",
+                                selected = track == "音轨 1",
                                 onClick = {},
                             )
                         },
@@ -266,7 +266,7 @@ class PlayerSheetSemanticsInstrumentedTest {
             }
         }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("播放速度").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("音轨").fetchSemanticsNodes().isNotEmpty()
         }
         selectedNodes().assertCountEquals(1)
 
@@ -276,6 +276,6 @@ class PlayerSheetSemanticsInstrumentedTest {
         }
         // 面板间切换后仍然只有一个选中项，不会残留上一个面板的勾选
         selectedNodes().assertCountEquals(1)
-        compose.onAllNodesWithText("播放速度").assertCountEquals(0)
+        compose.onAllNodesWithText("音轨").assertCountEquals(0)
     }
 }

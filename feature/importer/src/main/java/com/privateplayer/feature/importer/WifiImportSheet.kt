@@ -1,26 +1,26 @@
 package com.privateplayer.feature.importer
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -33,36 +33,43 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalAccessibilityManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.semantics.stateDescription
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import kotlinx.coroutines.delay
 import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.design.R as DesignR
+import com.privateplayer.core.design.components.SwitchRow
 import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.domain.repository.WebTransferRecord
 import com.privateplayer.domain.repository.WebTransferState
+import com.privateplayer.domain.repository.WebUploadEndpoint
+import com.privateplayer.domain.repository.WebUploadNetwork
 import com.privateplayer.domain.repository.WebUploadStatus
+import kotlinx.coroutines.delay
 
 /** 临时文件服务的控制面板；关闭面板不会中断仍在运行的服务。 */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -76,22 +83,31 @@ fun WifiImportSheet(
     val importState by viewModel.uiState.collectAsStateWithLifecycle()
     val preferences by viewModel.importPreferences.collectAsStateWithLifecycle()
     val context = LocalContext.current
-    val permissionDeniedText = stringResource(R.string.wifi_permission_denied)
-    val clipLabel = stringResource(R.string.wifi_clip_label)
-    var permissionError by remember { mutableStateOf<String?>(null) }
-    var copied by remember { mutableStateOf(false) }
-    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) {
-            permissionError = null
-            viewModel.startWebUpload(directory)
-        } else {
-            permissionError = permissionDeniedText
-        }
+    val active = state.status == WebUploadStatus.STARTING || state.status == WebUploadStatus.RUNNING
+    val endpoints = if (state.status == WebUploadStatus.RUNNING) state.endpoints else emptyList()
+    val networkCounts = remember(endpoints) { endpoints.groupingBy { it.kind }.eachCount() }
+    val inset = Modifier.fillMaxWidth().padding(horizontal = Spacing.screenHorizontal)
+
+    // 恢复入口取决于系统授权，而不是上一次请求的回调；重开面板或进程后仍可去设置。
+    var hasPermission by remember(context) { mutableStateOf(context.hasLocalNetworkPermission()) }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        hasPermission = context.hasLocalNetworkPermission()
     }
-    LaunchedEffect(copied) {
-        if (copied) {
-            delay(2000)
-            copied = false
+    val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasPermission = granted
+        if (granted) viewModel.startWebUpload(directory)
+    }
+
+    val clipLabel = stringResource(R.string.wifi_clip_label)
+    var copiedUrl by remember(state.status, endpoints) { mutableStateOf<String?>(null) }
+    var copyCount by remember { mutableIntStateOf(0) }
+    val feedbackTimeout = LocalAccessibilityManager.current?.calculateRecommendedTimeoutMillis(
+        originalTimeoutMillis = 2_000L, containsText = true,
+    ) ?: 2_000L
+    LaunchedEffect(copiedUrl, copyCount) {
+        if (copiedUrl != null) {
+            delay(feedbackTimeout)
+            copiedUrl = null
         }
     }
 
@@ -100,141 +116,115 @@ fun WifiImportSheet(
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     ) {
         LazyColumn(
-            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.88f),
-            contentPadding = PaddingValues(start = 24.dp, end = 24.dp, bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth(),
+            contentPadding = PaddingValues(bottom = Spacing.xl),
+            verticalArrangement = Arrangement.spacedBy(Spacing.md),
         ) {
             item {
-                Text(stringResource(R.string.wifi_title), style = MaterialTheme.typography.headlineSmall)
-            }
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    val status = stringResource(
-                        when (state.status) {
-                            WebUploadStatus.STOPPED -> R.string.wifi_status_stopped
-                            WebUploadStatus.STARTING -> R.string.wifi_status_starting
-                            WebUploadStatus.RUNNING -> R.string.wifi_status_running
-                            WebUploadStatus.ERROR -> R.string.wifi_status_error
-                        },
-                    )
+                Column(modifier = inset, verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
                     Text(
-                        status,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        stringResource(R.string.wifi_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.semantics { heading() },
                     )
-                    Text(
-                        stringResource(
-                            R.string.wifi_initial_directory,
-                            (if (state.status == WebUploadStatus.RUNNING || state.status == WebUploadStatus.STARTING) state.initialPath else directory).trim('/'),
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Text(
-                        stringResource(R.string.wifi_space_port, formatBytes(importState.usage.freeBytes)),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    state.address?.takeIf { state.status == WebUploadStatus.RUNNING }?.let { address ->
-                        SelectionContainer {
-                            Text(address, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
+                    if (active) {
+                        // 停止入口不跟着网卡数量下移；启动过程中同样可以取消监听。
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            ServiceStatus(state.status, Modifier.weight(1f))
+                            OutlinedButton(onClick = {
+                                copiedUrl = null
+                                viewModel.stopWebUpload()
+                            }) { Text(stringResource(R.string.wifi_stop)) }
                         }
-                        OutlinedButton(onClick = {
-                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            clipboard.setPrimaryClip(ClipData.newPlainText(clipLabel, address))
-                            copied = true
-                        }) {
-                            Text(stringResource(if (copied) R.string.wifi_address_copied else R.string.wifi_copy_address))
-                        }
-                    }
-                    val message = permissionError ?: state.message
-                    if (!message.isNullOrBlank()) {
-                        Text(
-                            message,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = if (permissionError != null || state.status == WebUploadStatus.ERROR) {
-                                MaterialTheme.colorScheme.error
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-                        )
-                    }
-                    // F-13：权限拒绝后提供“去设置”跳转应用详情页，返回后可重试。
-                    if (permissionError != null) {
-                        TextButton(onClick = {
-                            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                                data = Uri.fromParts("package", context.packageName, null)
-                            }
-                            runCatching { context.startActivity(intent) }
-                        }) { Text(stringResource(R.string.wifi_go_settings)) }
-                    }
-
-                    // F-09：无鉴权风险独立成块，紧邻启动按钮；图标 + 文字，不只靠颜色。
-                    WifiRiskNotice()
-
-                    when (state.status) {
-                        WebUploadStatus.STOPPED, WebUploadStatus.ERROR -> Button(onClick = {
-                            permissionError = null
-                            if (Build.VERSION.SDK_INT >= 37 && ContextCompat.checkSelfPermission(
-                                    context,
-                                    Manifest.permission.ACCESS_LOCAL_NETWORK,
-                                ) != PackageManager.PERMISSION_GRANTED
-                            ) {
+                        WifiRiskNotice()
+                    } else {
+                        ServiceStatus(state.status)
+                        TransferDestination(directory, importState.usage.freeBytes)
+                        WifiRiskNotice()
+                        Button(onClick = {
+                            if (Build.VERSION.SDK_INT >= 37 && !context.hasLocalNetworkPermission()) {
                                 permission.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
                             } else {
                                 viewModel.startWebUpload(directory)
                             }
                         }) { Text(stringResource(R.string.wifi_start)) }
-                        WebUploadStatus.STARTING, WebUploadStatus.RUNNING -> OutlinedButton(onClick = viewModel::stopWebUpload) {
-                            Text(stringResource(R.string.wifi_stop))
-                        }
+                        if (!hasPermission) PermissionRecovery()
                     }
-                    Text(
-                        stringResource(R.string.wifi_usage_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    state.message?.takeIf { it.isNotBlank() }?.let {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (state.status == WebUploadStatus.ERROR) MaterialTheme.colorScheme.error
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+                        )
+                    }
+                }
+            }
+            if (endpoints.isNotEmpty()) {
+                item { SectionTitle(R.string.wifi_browser_addresses, inset) }
+                items(endpoints, key = { it.url }) { endpoint ->
+                    EndpointRow(
+                        endpoint = endpoint,
+                        showInterface = networkCounts.getValue(endpoint.kind) > 1,
+                        copied = copiedUrl == endpoint.url,
+                        modifier = inset,
+                        onCopy = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText(clipLabel, endpoint.url))
+                            copiedUrl = endpoint.url
+                            copyCount++
+                        },
                     )
                 }
             }
-            item { HorizontalDivider() }
-            item {
-                Text(stringResource(R.string.wifi_import_settings), style = MaterialTheme.typography.titleMedium)
-            }
-            item {
-                ImportOption(
-                    title = stringResource(DesignR.string.design_import_thumbnails),
-                    checked = preferences.generateThumbnails,
-                    onCheckedChange = viewModel::setGenerateThumbnails,
-                )
-            }
-            item {
-                ImportOption(
-                    title = stringResource(DesignR.string.design_import_duplicates),
-                    checked = preferences.duplicateDetection,
-                    onCheckedChange = viewModel::setDuplicateDetection,
-                )
-            }
-            item { HorizontalDivider() }
-            item {
-                Text(stringResource(R.string.wifi_uploads_title), style = MaterialTheme.typography.titleMedium)
-            }
-            if (state.transfers.isEmpty()) {
+            if (active) {
                 item {
-                    Text(
-                        stringResource(
-                            if (state.status == WebUploadStatus.RUNNING) R.string.wifi_uploads_waiting else R.string.wifi_uploads_hint,
-                        ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    Column(modifier = inset, verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+                        TransferDestination(state.initialPath, importState.usage.freeBytes)
+                        Text(
+                            stringResource(R.string.wifi_usage_note),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+            item {
+                Column {
+                    HorizontalDivider(modifier = inset)
+                    SectionTitle(R.string.wifi_import_settings, inset.padding(top = Spacing.md))
+                    SwitchRow(
+                        title = stringResource(DesignR.string.design_import_thumbnails),
+                        description = null,
+                        checked = preferences.generateThumbnails,
+                        onCheckedChange = viewModel::setGenerateThumbnails,
+                    )
+                    SwitchRow(
+                        title = stringResource(DesignR.string.design_import_duplicates),
+                        description = null,
+                        checked = preferences.duplicateDetection,
+                        onCheckedChange = viewModel::setDuplicateDetection,
                     )
                 }
-            } else {
+            }
+            if (state.transfers.isNotEmpty()) {
+                item { SectionTitle(R.string.wifi_uploads_title, inset) }
                 items(state.transfers, key = { it.id }) { transfer ->
                     TransferRow(
                         transfer = transfer,
+                        modifier = inset,
                         onRetry = { transfer.taskId?.let(viewModel::retry) },
                         onCancel = { transfer.taskId?.let(viewModel::cancel) },
+                    )
+                }
+            } else if (state.status == WebUploadStatus.RUNNING) {
+                item {
+                    Text(
+                        stringResource(R.string.wifi_uploads_waiting),
+                        modifier = inset,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -242,20 +232,83 @@ fun WifiImportSheet(
     }
 }
 
-/**
- * 无鉴权风险提示（F-09）。
- *
- * 服务没有登录或访问令牌，同一网络内能访问地址的设备均可读写文件。
- * 该结论独立成块并放在启动按钮旁，使用警示容器色 + 图标 + 文字，
- * 浅色与深色下均可读；不使用营销或恐吓语言，只陈述事实与使用建议。
- */
+private fun Context.hasLocalNetworkPermission(): Boolean =
+    Build.VERSION.SDK_INT < 37 || ContextCompat.checkSelfPermission(
+        this, Manifest.permission.ACCESS_LOCAL_NETWORK,
+    ) == PackageManager.PERMISSION_GRANTED
+
+@Composable
+private fun PermissionRecovery() {
+    val context = LocalContext.current
+    var settingsUnavailable by rememberSaveable { mutableStateOf(false) }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+    ) {
+        Text(
+            stringResource(if (settingsUnavailable) R.string.wifi_permission_manual else R.string.wifi_permission_denied),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+        )
+        if (!settingsUnavailable) {
+            TextButton(onClick = {
+                val intent = Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.packageName, null),
+                )
+                try {
+                    context.startActivity(intent)
+                } catch (_: ActivityNotFoundException) {
+                    settingsUnavailable = true
+                } catch (_: SecurityException) {
+                    settingsUnavailable = true
+                }
+            }) { Text(stringResource(R.string.wifi_go_settings)) }
+        }
+    }
+}
+
+@Composable
+private fun SectionTitle(@StringRes title: Int, modifier: Modifier) {
+    Text(stringResource(title), style = MaterialTheme.typography.titleMedium, modifier = modifier.semantics { heading() })
+}
+
+@Composable
+private fun ServiceStatus(status: WebUploadStatus, modifier: Modifier = Modifier) {
+    val label = when (status) {
+        WebUploadStatus.STOPPED -> R.string.wifi_status_stopped
+        WebUploadStatus.STARTING -> R.string.wifi_status_starting
+        WebUploadStatus.RUNNING -> R.string.wifi_status_running
+        WebUploadStatus.ERROR -> R.string.wifi_status_error
+    }
+    Text(
+        stringResource(label),
+        style = MaterialTheme.typography.titleMedium,
+        modifier = modifier.semantics { liveRegion = LiveRegionMode.Polite },
+    )
+}
+
+@Composable
+private fun TransferDestination(path: String, freeBytes: Long) {
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
+        Text(stringResource(R.string.wifi_initial_directory, path.trim('/')), style = MaterialTheme.typography.bodyLarge)
+        Text(
+            stringResource(R.string.wifi_space_port, formatBytes(freeBytes)),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** F-09：风险紧邻启停，文字与图标共同表达，不依赖警示色。 */
 @Composable
 private fun WifiRiskNotice() {
     Surface(
         color = MaterialTheme.colorScheme.errorContainer,
         contentColor = MaterialTheme.colorScheme.onErrorContainer,
-        shape = RoundedCornerShape(Spacing.md),
-        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) {},
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -281,23 +334,51 @@ private fun WifiRiskNotice() {
 }
 
 @Composable
-private fun ImportOption(title: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun EndpointRow(
+    endpoint: WebUploadEndpoint,
+    showInterface: Boolean,
+    copied: Boolean,
+    modifier: Modifier,
+    onCopy: () -> Unit,
+) {
+    val kind = stringResource(
+        when (endpoint.kind) {
+            WebUploadNetwork.WIFI -> R.string.wifi_network_wifi
+            WebUploadNetwork.ETHERNET -> R.string.wifi_network_ethernet
+            WebUploadNetwork.HOTSPOT -> R.string.wifi_network_hotspot
+        },
+    )
+    val label = if (showInterface && endpoint.interfaceName.isNotBlank()) {
+        stringResource(R.string.wifi_network_interface, kind, endpoint.interfaceName)
+    } else kind
+    val action = stringResource(R.string.wifi_copy_network_address, label, endpoint.url)
+    val copiedLabel = stringResource(R.string.wifi_address_copied)
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(title, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            modifier = Modifier.semantics { contentDescription = title },
-        )
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
+            Text(label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            SelectionContainer {
+                Text(endpoint.url, style = MaterialTheme.typography.titleMedium)
+            }
+        }
+        TextButton(
+            onClick = onCopy,
+            modifier = Modifier.semantics {
+                contentDescription = action
+                if (copied) {
+                    stateDescription = copiedLabel
+                    liveRegion = LiveRegionMode.Polite
+                }
+            },
+        ) { Text(if (copied) copiedLabel else stringResource(R.string.wifi_copy_address)) }
     }
 }
 
 @Composable
-private fun TransferRow(transfer: WebTransferRecord, onRetry: () -> Unit, onCancel: () -> Unit) {
+private fun TransferRow(transfer: WebTransferRecord, modifier: Modifier, onRetry: () -> Unit, onCancel: () -> Unit) {
     val stateLabel = stringResource(
         when (transfer.state) {
             WebTransferState.RECEIVING -> R.string.wifi_transfer_receiving
@@ -307,18 +388,21 @@ private fun TransferRow(transfer: WebTransferRecord, onRetry: () -> Unit, onCanc
             WebTransferState.CANCELED -> R.string.wifi_transfer_canceled
         },
     )
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.fillMaxWidth()) {
-        Text(transfer.name, style = MaterialTheme.typography.bodyLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs), modifier = modifier) {
+        Text(transfer.name, style = MaterialTheme.typography.bodyLarge)
         val size = if (transfer.state == WebTransferState.RECEIVING) {
             stringResource(R.string.wifi_transfer_size_progress, formatBytes(transfer.receivedBytes), formatBytes(transfer.sizeBytes))
         } else {
             formatBytes(transfer.sizeBytes)
         }
+        val failure = transfer.failureKind
+        val reason = if (failure != null) failure.diagnostic(transfer.message) ?: stringResource(failure.messageRes) else transfer.message
         Text(
-            listOfNotNull(stateLabel, size, transfer.message?.takeIf { it.isNotBlank() }).joinToString(" · "),
+            if (reason.isNullOrBlank()) "$stateLabel · $size" else "$stateLabel · $size · $reason",
             style = MaterialTheme.typography.bodySmall,
             color = if (transfer.state == WebTransferState.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            modifier = if (transfer.state == WebTransferState.RECEIVING) Modifier
+                else Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         )
         if (transfer.state == WebTransferState.RECEIVING && transfer.sizeBytes > 0L) {
             LinearProgressIndicator(
@@ -328,7 +412,7 @@ private fun TransferRow(transfer: WebTransferRecord, onRetry: () -> Unit, onCanc
         } else if (transfer.state == WebTransferState.IMPORTING) {
             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
         }
-        if (transfer.taskId != null && transfer.state == WebTransferState.FAILED) {
+        if (failure?.canRetry == true) {
             TextButton(onClick = onRetry) { Text(stringResource(R.string.wifi_retry_save)) }
         } else if (transfer.taskId != null && transfer.state == WebTransferState.IMPORTING) {
             TextButton(onClick = onCancel) { Text(stringResource(R.string.wifi_cancel_save)) }

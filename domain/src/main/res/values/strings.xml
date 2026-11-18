@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- domain 枚举选项文案：设置与播放器共用同一来源，保证同一选项只有一种叫法。 -->
+<!-- domain 枚举文案：跨界面使用同一来源。 -->
 <resources>
     <string name="option_theme_system">跟随系统</string>
     <string name="option_theme_light">浅色</string>
     <string name="option_theme_dark">深色</string>
+    <string name="option_progress_disabled">不记录</string>
+    <string name="option_progress_record_only">仅记录，从头播放</string>
+    <string name="option_progress_resume">记录并续播</string>
     <string name="option_aspect_fit">适应屏幕</string>
     <string name="option_aspect_fill">拉伸填充</string>
     <string name="option_aspect_crop">裁剪填满</string>
@@ -11,8 +14,24 @@
     <string name="option_aspect_4_3">4:3</string>
     <string name="option_subtitle_bg_none">无背景</string>
     <string name="option_subtitle_bg_semi">半透明</string>
-    <string name="option_subtitle_bg_solid">纯色</string>
+    <string name="option_subtitle_bg_solid">黑色</string>
+    <string name="option_subtitle_bg_navy">深蓝色</string>
     <string name="option_subtitle_color_white">白色</string>
     <string name="option_subtitle_color_yellow">黄色</string>
     <string name="option_subtitle_color_cyan">青色</string>
+    <string name="option_subtitle_font_default">默认</string>
+    <string name="option_subtitle_font_serif">衬线</string>
+    <string name="option_subtitle_font_monospace">等宽</string>
+    <string name="option_subtitle_style_normal">常规</string>
+    <string name="option_subtitle_style_bold">粗体</string>
+    <string name="option_subtitle_style_italic">斜体</string>
+    <string name="option_subtitle_style_bold_italic">粗斜体</string>
+
+    <string name="import_error_space">存储空间不足，请清理空间后重试。</string>
+    <string name="import_error_source">来源不可读，请重新选择文件后重试。</string>
+    <string name="import_error_io">文件读写失败，请重试。</string>
+    <string name="import_error_canceled">导入已取消。</string>
+    <string name="import_error_generic">导入失败，请重试。</string>
+    <string name="import_error_web_staging_missing">上传暂存文件已丢失，请从网页重新上传。</string>
+    <string name="import_error_target_directory_missing">目标文件夹不可用，请按原路径恢复后重试。</string>
 </resources>

@@ -1,5 +1,8 @@
 package com.privateplayer.data.repository
 
+import android.os.Build
+import android.system.OsConstants
+import android.system.StructStat
 import android.webkit.MimeTypeMap
 import androidx.room.withTransaction
 import com.privateplayer.core.common.di.IoDispatcher
@@ -12,10 +15,16 @@ import com.privateplayer.core.database.dao.PlaylistDao
 import com.privateplayer.core.database.entity.MediaEntity
 import com.privateplayer.core.storage.MediaProbe
 import com.privateplayer.core.storage.PrivateStorage
+import com.privateplayer.core.storage.deleteTree
+import com.privateplayer.core.storage.hasIdentity
 import com.privateplayer.core.storage.moveNoOverwrite
+import com.privateplayer.core.storage.privateIdentity
 import com.privateplayer.data.importer.ImportCommitJournal
 import com.privateplayer.data.importer.importTempFile
+import com.privateplayer.domain.model.DIRECTORY_UNAVAILABLE_REASON
+import com.privateplayer.domain.model.PrivateFileIdentity
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.repository.FileTreeRepository
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -25,10 +34,6 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.file.Files
 import java.nio.file.LinkOption
-import java.nio.file.Path
-import java.nio.file.SimpleFileVisitor
-import java.nio.file.FileVisitResult
-import java.nio.file.attribute.BasicFileAttributes
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -67,11 +72,11 @@ class FileTreeRepositoryImpl @Inject constructor(
         val mediaByPath = mediaDao.findDirectChildren(databasePath(path)).associateBy { it.relativePath }
         val children = directory.listFiles() ?: throw IOException("无法读取目录：$path")
         children.mapNotNull { child ->
-            if (Files.isSymbolicLink(child.toPath())) return@mapNotNull null
+            // 父目录已在树锁内解析；child 是其直接子项。lstat 不跟随链接。
+            val stat = storage.fileStat(child) ?: return@mapNotNull null
+            if (!OsConstants.S_ISREG(stat.st_mode) && !OsConstants.S_ISDIR(stat.st_mode)) return@mapNotNull null
             val childPath = join(path, child.name)
-            val checked = storage.resolveMediaFile(childPath)
-            if (!isFile(checked) && !isDirectory(checked)) return@mapNotNull null
-            entry(childPath, checked, mediaByPath[databasePath(childPath)])
+            entry(childPath, child, mediaByPath[databasePath(childPath)], stat)
         }.sortedWith { left, right ->
             when {
                 left.isDirectory != right.isDirectory -> if (left.isDirectory) -1 else 1
@@ -82,9 +87,11 @@ class FileTreeRepositoryImpl @Inject constructor(
 
     override suspend fun find(path: String): FileTreeEntry? = inTree {
         val file = storage.resolveMediaFile(path)
-        if (!isFile(file) && !isDirectory(file)) return@inTree null
-        val media = if (isFile(file)) mediaDao.findByRelativePath(databasePath(path)) else null
-        entry(path, file, media)
+        val stat = storage.fileStat(file) ?: return@inTree null
+        val regular = OsConstants.S_ISREG(stat.st_mode)
+        if (!regular && !OsConstants.S_ISDIR(stat.st_mode)) return@inTree null
+        val media = if (regular) mediaDao.findByRelativePath(databasePath(path)) else null
+        entry(path, file, media, stat)
     }
 
     override suspend fun createDirectory(parent: String, name: String): FileTreeEntry = inTree {
@@ -110,9 +117,16 @@ class FileTreeRepositoryImpl @Inject constructor(
         moveEntry(path, join(destination, path.substringAfterLast('/')), renameFile = false)
     }
 
-    override suspend fun delete(path: String): Unit = inTree {
+    override suspend fun delete(path: String, identity: PrivateFileIdentity, isDirectory: Boolean): Unit = inTree {
         require(path.isNotEmpty()) { "不能删除根目录" }
-        val source = existingEntry(path)
+        val source = try {
+            storage.resolveMediaFile(path)
+        } catch (error: IllegalArgumentException) {
+            throw FileTreeEntryChangedException(error)
+        }
+        val stat = storage.fileStat(source) ?: throw FileTreeEntryChangedException()
+        val sameType = if (isDirectory) OsConstants.S_ISDIR(stat.st_mode) else OsConstants.S_ISREG(stat.st_mode)
+        if (!sameType || !stat.hasIdentity(identity)) throw FileTreeEntryChangedException()
         ensureNoPendingImport(path)
         var journalDirectory: File? = null
         try {
@@ -270,7 +284,7 @@ class FileTreeRepositoryImpl @Inject constructor(
 
     private fun existingDirectory(path: String): File {
         val file = storage.resolveMediaFile(path)
-        require(isDirectory(file)) { "目录不存在或不是目录" }
+        require(isDirectory(file)) { DIRECTORY_UNAVAILABLE_REASON }
         return file
     }
 
@@ -290,21 +304,28 @@ class FileTreeRepositoryImpl @Inject constructor(
                 importCommits.owns(target, prepared)
             } else {
                 // 升级前已产生的双路径仍可恢复，但不再创建此类文件。
-                val staged = storage.importTempFile(task)
+                val staged = storage.importTempFile(task, null)
                 isFile(staged) && sameFile(target, staged)
             }
             if (owned) throw IOException("文件仍在导入或等待恢复，请先处理导入任务")
         }
     }
 
-    private fun entry(path: String, file: File, media: MediaEntity?): FileTreeEntry {
-        val directory = isDirectory(file)
+    private fun entry(
+        path: String,
+        file: File,
+        media: MediaEntity?,
+        stat: StructStat = storage.fileStat(file) ?: throw IOException("文件不存在：$path"),
+    ): FileTreeEntry {
+        val directory = OsConstants.S_ISDIR(stat.st_mode)
         return FileTreeEntry(
             name = if (path.isEmpty()) "" else visibleName(file.name, media),
             path = path,
             isDirectory = directory,
-            sizeBytes = if (directory) 0L else file.length(),
-            modifiedAt = file.lastModified(),
+            identity = stat.privateIdentity,
+            sizeBytes = if (directory) 0L else stat.st_size,
+            modifiedAt = if (Build.VERSION.SDK_INT >= 27) stat.st_mtim.tv_sec * 1000 + stat.st_mtim.tv_nsec / 1_000_000
+            else file.lastModified(),
             mediaId = media?.id,
             isVideo = !directory && isLikelyVideo(file.name, media?.mimeType ?: mimeFor(file.name), media != null),
             thumbnailPath = media?.thumbnailPath,
@@ -485,8 +506,10 @@ class FileTreeRepositoryImpl @Inject constructor(
             moved
         }
         if (journal.operation == Operation.DELETE) {
-            if (destinationExists && committed) {
-                deleteTree(destination.toPath())
+            if (committed) {
+                // 同一分支用于正常提交与进程恢复。各项可重复清理；最后才移除日志。
+                journal.records.forEach { storage.deleteSubtitleDir(it.id) }
+                if (destinationExists) deleteTree(destination.toPath())
             } else if (destinationExists) {
                 if (sourceExists) {
                     if (!sameFile(source, destination)) throw IOException("原位置已被占用，已保留暂存内容")
@@ -540,19 +563,3 @@ internal fun isMatchingSubtitle(videoName: String, subtitleName: String): Boolea
     return SUBTITLE_LANGUAGE_SUFFIX.matches(suffix)
 }
 
-
-/** 不跟随符号链接清理暂存目录，防止递归删除树外内容。 */
-internal fun deleteTree(root: Path) {
-    if (!Files.exists(root, LinkOption.NOFOLLOW_LINKS)) return
-    Files.walkFileTree(root, object : SimpleFileVisitor<Path>() {
-        override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
-            Files.delete(file)
-            return FileVisitResult.CONTINUE
-        }
-        override fun postVisitDirectory(dir: Path, error: IOException?): FileVisitResult {
-            if (error != null) throw error
-            Files.delete(dir)
-            return FileVisitResult.CONTINUE
-        }
-    })
-}

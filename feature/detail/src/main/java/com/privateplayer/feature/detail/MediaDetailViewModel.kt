@@ -15,6 +15,7 @@ import com.privateplayer.domain.repository.MediaFileLocator
 import com.privateplayer.domain.repository.MediaRepository
 import com.privateplayer.domain.repository.SubtitleStore
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.usecase.PlaybackStopper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
@@ -50,6 +51,7 @@ data class DetailMessage(@StringRes val res: Int, val args: List<String> = empty
 data class MediaDetailUiState(
     val isLoading: Boolean = true,
     val media: Media? = null,
+    val fileEntry: FileTreeEntry? = null,
     val thumbnailFile: File? = null,
     val fileInfo: MediaFileInfo? = null,
     val subtitles: List<SubtitleFile> = emptyList(),
@@ -86,6 +88,7 @@ class MediaDetailViewModel @Inject constructor(
 
     private data class SameDirectorySubtitles(
         val mediaPath: String? = null,
+        val fileEntry: FileTreeEntry? = null,
         val subtitles: List<SubtitleFile> = emptyList(),
         @StringRes val errorRes: Int? = null,
     )
@@ -104,17 +107,18 @@ class MediaDetailViewModel @Inject constructor(
                 val treePath = mediaPath.removePrefix("media/")
                 val parent = treePath.substringBeforeLast('/', "")
                 fileTreeRepository.observeDirectory(parent)
-                    .map {
+                    .map { entries ->
+                        val entry = entries.firstOrNull { it.path == treePath && !it.isDirectory && it.mediaId == mediaId }
                         try {
                             val subtitles = fileTreeRepository.matchingSubtitles(treePath).map { path ->
                                 val file = File(path)
                                 SubtitleFile(name = file.name, absolutePath = path, format = file.extension.lowercase())
                             }
-                            SameDirectorySubtitles(mediaPath = mediaPath, subtitles = subtitles)
+                            SameDirectorySubtitles(mediaPath = mediaPath, fileEntry = entry, subtitles = subtitles)
                         } catch (error: CancellationException) {
                             throw error
                         } catch (error: Exception) {
-                            SameDirectorySubtitles(mediaPath = mediaPath, errorRes = R.string.detail_same_dir_subtitle_error)
+                            SameDirectorySubtitles(mediaPath = mediaPath, fileEntry = entry, errorRes = R.string.detail_same_dir_subtitle_error)
                         }
                     }
                     .catch {
@@ -136,6 +140,7 @@ class MediaDetailViewModel @Inject constructor(
         MediaDetailUiState(
             isLoading = false,
             media = media,
+            fileEntry = matches?.fileEntry,
             thumbnailFile = fileLocator.thumbnailFile(media?.thumbnailPath),
             fileInfo = media?.let { fileLocator.mediaFile(it.relativePath) },
             subtitles = localState.subtitles,
@@ -158,25 +163,7 @@ class MediaDetailViewModel @Inject constructor(
         local.update { it.copy(showFileInfo = show) }
     }
 
-    /** 当前媒体在文件树中的条目；文件操作对话框与首页共用同一模型。 */
-    fun treeEntry(): FileTreeEntry? {
-        val media = uiState.value.media ?: return null
-        return FileTreeEntry(
-            name = media.fileName,
-            path = media.relativePath.removePrefix("media/"),
-            isDirectory = false,
-            sizeBytes = media.sizeBytes,
-            modifiedAt = media.addedAt,
-            mediaId = media.id,
-            isVideo = true,
-            thumbnailPath = media.thumbnailPath,
-            durationMs = media.durationMs,
-            playbackPositionMs = media.playbackPositionMs,
-        )
-    }
-
-    fun rename(name: String) {
-        val entry = treeEntry() ?: return
+    fun rename(entry: FileTreeEntry, name: String) {
         performFileOperation(
             failureMessage = DetailMessage(R.string.detail_rename_failed),
             successMessage = DetailMessage(R.string.detail_renamed),
@@ -186,8 +173,7 @@ class MediaDetailViewModel @Inject constructor(
         }
     }
 
-    fun move(destination: String) {
-        val entry = treeEntry() ?: return
+    fun move(entry: FileTreeEntry, destination: String) {
         performFileOperation(
             failureMessage = DetailMessage(R.string.detail_move_failed),
             successMessage = DetailMessage(R.string.detail_moved),
@@ -197,14 +183,13 @@ class MediaDetailViewModel @Inject constructor(
         }
     }
 
-    fun delete() {
-        val entry = treeEntry() ?: return
+    fun delete(entry: FileTreeEntry) {
         performFileOperation(
             failureMessage = DetailMessage(R.string.detail_delete_failed),
             successMessage = DetailMessage(R.string.detail_deleted),
         ) {
             playbackStopper.stopIfAffected(entry.path)
-            fileTreeRepository.delete(entry.path)
+            fileTreeRepository.delete(entry)
         }
     }
 
@@ -230,6 +215,8 @@ class MediaDetailViewModel @Inject constructor(
                 successMessage
             } catch (error: CancellationException) {
                 throw error
+            } catch (_: FileTreeEntryChangedException) {
+                DetailMessage(R.string.detail_delete_target_changed)
             } catch (_: Exception) {
                 failureMessage
             }

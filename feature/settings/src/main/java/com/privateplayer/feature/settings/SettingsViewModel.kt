@@ -8,8 +8,11 @@ import com.privateplayer.core.common.di.IoDispatcher
 import com.privateplayer.core.playback.PlaybackEngineProvider
 import com.privateplayer.domain.model.AppSettings
 import com.privateplayer.domain.model.OperationOutcome
+import com.privateplayer.domain.model.PlaybackProgressMode
 import com.privateplayer.domain.model.StorageUsage
 import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.SubtitleFont
+import com.privateplayer.domain.model.SubtitleFontStyle
 import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.ThemeMode
 import com.privateplayer.domain.model.VideoAspect
@@ -91,9 +94,7 @@ class SettingsViewModel @Inject constructor(
 
     fun setAutoPlayNext(enabled: Boolean) = launchSetting { settingsRepository.setAutoPlayNext(enabled) }
 
-    fun setRememberProgress(enabled: Boolean) = launchSetting { settingsRepository.setRememberProgress(enabled) }
-
-    fun setAutoResume(enabled: Boolean) = launchSetting { settingsRepository.setAutoResume(enabled) }
+    fun setPlaybackProgressMode(mode: PlaybackProgressMode) = launchSetting { settingsRepository.setPlaybackProgressMode(mode) }
 
     fun setDefaultSpeed(speed: Float) = launchSetting { settingsRepository.setDefaultSpeed(speed) }
 
@@ -104,6 +105,10 @@ class SettingsViewModel @Inject constructor(
     fun setLongPressSpeed(speed: Float) = launchSetting { settingsRepository.setLongPressSpeed(speed) }
 
     fun setSubtitleFontScale(scale: Float) = launchSetting { settingsRepository.setSubtitleFontScale(scale) }
+    fun setSubtitleFont(font: SubtitleFont) = launchSetting { settingsRepository.setSubtitleFont(font) }
+    fun setSubtitleFontStyle(style: SubtitleFontStyle) = launchSetting { settingsRepository.setSubtitleFontStyle(style) }
+    fun setSubtitleVerticalOffset(percent: Int) = launchSetting { settingsRepository.setSubtitleVerticalOffset(percent) }
+    fun setSubtitleOverrideAss(enabled: Boolean) = launchSetting { settingsRepository.setSubtitleOverrideAss(enabled) }
 
     fun setSubtitleBackground(background: SubtitleBackground) =
         launchSetting { settingsRepository.setSubtitleBackground(background) }

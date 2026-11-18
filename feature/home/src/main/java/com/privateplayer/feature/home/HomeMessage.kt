@@ -36,6 +36,9 @@ sealed interface HomeMessage {
     /** 删除失败。 */
     data object DeleteFailed : HomeMessage
 
+    /** 用户确认的条目已经被移除或替换。 */
+    data object DeleteTargetChanged : HomeMessage
+
     /** 已删除。 */
     data object Deleted : HomeMessage
 
@@ -55,6 +58,7 @@ fun HomeMessage.labelRes(): Int = when (this) {
     HomeMessage.MoveFailed -> R.string.home_move_failed
     HomeMessage.Moved -> R.string.home_moved
     HomeMessage.DeleteFailed -> R.string.home_delete_failed
+    HomeMessage.DeleteTargetChanged -> R.string.home_delete_target_changed
     HomeMessage.Deleted -> R.string.home_deleted
     is HomeMessage.BatchDone -> when {
         this.result.allSucceeded -> R.string.home_batch_result_all_success

@@ -38,18 +38,21 @@ interface MediaRepository {
 
     suspend fun moveToFolder(ids: List<Long>, folderId: Long?): OperationOutcome
 
-    /** 删除媒体：先删数据库记录再删文件；文件删除失败时返回失败原因。 */
-    suspend fun delete(ids: List<Long>): OperationOutcome
+    /** 删除已选中的媒体文件，并清理其缩略图缓存；失败项返回原因。 */
+    suspend fun delete(entries: List<FileTreeEntry>): OperationOutcome
 
     suspend fun recordPlayback(
         mediaId: Long,
         positionMs: Long,
+        observedDurationMs: Long,
         watchedMs: Long,
         playIncrement: Int,
     )
 
     /** 记住该视频的字幕选择；`trackId` 为 null 表示关闭字幕，"off" 由播放层写入。 */
     suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?)
+
+    suspend fun setSubtitleDelayMs(mediaId: Long, delayMs: Long)
 }
 
 interface FolderRepository {
@@ -99,9 +102,7 @@ interface SettingsRepository {
 
     suspend fun setAutoPlayNext(enabled: Boolean)
 
-    suspend fun setRememberProgress(enabled: Boolean)
-
-    suspend fun setAutoResume(enabled: Boolean)
+    suspend fun setPlaybackProgressMode(mode: com.privateplayer.domain.model.PlaybackProgressMode)
 
     suspend fun setDefaultSpeed(speed: Float)
 
@@ -112,6 +113,14 @@ interface SettingsRepository {
     suspend fun setLongPressSpeed(speed: Float)
 
     suspend fun setSubtitleFontScale(scale: Float)
+
+    suspend fun setSubtitleFont(font: com.privateplayer.domain.model.SubtitleFont)
+
+    suspend fun setSubtitleFontStyle(style: com.privateplayer.domain.model.SubtitleFontStyle)
+
+    suspend fun setSubtitleVerticalOffset(percent: Int)
+
+    suspend fun setSubtitleOverrideAss(enabled: Boolean)
 
     suspend fun setSubtitleBackground(background: com.privateplayer.domain.model.SubtitleBackground)
 
@@ -159,6 +168,9 @@ interface ImportRepository {
     suspend fun retry(taskId: String)
 
     suspend fun removeTask(taskId: String)
+
+    /** 明确放弃本机失败或取消的任务；不会移除外部来源或已入库文件。 */
+    suspend fun discardLocalTask(taskId: String)
 
     /** 应用启动时对账：补挂丢失的 WorkManager 任务。 */
     suspend fun reconcilePendingTasks()

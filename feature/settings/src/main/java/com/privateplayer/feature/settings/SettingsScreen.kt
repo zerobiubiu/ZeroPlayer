@@ -1,6 +1,7 @@
 package com.privateplayer.feature.settings
 
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,15 +9,12 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
@@ -34,7 +32,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -48,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -55,36 +53,43 @@ import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.design.components.AppTopBar
 import com.privateplayer.core.design.components.InfoRow
 import com.privateplayer.core.design.components.SettingSection
+import com.privateplayer.core.design.components.SettingsDropdownRow
+import com.privateplayer.core.design.components.SubtitleAppearanceActions
+import com.privateplayer.core.design.components.SubtitleAppearanceControls
 import com.privateplayer.core.design.components.SwitchRow
-import com.privateplayer.core.design.theme.Radius
 import com.privateplayer.core.design.theme.Spacing
-import com.privateplayer.domain.model.SubtitleBackground
+import com.privateplayer.domain.model.PlaybackProgressMode
+import com.privateplayer.domain.model.PlaybackSpeedLimits
 import com.privateplayer.core.design.R as DesignR
-import com.privateplayer.domain.model.SubtitleTextColor
 import com.privateplayer.domain.model.ThemeMode
 import com.privateplayer.domain.model.VideoAspect
 import kotlin.math.roundToInt
 
-/** 设置二级页面；一级按任务分组（播放与字幕 / 手势与反馈 / 外观 / 数据与存储 / 关于）。文案全部来自模块资源。 */
+/** 设置按观看、文件和应用分组；路由 ID 不依赖可见标题。 */
 enum class SettingsSection(
     val id: String,
     @StringRes val titleRes: Int,
-    @StringRes val summaryRes: Int,
     val icon: ImageVector,
 ) {
-    PLAYBACK("playback", R.string.settings_section_playback, R.string.settings_section_playback_summary, Icons.Outlined.PlayCircle),
-    GESTURE("gesture", R.string.settings_section_gesture, R.string.settings_section_gesture_summary, Icons.Outlined.TouchApp),
-    APPEARANCE("appearance", R.string.settings_section_appearance, R.string.settings_section_appearance_summary, Icons.Outlined.Palette),
-    DATA("data", R.string.settings_section_data, R.string.settings_section_data_summary, Icons.Outlined.Storage),
-    ABOUT("about", R.string.settings_section_about, R.string.settings_section_about_summary, Icons.Outlined.Info),
+    PLAYBACK("playback", R.string.settings_section_playback, Icons.Outlined.PlayCircle),
+    SUBTITLE("subtitle", R.string.settings_section_subtitle, Icons.Outlined.ClosedCaption),
+    GESTURE("gesture", R.string.settings_section_gesture, Icons.Outlined.TouchApp),
+    IMPORT("import", R.string.settings_section_import, Icons.Outlined.FileDownload),
+    STORAGE("storage", R.string.settings_section_storage, Icons.Outlined.Storage),
+    APPEARANCE("appearance", R.string.settings_section_appearance, Icons.Outlined.Palette),
+    ABOUT("about", R.string.settings_section_about, Icons.Outlined.Info),
     ;
 
     companion object {
-        /** 旧路由兼容：display→appearance，import/storage→data，subtitle→playback。 */
+        internal val groups = listOf(
+            R.string.settings_group_watch to listOf(PLAYBACK, SUBTITLE, GESTURE),
+            R.string.settings_group_files to listOf(IMPORT, STORAGE),
+            R.string.settings_group_app to listOf(APPEARANCE, ABOUT),
+        )
+
         fun fromId(id: String?): SettingsSection? = when (id) {
             "display" -> APPEARANCE
-            "import", "storage" -> DATA
-            "subtitle" -> PLAYBACK
+            "data" -> STORAGE
             else -> entries.firstOrNull { it.id == id }
         }
     }
@@ -111,14 +116,15 @@ fun SettingsHubScreen(
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
             AppTopBar(title = stringResource(R.string.settings_title))
+            SnackbarHost(snackbarHostState)
             LazyColumn(
                 contentPadding = PaddingValues(bottom = Spacing.contentBottom),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item {
-                    SettingSection(title = stringResource(R.string.settings_group_preferences)) {
-                        Column(verticalArrangement = Arrangement.spacedBy(Spacing.xs)) {
-                            SettingsSection.entries.forEach { section ->
+                SettingsSection.groups.forEach { (heading, sections) ->
+                    item(key = heading) {
+                        SettingSection(title = stringResource(heading)) {
+                            sections.forEach { section ->
                                 SettingsEntryRow(
                                     section = section,
                                     detail = sectionDetail(section, state),
@@ -131,56 +137,31 @@ fun SettingsHubScreen(
             }
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = Spacing.contentBottom),
-        )
     }
 }
 
 @Composable
 private fun SettingsEntryRow(
     section: SettingsSection,
-    detail: String,
+    detail: String?,
     onClick: () -> Unit,
 ) {
     val title = stringResource(section.titleRes)
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        shape = RoundedCornerShape(Radius.card),
-        onClick = onClick,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(Spacing.md),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = Spacing.screenHorizontal),
+            .clickable(role = Role.Button, onClickLabel = stringResource(R.string.settings_enter_section, title), onClick = onClick)
+            .heightIn(min = 64.dp)
+            .padding(horizontal = Spacing.lg, vertical = Spacing.md),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.md),
-        ) {
-            Icon(
-                imageVector = section.icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp),
-            )
-            Spacer(Modifier.padding(horizontal = Spacing.sm))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(text = title, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    text = detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Outlined.KeyboardArrowRight,
-                contentDescription = stringResource(R.string.settings_enter_section, title),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+        Icon(section.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(Spacing.xxs)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            if (detail != null) Text(detail, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -208,9 +189,9 @@ fun SettingsSectionScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             AppTopBar(
                 title = stringResource(section.titleRes),
-                subtitle = stringResource(section.summaryRes),
                 onBack = onBack,
             )
+            SnackbarHost(snackbarHostState)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -218,27 +199,17 @@ fun SettingsSectionScreen(
                     .padding(bottom = Spacing.contentBottom),
             ) {
                 when (section) {
-                    SettingsSection.PLAYBACK -> {
-                        PlaybackSettings(state, viewModel)
-                        SubtitleSettings(state, viewModel)
-                    }
+                    SettingsSection.PLAYBACK -> PlaybackSettings(state, viewModel)
+                    SettingsSection.SUBTITLE -> SubtitleSettings(state, viewModel)
                     SettingsSection.GESTURE -> GestureSettings(state, viewModel)
                     SettingsSection.APPEARANCE -> DisplaySettings(state, viewModel)
-                    SettingsSection.DATA -> {
-                        ImportSettings(state, viewModel)
-                        StorageSettings(state, viewModel)
-                    }
+                    SettingsSection.IMPORT -> ImportSettings(state, viewModel)
+                    SettingsSection.STORAGE -> StorageSettings(state, viewModel)
                     SettingsSection.ABOUT -> AboutSettings(state)
                 }
             }
         }
 
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = Spacing.contentBottom),
-        )
     }
 }
 
@@ -249,21 +220,16 @@ private fun PlaybackSettings(state: SettingsUiState, viewModel: SettingsViewMode
         Column {
             SwitchRow(
                 title = stringResource(R.string.settings_auto_play_next),
-                description = stringResource(R.string.settings_auto_play_next_desc),
+                description = null,
                 checked = playback.autoPlayNext,
                 onCheckedChange = viewModel::setAutoPlayNext,
             )
-            SwitchRow(
-                title = stringResource(R.string.settings_remember_progress),
-                description = stringResource(R.string.settings_remember_progress_desc),
-                checked = playback.rememberProgress,
-                onCheckedChange = viewModel::setRememberProgress,
-            )
-            SwitchRow(
-                title = stringResource(R.string.settings_auto_resume),
-                description = stringResource(R.string.settings_auto_resume_desc),
-                checked = playback.autoResume,
-                onCheckedChange = viewModel::setAutoResume,
+            SettingsDropdownRow(
+                title = stringResource(R.string.settings_progress_mode),
+                value = playback.progressMode,
+                options = PlaybackProgressMode.entries,
+                labelRes = PlaybackProgressMode::labelRes,
+                onSelect = viewModel::setPlaybackProgressMode,
             )
         }
     }
@@ -273,31 +239,16 @@ private fun PlaybackSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 title = stringResource(R.string.settings_default_speed),
                 initialValue = playback.defaultSpeed.toString(),
                 unit = stringResource(R.string.settings_unit_times),
-                minimum = 0.25, maximum = 4.0,
-                rangeLabel = stringResource(R.string.settings_range_speed_025_4), integerOnly = false,
+                minimum = PlaybackSpeedLimits.MIN.toDouble(), maximum = PlaybackSpeedLimits.MAX.toDouble(),
+                rangeLabel = stringResource(R.string.settings_range_speed, PlaybackSpeedLimits.MIN.toString(), PlaybackSpeedLimits.MAX.toInt()), integerOnly = false,
                 onCommit = { viewModel.setDefaultSpeed(it.toFloat()) },
             )
             SettingsDropdownRow(
                 title = stringResource(R.string.settings_default_aspect),
-                value = stringResource(playback.defaultAspect.labelRes),
-                options = VideoAspect.entries.map { it to stringResource(it.labelRes) },
+                value = playback.defaultAspect,
+                options = VideoAspect.entries,
+                labelRes = VideoAspect::labelRes,
                 onSelect = viewModel::setDefaultAspect,
-            )
-            NumericSettingRow(
-                title = stringResource(R.string.settings_seek_step),
-                initialValue = playback.seekStepSeconds.toString(),
-                unit = stringResource(R.string.settings_unit_seconds),
-                minimum = 5.0, maximum = 60.0,
-                rangeLabel = stringResource(R.string.settings_range_seconds_5_60), integerOnly = true,
-                onCommit = { viewModel.setSeekStep(it.toInt()) },
-            )
-            NumericSettingRow(
-                title = stringResource(R.string.settings_long_press_speed),
-                initialValue = playback.longPressSpeed.toString(),
-                unit = stringResource(R.string.settings_unit_times),
-                minimum = 1.5, maximum = 4.0,
-                rangeLabel = stringResource(R.string.settings_range_speed_15_4), integerOnly = false,
-                onCommit = { viewModel.setLongPressSpeed(it.toFloat()) },
             )
         }
     }
@@ -307,32 +258,17 @@ private fun PlaybackSettings(state: SettingsUiState, viewModel: SettingsViewMode
 private fun SubtitleSettings(state: SettingsUiState, viewModel: SettingsViewModel) {
     val subtitle = state.settings.subtitle
     SettingSection(title = stringResource(R.string.settings_subtitle_style)) {
-        Column {
+        SubtitleAppearanceControls(subtitle, remember(viewModel) {
+            SubtitleAppearanceActions(viewModel::setSubtitleFontScale, viewModel::setSubtitleFont, viewModel::setSubtitleFontStyle,
+                viewModel::setSubtitleTextColor, viewModel::setSubtitleBackground, viewModel::setSubtitleVerticalOffset, viewModel::setSubtitleOverrideAss)
+        }) {
             NumericSettingRow(
-                title = stringResource(R.string.settings_subtitle_font_scale),
+                title = stringResource(DesignR.string.design_subtitle_size),
                 initialValue = (subtitle.fontSizeScale * 100).roundToInt().toString(),
                 unit = stringResource(R.string.settings_unit_percent),
                 minimum = 60.0, maximum = 200.0,
                 rangeLabel = stringResource(R.string.settings_range_percent_60_200), integerOnly = true,
                 onCommit = { viewModel.setSubtitleFontScale((it / 100).toFloat()) },
-            )
-            SettingsDropdownRow(
-                title = stringResource(R.string.settings_subtitle_background),
-                value = stringResource(subtitle.background.labelRes),
-                options = SubtitleBackground.entries.map { it to stringResource(it.labelRes) },
-                onSelect = viewModel::setSubtitleBackground,
-            )
-            SettingsDropdownRow(
-                title = stringResource(R.string.settings_subtitle_text_color),
-                value = stringResource(subtitle.textColor.labelRes),
-                options = SubtitleTextColor.entries.map { it to stringResource(it.labelRes) },
-                onSelect = viewModel::setSubtitleTextColor,
-            )
-            Text(
-                text = stringResource(R.string.settings_subtitle_style_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.xs),
             )
         }
     }
@@ -346,12 +282,6 @@ private fun SubtitleSettings(state: SettingsUiState, viewModel: SettingsViewMode
                 rangeLabel = stringResource(R.string.settings_range_ms_50_1000), integerOnly = true,
                 onCommit = { viewModel.setSubtitleDelayStep(it.toInt()) },
             )
-            Text(
-                text = stringResource(R.string.settings_subtitle_memory_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.xs),
-            )
         }
     }
 }
@@ -359,6 +289,18 @@ private fun SubtitleSettings(state: SettingsUiState, viewModel: SettingsViewMode
 @Composable
 private fun GestureSettings(state: SettingsUiState, viewModel: SettingsViewModel) {
     val gesture = state.settings.gesture
+    val playback = state.settings.playback
+    SettingSection(title = stringResource(R.string.settings_gesture_double_tap)) {
+            NumericSettingRow(
+                title = stringResource(R.string.settings_seek_step),
+                initialValue = playback.seekStepSeconds.toString(),
+                unit = stringResource(R.string.settings_unit_seconds),
+                minimum = 5.0, maximum = 60.0,
+                rangeLabel = stringResource(R.string.settings_range_seconds_5_60), integerOnly = true,
+                onCommit = { viewModel.setSeekStep(it.toInt()) },
+            )
+        SettingsNote(stringResource(R.string.settings_gesture_double_tap_zones))
+    }
     SettingSection(title = stringResource(R.string.settings_gesture_switches)) {
         Column {
             SwitchRow(
@@ -379,11 +321,23 @@ private fun GestureSettings(state: SettingsUiState, viewModel: SettingsViewModel
                 checked = gesture.seekGestureEnabled,
                 onCheckedChange = viewModel::setSeekGesture,
             )
+        }
+    }
+    SettingSection(title = stringResource(R.string.settings_gesture_hold)) {
+        Column {
             SwitchRow(
                 title = stringResource(R.string.settings_gesture_long_press),
                 description = null,
                 checked = gesture.longPressSpeedEnabled,
                 onCheckedChange = viewModel::setLongPressSpeedGesture,
+            )
+            NumericSettingRow(
+                title = stringResource(R.string.settings_long_press_speed),
+                initialValue = playback.longPressSpeed.toString(),
+                unit = stringResource(R.string.settings_unit_times),
+                minimum = PlaybackSpeedLimits.MIN_TEMPORARY.toDouble(), maximum = PlaybackSpeedLimits.MAX.toDouble(),
+                rangeLabel = stringResource(R.string.settings_range_speed, PlaybackSpeedLimits.MIN_TEMPORARY.toString(), PlaybackSpeedLimits.MAX.toInt()), integerOnly = false,
+                onCommit = { viewModel.setLongPressSpeed(it.toFloat()) },
             )
         }
     }
@@ -391,7 +345,7 @@ private fun GestureSettings(state: SettingsUiState, viewModel: SettingsViewModel
         Column {
             SwitchRow(
                 title = stringResource(R.string.settings_gesture_haptics),
-                description = stringResource(R.string.settings_gesture_haptics_desc),
+                description = null,
                 checked = gesture.hapticsEnabled,
                 onCheckedChange = viewModel::setHapticsEnabled,
             )
@@ -401,22 +355,13 @@ private fun GestureSettings(state: SettingsUiState, viewModel: SettingsViewModel
 
 @Composable
 private fun DisplaySettings(state: SettingsUiState, viewModel: SettingsViewModel) {
-    SettingSection(title = stringResource(R.string.settings_theme)) {
-        Column {
-            SettingsDropdownRow(
-                title = stringResource(R.string.settings_theme_mode),
-                value = stringResource(state.settings.display.themeMode.labelRes),
-                options = ThemeMode.entries.map { it to stringResource(it.labelRes) },
-                onSelect = viewModel::setTheme,
-            )
-            Text(
-                text = stringResource(R.string.settings_theme_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.xs),
-            )
-        }
-    }
+    SettingsDropdownRow(
+        title = stringResource(R.string.settings_theme_mode),
+        value = state.settings.display.themeMode,
+        options = ThemeMode.entries,
+        labelRes = ThemeMode::labelRes,
+        onSelect = viewModel::setTheme,
+    )
 }
 
 @Composable
@@ -426,7 +371,7 @@ private fun ImportSettings(state: SettingsUiState, viewModel: SettingsViewModel)
         Column {
             SwitchRow(
                 title = stringResource(DesignR.string.design_import_thumbnails),
-                description = stringResource(DesignR.string.design_import_thumbnails_desc),
+                description = null,
                 checked = import.generateThumbnails,
                 onCheckedChange = viewModel::setGenerateThumbnails,
             )
@@ -443,45 +388,31 @@ private fun ImportSettings(state: SettingsUiState, viewModel: SettingsViewModel)
 @Composable
 private fun StorageSettings(state: SettingsUiState, viewModel: SettingsViewModel) {
     SettingSection(title = stringResource(R.string.settings_storage_management)) {
-        Surface(
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            shape = RoundedCornerShape(Radius.card),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = Spacing.screenHorizontal),
-        ) {
-            Column(modifier = Modifier.padding(vertical = Spacing.sm)) {
-                InfoRow(
-                    stringResource(R.string.settings_storage_files),
-                    stringResource(R.string.settings_detail_video_usage_format, state.usage.mediaCount, formatBytes(state.usage.mediaBytes)),
-                )
-                InfoRow(stringResource(R.string.settings_storage_thumbnail_cache), formatBytes(state.usage.thumbnailBytes))
-                InfoRow(stringResource(R.string.settings_storage_temp_files), formatBytes(state.usage.temporaryBytes))
-                InfoRow(stringResource(R.string.settings_storage_free), formatBytes(state.usage.freeBytes))
-                HorizontalDivider(
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(vertical = Spacing.sm),
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-                    verticalArrangement = Arrangement.spacedBy(Spacing.xs),
-                    modifier = Modifier.padding(horizontal = Spacing.lg),
-                ) {
-                    OutlinedButton(onClick = viewModel::clearThumbnailCache) {
-                        Text(stringResource(R.string.settings_clear_thumbnails))
-                    }
-                    OutlinedButton(onClick = viewModel::clearTemporaryFiles) {
-                        Text(stringResource(R.string.settings_clear_temp))
-                    }
+        Column(modifier = Modifier.padding(vertical = Spacing.sm)) {
+            InfoRow(
+                stringResource(R.string.settings_storage_files),
+                stringResource(R.string.settings_detail_video_usage_format, state.usage.mediaCount, formatBytes(state.usage.mediaBytes)),
+            )
+            InfoRow(stringResource(R.string.settings_storage_thumbnail_cache), formatBytes(state.usage.thumbnailBytes))
+            InfoRow(stringResource(R.string.settings_storage_temp_files), formatBytes(state.usage.temporaryBytes))
+            InfoRow(stringResource(R.string.settings_storage_free), formatBytes(state.usage.freeBytes))
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outlineVariant,
+                modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(Spacing.xs),
+                modifier = Modifier.padding(horizontal = Spacing.lg),
+            ) {
+                OutlinedButton(onClick = viewModel::clearThumbnailCache) {
+                    Text(stringResource(R.string.settings_clear_thumbnails))
                 }
-                Spacer(Modifier.height(Spacing.xs))
-                Text(
-                    text = stringResource(R.string.settings_clear_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = Spacing.lg),
-                )
+                OutlinedButton(onClick = viewModel::clearTemporaryFiles) {
+                    Text(stringResource(R.string.settings_clear_temp))
+                }
             }
+            SettingsNote(stringResource(R.string.settings_clear_note))
         }
     }
 }
@@ -499,20 +430,10 @@ private fun AboutSettings(state: SettingsUiState) {
             InfoRow(stringResource(R.string.settings_about_engine), state.engineLabel)
         }
     }
-    SettingSection(title = stringResource(R.string.settings_about_notes)) {
+    SettingSection(title = stringResource(R.string.settings_about_privacy)) {
         Column {
-            Text(
-                text = stringResource(R.string.settings_about_product_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
-            )
-            Text(
-                text = stringResource(R.string.settings_about_license_note),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
-            )
+            SettingsNote(stringResource(R.string.settings_about_product_note))
+            SettingsNote(stringResource(R.string.settings_about_license_note))
             TextButton(
                 onClick = {
                     licenseText = runCatching {
@@ -548,20 +469,31 @@ private fun AboutSettings(state: SettingsUiState) {
     }
 }
 
+@Composable
+private fun SettingsNote(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+    )
+}
+
 /** 一级入口的右侧摘要，进入二级页面前就能看到关键状态。 */
 @Composable
-private fun sectionDetail(section: SettingsSection, state: SettingsUiState): String = when (section) {
+private fun sectionDetail(section: SettingsSection, state: SettingsUiState): String? = when (section) {
     SettingsSection.PLAYBACK -> listOf(
-        stringResource(if (state.settings.playback.autoResume) R.string.settings_detail_auto_resume else R.string.settings_detail_from_start),
+        stringResource(state.settings.playback.progressMode.labelRes),
         stringResource(R.string.settings_detail_speed_format, state.settings.playback.defaultSpeed.toString()),
-        stringResource(R.string.settings_detail_font_scale_format, (state.settings.subtitle.fontSizeScale * 100).roundToInt()),
     ).joinToString(" · ")
+    SettingsSection.SUBTITLE -> stringResource(R.string.settings_detail_font_scale_format, (state.settings.subtitle.fontSizeScale * 100).roundToInt())
     SettingsSection.GESTURE -> listOf(
         stringResource(if (state.settings.gesture.seekGestureEnabled) R.string.settings_detail_seek_on else R.string.settings_detail_seek_off),
         stringResource(if (state.settings.gesture.hapticsEnabled) R.string.settings_detail_haptics_on else R.string.settings_detail_haptics_off),
     ).joinToString(" · ")
     SettingsSection.APPEARANCE -> stringResource(state.settings.display.themeMode.labelRes)
-    SettingsSection.DATA -> stringResource(
+    SettingsSection.IMPORT -> null
+    SettingsSection.STORAGE -> stringResource(
         R.string.settings_detail_video_usage_format, state.usage.mediaCount, formatBytes(state.usage.mediaBytes),
     )
     SettingsSection.ABOUT -> stringResource(R.string.settings_detail_version_format, state.versionName, state.engineLabel)

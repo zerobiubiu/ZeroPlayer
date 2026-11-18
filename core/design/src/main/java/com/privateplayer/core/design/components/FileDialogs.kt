@@ -139,6 +139,7 @@ fun MoveDialog(
     loadDirectories: suspend (String, FileTreeEntry) -> List<FileTreeEntry>,
     onDismiss: () -> Unit,
     onConfirm: (String) -> Unit,
+    title: String = stringResource(R.string.design_move_title, entry.name),
 ) {
     val originalParent = remember(entry.path) { entry.path.substringBeforeLast('/', "") }
     var destination by remember(entry.path) { mutableStateOf(originalParent) }
@@ -160,10 +161,9 @@ fun MoveDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.design_move_title, entry.name)) },
+        title = { Text(title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
-                Text(stringResource(R.string.design_move_pick_target), style = MaterialTheme.typography.bodyMedium)
                 Text(
                     text = if (destination.isEmpty()) {
                         stringResource(R.string.design_move_current_root)

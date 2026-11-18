@@ -117,6 +117,32 @@ class SessionPlaybackMappingTest {
     }
 
     @Test
+    fun `paused positions publish the actual short forward and backward landings once`() {
+        val first = PlaybackSnapshot(mediaId = media.mediaId, status = PlaybackStatus.PAUSED, positionMs = 5_067L)
+        val initial = mapSessionPlayback(first, media)
+        val backward = mapSessionPlayback(first.copy(positionMs = 4_500L), media)
+        val forward = mapSessionPlayback(first.copy(positionMs = 4_750L), media)
+        assertTrue(backward.hasPausedPositionCorrection(initial, PlaybackStatus.PAUSED))
+        assertFalse(backward.hasPausedPositionCorrection(backward, PlaybackStatus.PAUSED))
+        assertTrue(forward.hasPausedPositionCorrection(backward, PlaybackStatus.PAUSED))
+        val speedAndBuffer = forward.copy(speed = 0.5f, bufferedPositionMs = 10_000L)
+        assertFalse(speedAndBuffer.hasPausedPositionCorrection(forward, PlaybackStatus.PAUSED))
+    }
+
+    @Test
+    fun `playing ticks initial state resume intent and item changes are not paused jumps`() {
+        val frame = PlaybackSnapshot(mediaId = media.mediaId, status = PlaybackStatus.PAUSED, positionMs = 1_000L)
+        val paused = mapSessionPlayback(frame, media)
+        val playing = mapSessionPlayback(frame.copy(status = PlaybackStatus.PLAYING, playWhenReady = true), media)
+        assertFalse(paused.hasPausedPositionCorrection(null, PlaybackStatus.PAUSED))
+        assertFalse(playing.copy(positionMs = 2_000L).hasPausedPositionCorrection(playing, PlaybackStatus.PLAYING))
+        assertFalse(paused.copy(positionMs = 2_000L).hasPausedPositionCorrection(playing, PlaybackStatus.PAUSED))
+        assertFalse(paused.copy(playWhenReady = true, positionMs = 2_000L).hasPausedPositionCorrection(paused, PlaybackStatus.PAUSED))
+        assertFalse(paused.copy(media = media.copy(mediaId = 8L), positionMs = 0L).hasPausedPositionCorrection(paused, PlaybackStatus.PAUSED))
+        assertFalse(mapSessionPlayback(frame, null).hasPausedPositionCorrection(paused, PlaybackStatus.PAUSED))
+    }
+
+    @Test
     fun `metadata updates for the same media retain real playback`() {
         val snapshot = PlaybackSnapshot(
             mediaId = 7L, status = PlaybackStatus.PLAYING, playWhenReady = true, positionMs = 1_234L,

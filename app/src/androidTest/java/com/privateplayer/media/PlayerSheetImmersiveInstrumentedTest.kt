@@ -4,7 +4,7 @@ import android.os.ParcelFileDescriptor
 import android.view.Window
 import androidx.activity.ComponentActivity
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Speed
+import androidx.compose.material.icons.outlined.AspectRatio
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.mutableStateOf
@@ -27,8 +27,8 @@ import org.junit.runner.RunWith
 /**
  * 播放器面板的沉浸式行为（F-38）。
  *
- * 面板是独立的对话框窗口，Activity 窗口隐藏系统栏对它无效——这正是
- * “打开面板后电池图标压在画面上”的根因。
+ * 画面比例等 ActionSheet 使用独立对话框窗口，Activity 隐藏系统栏对它无效；
+ * 同窗倍速板的沉浸状态在真实播放页单独验证。
  *
  * 断言的是用户可见结果：系统状态栏窗口是否真的可见，通过 `dumpsys window`
  * 读取，而不是实现细节。
@@ -85,12 +85,12 @@ class PlayerSheetImmersiveInstrumentedTest {
             MaterialTheme {
                 if (visible.value) {
                     ActionSheet(
-                        title = "播放速度",
+                        title = "画面比例",
                         immersive = immersive,
                         actions = listOf(
                             SheetAction(
-                                label = "1.0×",
-                                icon = Icons.Outlined.Speed,
+                                label = "适应屏幕",
+                                icon = Icons.Outlined.AspectRatio,
                                 kind = SheetActionKind.SingleChoice,
                                 selected = true,
                                 onClick = {},
@@ -105,7 +105,7 @@ class PlayerSheetImmersiveInstrumentedTest {
 
     private fun waitForSheet() {
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("播放速度").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("画面比例").fetchSemanticsNodes().isNotEmpty()
         }
         compose.waitForIdle()
     }
@@ -159,7 +159,7 @@ class PlayerSheetImmersiveInstrumentedTest {
         // 关闭再打开：新的面板窗口同样保持沉浸式
         compose.runOnIdle { visible.value = false }
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("播放速度").fetchSemanticsNodes().isEmpty()
+            compose.onAllNodesWithText("画面比例").fetchSemanticsNodes().isEmpty()
         }
         compose.runOnIdle { visible.value = true }
         waitForSheet()

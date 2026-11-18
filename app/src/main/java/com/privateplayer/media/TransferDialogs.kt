@@ -24,6 +24,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.privateplayer.core.common.format.formatBytes
+import com.privateplayer.core.design.components.ConfirmDialog
 import com.privateplayer.domain.model.ImportTask
 import com.privateplayer.domain.model.ImportTaskState
 import com.privateplayer.feature.importer.ImportUiState
@@ -36,6 +37,7 @@ internal fun ImportTasksDialog(
     onCancel: (String) -> Unit,
     onRetry: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onDiscardLocal: (String) -> Unit,
 ) {
     val tasks = state.activeTasks + state.finishedTasks
     AlertDialog(
@@ -55,9 +57,9 @@ internal fun ImportTasksDialog(
                     )
                 }
                 if (state.enqueuing) item { Text(stringResource(R.string.app_import_creating)) }
-                if (tasks.isEmpty() && !state.enqueuing) item { Text(stringResource(R.string.app_import_empty)) }
+                if (tasks.isEmpty() && !state.enqueuing && allNotices.isEmpty()) item { Text(stringResource(R.string.app_import_empty)) }
                 items(tasks, key = ImportTask::id) { task ->
-                    ImportTaskRow(task, onCancel, onRetry, onRemove)
+                    ImportTaskRow(task, onCancel, onRetry, onRemove, onDiscardLocal)
                 }
             }
         },
@@ -71,37 +73,39 @@ private fun ImportTaskRow(
     onCancel: (String) -> Unit,
     onRetry: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onDiscardLocal: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(task.displayName, style = MaterialTheme.typography.titleSmall)
-        Text(
-            when (task.state) {
-                ImportTaskState.QUEUED -> stringResource(R.string.app_task_queued)
-                ImportTaskState.RUNNING -> stringResource(R.string.app_task_running, formatBytes(task.bytesCopied))
-                ImportTaskState.COMMITTING -> stringResource(R.string.app_task_committing)
-                ImportTaskState.COMPLETED -> stringResource(R.string.app_task_completed)
-                ImportTaskState.CANCELED -> stringResource(R.string.app_task_canceled)
-                ImportTaskState.FAILED -> stringResource(R.string.app_task_failed)
-            },
-            style = MaterialTheme.typography.bodySmall,
-        )
-        task.errorMessage?.takeIf { it.isNotBlank() }?.let { raw ->
-            if (task.state == ImportTaskState.FAILED) {
-                var showDetail by remember(task.id) { mutableStateOf(false) }
-                Text(
-                    stringResource(classifyImportError(raw).messageRes()),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-                TextButton(onClick = { showDetail = !showDetail }) {
-                    Text(stringResource(R.string.app_task_error_detail))
-                }
-                if (showDetail) {
-                    Text(raw, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            } else {
-                Text(raw, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        val failure = task.failureKind
+        val raw = task.errorMessage?.takeIf { it.isNotBlank() }
+        if (failure != null && raw != null) {
+            val summary = stringResource(failure.messageRes)
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+            )
+            val detail = failure.diagnostic(raw)
+            if (detail != null && !summary.contains(detail.trim().trimEnd('。', '.'))) {
+                var expanded by remember(task.id, raw) { mutableStateOf(false) }
+                TextButton(onClick = { expanded = !expanded }) { Text(stringResource(R.string.app_task_error_detail)) }
+                if (expanded) Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        } else {
+            Text(
+                when (task.state) {
+                    ImportTaskState.QUEUED -> stringResource(R.string.app_task_queued)
+                    ImportTaskState.RUNNING -> stringResource(R.string.app_task_running, formatBytes(task.bytesCopied))
+                    ImportTaskState.COMMITTING -> stringResource(R.string.app_task_committing)
+                    ImportTaskState.COMPLETED -> stringResource(R.string.app_task_completed)
+                    ImportTaskState.CANCELED -> stringResource(R.string.app_task_canceled)
+                    ImportTaskState.FAILED -> stringResource(R.string.app_task_failed)
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (raw != null) Text(raw, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (task.state.isActive) {
             val progress = task.progress
@@ -110,9 +114,33 @@ private fun ImportTaskRow(
         }
         Row {
             if (task.state.isActive) TextButton(onClick = { onCancel(task.id) }) { Text(stringResource(R.string.app_task_cancel)) }
-            if (task.state == ImportTaskState.FAILED) TextButton(onClick = { onRetry(task.id) }) { Text(stringResource(R.string.app_task_retry)) }
-            if (!task.state.isActive) TextButton(onClick = { onRemove(task.id) }) { Text(stringResource(R.string.app_task_remove)) }
+            if (failure?.canRetry == true) TextButton(onClick = { onRetry(task.id) }) { Text(stringResource(R.string.app_task_retry)) }
+            if (task.state == ImportTaskState.COMPLETED) TextButton(onClick = { onRemove(task.id) }) { Text(stringResource(R.string.app_task_remove)) }
+            if (task.canDiscardLocal) DiscardLocalTaskButton(task, onDiscardLocal)
         }
+    }
+}
+
+@Composable
+private fun DiscardLocalTaskButton(task: ImportTask, onDiscardLocal: (String) -> Unit) {
+    var confirming by remember(task.id) { mutableStateOf(false) }
+    TextButton(onClick = { confirming = true }) {
+        Text(stringResource(R.string.app_task_discard), color = MaterialTheme.colorScheme.error)
+    }
+    if (confirming) {
+        ConfirmDialog(
+            title = stringResource(R.string.app_task_discard_title),
+            message = stringResource(R.string.app_task_discard_message, task.displayName),
+            confirmLabel = stringResource(R.string.app_task_discard_confirm),
+            destructive = true,
+            onDismiss = { confirming = false },
+            onConfirm = {
+                if (confirming) {
+                    confirming = false
+                    onDiscardLocal(task.id)
+                }
+            },
+        )
     }
 }
 

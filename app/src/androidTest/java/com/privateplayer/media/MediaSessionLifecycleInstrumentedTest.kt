@@ -13,8 +13,11 @@ import android.os.PowerManager
 import android.util.Log
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ComposeTimeoutException
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -34,6 +37,8 @@ import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.privateplayer.core.database.PrivatePlayerDatabase
+import com.privateplayer.core.datastore.PreferencesSettingsRepository
+import com.privateplayer.domain.model.PlaybackProgressMode
 import com.privateplayer.core.storage.MediaProbe
 import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.data.repository.FileTreeRepositoryImpl
@@ -48,6 +53,7 @@ import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
@@ -118,7 +124,11 @@ class MediaSessionLifecycleInstrumentedTest {
         var scenario: ActivityScenario<MainActivity>? = null
         var controller: MediaController? = null
         var primaryFailure: Throwable? = null
+        val preferences = PreferencesSettingsRepository(context)
+        val originalProgress = preferences.observeSettings().first().playback.progressMode
+        val directoryIdentity = storage.fileIdentity(directory)
         try {
+            preferences.setPlaybackProgressMode(PlaybackProgressMode.RESUME)
             val id = tree.ensureMedia("${directory.name}/${file.name}")
             val secondId = tree.ensureMedia("${directory.name}/${secondFile.name}")
             database.mediaDao().setThumbnail(id, thumbnailPath, System.currentTimeMillis())
@@ -162,27 +172,88 @@ class MediaSessionLifecycleInstrumentedTest {
             // 外部控制的跳转、倍速必须反映到同一页面。
             onMain {
                 remote.seekTo(1_500L)
-                remote.setPlaybackSpeed(1.5f)
+                remote.setPlaybackSpeed(8f)
             }
-            awaitController(remote, "控制器跳转与 1.5 倍速") { abs(currentPosition - 1_500L) < 800L && abs(playbackParameters.speed - 1.5f) < 0.01f }
-            compose.waitUntil(10_000) { compose.onAllNodesWithText("1.5×").fetchSemanticsNodes().isNotEmpty() }
+            awaitController(remote, "控制器跳转与最高倍速") { abs(currentPosition - 1_500L) < 800L && playbackParameters.speed == 8f }
+            compose.waitUntil(10_000) { compose.onAllNodes(speedButtonAt("8×")).fetchSemanticsNodes().isNotEmpty() }
+            // 非预设速度超出两位时标明近似，语义与面板保留精确值，不勾选邻近档。
+            onMain { remote.setPlaybackSpeed(1.375f) }
+            compose.waitUntil(10_000) { compose.onAllNodes(speedButtonAt("1.375×")).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNode(speedButtonAt("1.375×") and hasText("≈1.38×")).assertIsDisplayed()
+
+            // 在真实 MainActivity 的同一根手指尚未抬起时退后台：保持暂停，恢复外部设定的精确速度。
+            val defaultSpeed = preferences.observeSettings().first().playback.defaultSpeed
+            val anchor = compose.playerBounds(compose.onNode(speedButtonAt("1.375×"))).center
+            PlayerSystemTouch(anchor).use { finger ->
+                compose.waitUntil(5_000) { compose.onAllNodes(speedOption("5×")).fetchSemanticsNodes().isNotEmpty() }
+                finger.moveTo(compose.playerBounds(compose.onNode(speedOption("5×"))).center)
+                awaitController(remote, "未抬手时媒体会话已按 5× 试播") { playbackParameters.speed == 5f && !playWhenReady }
+                compose.onNode(hasTestTag("temporarySpeedHud") and hasText("5× 临时倍速")).assertIsDisplayed()
+                compose.onNode(hasTestTag("speedFanBubble") and hasText("5×")).assertIsDisplayed()
+                assertEquals(defaultSpeed, preferences.observeSettings().first().playback.defaultSpeed, 0f)
+                activity.moveToState(Lifecycle.State.CREATED)
+                awaitController(remote, "退后台撤销试播，不恢复播放") { playbackParameters.speed == 1.375f && !isPlaying && !playWhenReady }
+                activity.moveToState(Lifecycle.State.RESUMED)
+                finger.up()
+            }
+            showControls()
+            compose.waitUntil(5_000) { compose.onAllNodes(speedButtonAt("1.375×")).fetchSemanticsNodes().isNotEmpty() }
+            compose.onAllNodes(hasTestTag("temporarySpeedHud")).assertCountEquals(0)
+            compose.onAllNodes(hasTestTag("speedFanBubble")).assertCountEquals(0)
+            assertEquals(defaultSpeed, preferences.observeSettings().first().playback.defaultSpeed, 0f)
+            Log.i("ZeroPlayerSpeedProof", "MainActivity paused Media3 1.375→held 5→background 1.375; default=$defaultSpeed")
+            if (InstrumentationRegistry.getArguments().getString("speedEvidence") == "true") {
+                checkSystemSpeedHaptics(preferences, remote)
+            }
 
             // 页面反向修改倍速和进度，再由页面恢复播放。
-            compose.onNodeWithText("1.5×").performClick()
-            compose.onNodeWithText("0.5×").performClick()
+            compose.onNode(speedButtonAt("1.375×")).performTouchInput { click() }
+            compose.onNode(speedOption("1×")).assertIsDisplayed()
+            compose.onNodeWithText("1.375×", substring = true).assertIsDisplayed()
+            compose.onAllNodes(selectedSpeedOption).assertCountEquals(0)
+            compose.onNode(speedOption("0.5×")).performTouchInput { click() }
             awaitController(remote, "页面反向设置 0.5 倍速") { abs(playbackParameters.speed - 0.5f) < 0.01f }
             compose.onNodeWithContentDescription("播放进度")
                 .performSemanticsAction(SemanticsActions.SetProgress) { action -> action(0.2f) }
             awaitController(remote, "页面反向跳转至 20%") { duration > 0 && abs(currentPosition - (duration * 0.2f).toLong()) < 1_000L }
             val pausedSeekTarget = onMain { (remote.duration * 0.2f).toLong() }
-            awaitSystemState(
-                context,
-                "暂停跳转持久化且不重复增加播放次数",
-                diagnostics = { "目标=$pausedSeekTarget，真实媒体记录：${mediaRepository.findById(id)}\n${controllerState(remote)}" },
-            ) {
-                val saved = mediaRepository.findById(id)
-                saved != null && saved.playCount == 1 && abs(saved.playbackPositionMs - pausedSeekTarget) < 500L
+            suspend fun alignedPause(stage: String, target: Long): Long {
+                var previous = -1L
+                awaitSystemState(context, stage, diagnostics = {
+                    "目标=$target，数据库：${mediaRepository.findById(id)}\n${controllerState(remote)}"
+                }) {
+                    val row = mediaRepository.findById(id) ?: return@awaitSystemState false
+                    val position = onMain {
+                        if (!remote.isPlaying && !remote.playWhenReady && remote.currentMediaItem?.mediaId == id.toString())
+                            remote.currentPosition else -1L
+                    }
+                    val matches = row.playCount == 1 && abs(row.playbackPositionMs - target) < 150L &&
+                        abs(position - target) < 150L && abs(position - row.playbackPositionMs) < 150L
+                    val stable = matches && previous == position
+                    previous = if (matches) position else -1L
+                    if (!stable) return@awaitSystemState false
+                    val native = serviceState(context).substringAfter("engine=PlaybackSnapshot(", "").substringBefore("), ui=")
+                    val enginePosition = native.substringAfter("positionMs=", "").substringBefore(',').toLongOrNull()
+                        ?: return@awaitSystemState false
+                    val same = native.contains("status=PAUSED,") && native.endsWith("mediaId=$id") &&
+                        abs(enginePosition - target) < 150L && abs(enginePosition - position) < 150L
+                    if (same) Log.i("ZeroPlayerSessionTest", "$stage：目标=$target 控制器=$position 库=${row.playbackPositionMs} 引擎=$enginePosition 媒体=$id 次数=${row.playCount}")
+                    same
+                }
+                return previous
             }
+            alignedPause("页面 20% 跳转已持久化", pausedSeekTarget)
+            // Material Slider 触区含两端留白；中点是与滑块宽度/密度无关的已知物理目标。
+            val midpoint = onMain { remote.duration / 2 }
+            val shortStart = midpoint - 700L
+            onMain { remote.seekTo(shortStart) }
+            alignedPause("准备小幅跳转", shortStart)
+            tapPlayerScreen(compose.playerBounds(compose.onNodeWithContentDescription("播放进度")).center)
+            alignedPause("触屏小幅前移", midpoint)
+            onMain { remote.seekTo(shortStart) }
+            alignedPause("外部控制器小幅后移", shortStart)
+            onMain { remote.seekTo(pausedSeekTarget) }
+            alignedPause("恢复到页面 20% 断点", pausedSeekTarget)
             compose.onNodeWithContentDescription("播放").performClick()
             awaitController(remote, "页面恢复真实播放") { isPlaying }
             awaitWakeLock(context, true, "页面恢复播放重新持有 CPU 锁")
@@ -220,19 +291,11 @@ class MediaSessionLifecycleInstrumentedTest {
             awaitController(remote, "关闭前暂停") {
                 currentMediaItem?.mediaId == id.toString() && playbackState == Player.STATE_READY && !isPlaying && !playWhenReady
             }
-            onMain { remote.seekTo(8_000L) }
-            awaitController(remote, "关闭前定位到 8 秒") {
-                currentMediaItem?.mediaId == id.toString() && abs(currentPosition - 8_000L) < 500L
+            onMain { remote.seekTo(4_500L) }
+            awaitController(remote, "关闭前定位到不足 5 秒的断点") {
+                currentMediaItem?.mediaId == id.toString() && abs(currentPosition - 4_500L) < 500L
             }
-            awaitSystemState(
-                context,
-                "关闭前断点已持久化",
-                diagnostics = { "真实媒体记录：${mediaRepository.findById(id)}\n${controllerState(remote)}" },
-            ) {
-                val saved = mediaRepository.findById(id)
-                saved != null && abs(saved.playbackPositionMs - 8_000L) < 1_000L
-            }
-            val checkpoint = onMain { remote.currentPosition }
+            val checkpoint = alignedPause("关闭前暂停断点", 4_500L)
             activity.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.waitUntil(15_000) { compose.onAllNodesWithText(file.name).fetchSemanticsNodes().isNotEmpty() }
             awaitSystemState(context, "返回文件树后播放服务停止", diagnostics = {
@@ -243,6 +306,11 @@ class MediaSessionLifecycleInstrumentedTest {
             }) { !onMain { remote.isConnected } }
             runCatching { onMain { remote.release() } }
             controller = null
+            val afterClose = requireNotNull(mediaRepository.findById(id)).playbackPositionMs
+            val onOpenMode = preferences.observeSettings().first().playback.progressMode
+            assertEquals("新会话须按续播策略读取断点", PlaybackProgressMode.RESUME, onOpenMode)
+            assertTrue("关闭丢失断点：控制器=$checkpoint 关闭后库=$afterClose", abs(afterClose - checkpoint) < 500L)
+            assertTrue("关闭后断点偏离明确的 4500ms 目标：$afterClose", abs(afterClose - 4_500L) < 150L)
 
             compose.onNodeWithText(file.name).performClick()
             compose.waitForIdle()
@@ -252,10 +320,15 @@ class MediaSessionLifecycleInstrumentedTest {
             }) { isServiceRunning(context) }
             remote = connect(context)
             controller = remote
-            awaitController(remote, "重开创建新会话并从断点续播") {
-                isConnected && isPlaying && currentMediaItem?.mediaId == id.toString() &&
-                    currentPosition >= (checkpoint - 1_500L).coerceAtLeast(0L)
+            var firstReadyPosition = -1L
+            awaitController(remote, "重开创建新会话并真正出帧") {
+                (isConnected && isPlaying && currentMediaItem?.mediaId == id.toString()).also { ready ->
+                    if (ready) firstReadyPosition = currentPosition
+                }
             }
+            Log.i("ZeroPlayerSessionTest", "恢复短断点：关闭前=$checkpoint 关闭后库=$afterClose 首个READY=$firstReadyPosition 模式=$onOpenMode")
+            assertTrue("首个就绪位置未续接短断点：关闭前=$checkpoint 关闭后库=$afterClose 首个READY=$firstReadyPosition；${serviceState(context)}",
+                firstReadyPosition >= maxOf(checkpoint, 4_500L) - 300L && firstReadyPosition < 4_500L + 1_000L)
             awaitWakeLock(context, true, "重开会话真实播放持有 CPU 锁")
             onMain { remote.pause() }
             awaitController(remote, "重开后控制器暂停") {
@@ -316,6 +389,12 @@ class MediaSessionLifecycleInstrumentedTest {
                 currentMediaItem?.mediaId == secondId.toString() && playbackState == Player.STATE_READY && !isPlaying && !playWhenReady
             }
             awaitWakeLock(context, false, "系统重播后暂停释放 CPU 锁")
+            // “仅记录”仍落库，但下一次新会话不能从该位置开始。
+            preferences.setPlaybackProgressMode(PlaybackProgressMode.RECORD_ONLY)
+            onMain { remote.seekTo(9_000L) }
+            awaitSystemState(context, "仅记录模式保存第二段断点", diagnostics = { controllerState(remote) }) {
+                abs((mediaRepository.findById(secondId)?.playbackPositionMs ?: 0L) - 9_000L) < 500L
+            }
             activity.onActivity { it.onBackPressedDispatcher.onBackPressed() }
             compose.waitUntil(15_000) { compose.onAllNodesWithText(secondFile.name).fetchSemanticsNodes().isNotEmpty() }
             awaitSystemState(context, "关闭第二段后播放服务停止", diagnostics = {
@@ -325,6 +404,16 @@ class MediaSessionLifecycleInstrumentedTest {
                 controllerState(remote)
             }) { !onMain { remote.isConnected } }
             runCatching { onMain { remote.release() } }
+            controller = null
+            compose.onNodeWithText(secondFile.name).performClick()
+            remote = connect(context)
+            controller = remote
+            awaitController(remote, "仅记录模式新会话开始播放") { isPlaying && currentMediaItem?.mediaId == secondId.toString() }
+            assertTrue("仅记录模式不能从 9 秒续播", onMain { remote.currentPosition } < 4_000L)
+            activity.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+            compose.waitUntil(15_000) { compose.onAllNodesWithText(secondFile.name).fetchSemanticsNodes().isNotEmpty() }
+            awaitSystemState(context, "关闭仅记录会话", diagnostics = { controllerState(remote) }) { !onMain { remote.isConnected } }
+            onMain { remote.release() }
             controller = null
             compose.onNodeWithText(brokenDirectory.name).performClick()
             compose.waitUntil(15_000) { compose.onAllNodesWithText(brokenFile.name).fetchSemanticsNodes().isNotEmpty() }
@@ -370,8 +459,9 @@ class MediaSessionLifecycleInstrumentedTest {
                     val original = primaryFailure
                     if (original == null) throw cleanupFailure else original.addSuppressed(cleanupFailure)
                 }
-                tree.delete(directory.name)
+                tree.delete(directory.name, directoryIdentity, isDirectory = true)
             } finally {
+                preferences.setPlaybackProgressMode(originalProgress)
                 database.close()
                 // 缩略图可能在登记元数据前已生成，单独清理本次文件。
                 thumbnailFile.delete()
@@ -441,6 +531,38 @@ class MediaSessionLifecycleInstrumentedTest {
             throw AssertionError(message, timeout)
         }
         Log.i("ZeroPlayerSessionTest", "完成等待：$stage")
+    }
+
+    /** 只有显式取证的 API 37 模拟器使用系统振动历史；普通回归不依赖厂商 dumpsys 格式。 */
+    private suspend fun checkSystemSpeedHaptics(settings: PreferencesSettingsRepository, remote: MediaController) {
+        val original = settings.observeSettings().first().gesture.hapticsEnabled
+        val event = Regex("""(\d\d-\d\d \d\d:\d\d:\d\d\.\d+).*?com\.privateplayer\.media \(uid=.*?performHapticFeedback\(constant=(0|4)\)""")
+        fun events() = event.findAll(shell("dumpsys vibrator_manager").substringAfter("Recent vibrations:").substringBefore("Aggregated vibration history:"))
+            .map { it.groupValues[1] to it.groupValues[2] }.toSet()
+        try {
+            for (enabled in listOf(true, false)) {
+                settings.setHapticsEnabled(enabled)
+                val before = events()
+                PlayerSystemTouch(compose.playerBounds(compose.onNode(speedButtonAt("1.375×"))).center).use { finger ->
+                    compose.waitUntil(5_000) { compose.onAllNodes(speedOption("0.5×")).fetchSemanticsNodes().isNotEmpty() }
+                    val slow = compose.playerBounds(compose.onNode(speedOption("0.5×"))).center
+                    finger.moveTo(slow)
+                    awaitController(remote, "震动开关=$enabled：慢速试播") { playbackParameters.speed == 0.5f && !isPlaying }
+                    repeat(3) { finger.moveTo(slow + androidx.compose.ui.geometry.Offset(it + 1f, 0f)) }
+                    finger.moveTo(compose.playerBounds(compose.onNode(speedOption("5×"))).center)
+                    awaitController(remote, "震动开关=$enabled：跨档试播") { playbackParameters.speed == 5f && !isPlaying }
+                    val origin = compose.playerBounds(compose.onNode(speedOption("1×"))).center
+                    finger.moveTo(origin)
+                    awaitController(remote, "回方块是一次有效切档") { playbackParameters.speed == 1f && !isPlaying && !playWhenReady }
+                    repeat(3) { finger.moveTo(origin + androidx.compose.ui.geometry.Offset(0f, it + 1f)) }
+                }
+                awaitController(remote, "震动检查取消恢复自定义速度") { playbackParameters.speed == 1.375f && !isPlaying }
+                delay(250) // API 37 完成脉冲后才写入 recent history。
+                val actual = (events() - before).sortedBy { it.first }.map { it.second }
+                assertEquals("系统反馈，开关=$enabled", if (enabled) listOf("0", "4", "4", "4") else emptyList<String>(), actual)
+                Log.i("ZeroPlayerSpeedProof", "haptics enabled=$enabled requested=$actual for hold/slow/same×3/fast/origin/same×3/cancel")
+            }
+        } finally { settings.setHapticsEnabled(original) }
     }
 
     private fun dispatchSystemPlayPause() {

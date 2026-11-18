@@ -1,5 +1,6 @@
 package com.privateplayer.feature.player
 
+import android.view.ViewConfiguration
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.Modifier
@@ -7,10 +8,14 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -19,8 +24,8 @@ import kotlinx.coroutines.launch
 sealed interface PlayerGesture {
     data object SingleTap : PlayerGesture
 
-    /** 双击：左半边快退、右半边快进。 */
-    data class DoubleTap(val leftSide: Boolean) : PlayerGesture
+    /** 按触摸层的物理横坐标分区，不随语言方向或视频画面比例翻转。 */
+    enum class DoubleTap : PlayerGesture { Rewind, PlayPause, Forward }
 
     data class DragStart(val position: Offset, val size: Size) : PlayerGesture
 
@@ -41,6 +46,19 @@ sealed interface PlayerGesture {
     data object LongPressEnd : PlayerGesture
 }
 
+/** 竖屏为三等分，直到 2:1 连续拓宽中央区为 40%，更宽时不再变化。 */
+internal fun doubleTapZone(x: Float, width: Int, height: Int): PlayerGesture.DoubleTap {
+    val blend = (width.toFloat() / height.coerceAtLeast(1) - 1f).coerceIn(0f, 1f)
+    val portraitSide = width / 3f
+    val wideSide = width * 0.30f
+    val side = portraitSide + (wideSide - portraitSide) * blend
+    return when {
+        x < side -> PlayerGesture.DoubleTap.Rewind
+        x < width - side -> PlayerGesture.DoubleTap.PlayPause
+        else -> PlayerGesture.DoubleTap.Forward
+    }
+}
+
 /**
  * 播放器统一手势识别。
  *
@@ -55,16 +73,35 @@ fun Modifier.playerGestures(
     onGesture: (PlayerGesture) -> Unit,
 ): Modifier {
     val currentOnGesture by rememberUpdatedState(onGesture)
-    return pointerInput(enabled) {
+    val context = LocalContext.current
+    val maxDistanceSquared = remember(context, LocalDensity.current) {
+        val slop = ViewConfiguration.get(context).scaledDoubleTapSlop.toFloat()
+        slop * slop
+    }
+    return pointerInput(enabled, maxDistanceSquared) {
         if (!enabled) return@pointerInput
 
-        var lastTapAt = 0L
+        var firstUpAt = 0L
+        var firstPosition = Offset.Zero
+        var firstSize = IntSize.Zero
         var pendingTapJob: kotlinx.coroutines.Job? = null
         val scope = kotlinx.coroutines.CoroutineScope(kotlin.coroutines.coroutineContext)
 
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = true)
             down.consume()
+            val zone = doubleTapZone(down.position.x, size.width, size.height)
+            // 二次按下时领取仍待定的首击，而非在两次抬手间用旧时间戳猜测。
+            val pending = pendingTapJob
+            val isDouble = pending?.isActive == true && firstSize == size &&
+                down.uptimeMillis - firstUpAt in viewConfiguration.doubleTapMinTimeMillis..viewConfiguration.doubleTapTimeoutMillis &&
+                (down.position - firstPosition).getDistanceSquared() <= maxDistanceSquared &&
+                zone == doubleTapZone(firstPosition.x, firstSize.width, firstSize.height)
+            if (pending != null) {
+                pending.cancel()
+                pendingTapJob = null
+                if (!isDouble) currentOnGesture(PlayerGesture.SingleTap)
+            }
 
             var dragging = false
             var longPressFired = false
@@ -82,9 +119,6 @@ fun Modifier.playerGestures(
             val longPressJob = scope.launch {
                 delay(LONG_PRESS_TIMEOUT_MS)
                 if (!dragging) {
-                    pendingTapJob?.cancel()
-                    pendingTapJob = null
-                    lastTapAt = 0L
                     longPressFired = true
                     currentOnGesture(PlayerGesture.LongPressStart)
                 }
@@ -105,9 +139,6 @@ fun Modifier.playerGestures(
                     ) {
                         dragging = true
                         longPressJob.cancel()
-                        pendingTapJob?.cancel()
-                        pendingTapJob = null
-                        lastTapAt = 0L
                         currentOnGesture(PlayerGesture.DragStart(down.position, size.toSize()))
                     }
                     if (dragging) {
@@ -135,18 +166,15 @@ fun Modifier.playerGestures(
                 return@awaitEachGesture
             }
 
-            val upPosition = up.position
-            val now = up.uptimeMillis
-            if (now - lastTapAt < DOUBLE_TAP_WINDOW_MS) {
-                pendingTapJob?.cancel()
-                pendingTapJob = null
-                lastTapAt = 0L
-                currentOnGesture(PlayerGesture.DoubleTap(leftSide = upPosition.x < size.width / 2f))
+            if (isDouble) {
+                currentOnGesture(zone)
             } else {
-                lastTapAt = now
-                pendingTapJob?.cancel()
+                firstPosition = up.position
+                firstSize = size
+                firstUpAt = up.uptimeMillis
                 pendingTapJob = scope.launch {
-                    delay(DOUBLE_TAP_WINDOW_MS)
+                    delay(viewConfiguration.doubleTapTimeoutMillis)
+                    pendingTapJob = null
                     currentOnGesture(PlayerGesture.SingleTap)
                 }
             }
@@ -155,4 +183,3 @@ fun Modifier.playerGestures(
 }
 
 private const val LONG_PRESS_TIMEOUT_MS = 450L
-private const val DOUBLE_TAP_WINDOW_MS = 280L

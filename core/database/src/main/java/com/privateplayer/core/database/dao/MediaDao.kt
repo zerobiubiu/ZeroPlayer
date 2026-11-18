@@ -115,6 +115,9 @@ interface MediaDao {
     @Query("UPDATE media SET selectedSubtitleTrackId = :trackId, updatedAt = :now WHERE id = :id")
     suspend fun setSelectedSubtitleTrack(id: Long, trackId: String?, now: Long)
 
+    @Query("UPDATE media SET subtitleDelayMs = :delayMs WHERE id = :id")
+    suspend fun setSubtitleDelayMs(id: Long, delayMs: Long)
+
     @Query(
         """
         UPDATE media
@@ -143,6 +146,8 @@ interface MediaDao {
         """
         UPDATE media
         SET playbackPositionMs = :positionMs,
+            durationMs = CASE WHEN durationMs <= 0 AND :observedDurationMs > 0
+                              THEN :observedDurationMs ELSE durationMs END,
             playedDurationMs = playedDurationMs + :watchedMs,
             lastPlayedAt = :now,
             playCount = playCount + :playIncrement,
@@ -153,6 +158,7 @@ interface MediaDao {
     suspend fun recordProgress(
         id: Long,
         positionMs: Long,
+        observedDurationMs: Long,
         watchedMs: Long,
         playIncrement: Int,
         now: Long,

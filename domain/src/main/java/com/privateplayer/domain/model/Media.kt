@@ -37,6 +37,8 @@ data class Media(
     val playCount: Int,
     /** 上次选中的字幕轨 ID；null 表示未选择过，"off" 表示用户主动关闭。 */
     val selectedSubtitleTrackId: String? = null,
+    /** 本视频的字幕时间校正；不与其他媒体共用。 */
+    val subtitleDelayMs: Long = 0L,
 ) {
     /** 观看进度 0f..1f。 */
     val progress: Float

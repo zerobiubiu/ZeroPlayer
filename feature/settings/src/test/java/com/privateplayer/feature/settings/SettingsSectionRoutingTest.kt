@@ -4,25 +4,23 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/**
- * 设置一级按任务分组（F-18）：五个入口，无单控件页面；旧路由兼容。
- */
+/** 入口按用途分组；收藏的旧链接仍能到达负责该选项的页面。 */
 class SettingsSectionRoutingTest {
 
     @Test
-    fun `一级入口为五个任务分组`() {
+    fun `观看文件应用各自只包含相关入口`() {
         assertEquals(
-            listOf("playback", "gesture", "appearance", "data", "about"),
-            SettingsSection.entries.map { it.id },
+            listOf(listOf("playback", "subtitle", "gesture"), listOf("import", "storage"), listOf("appearance", "about")),
+            SettingsSection.groups.map { (_, sections) -> sections.map { it.id } },
         )
     }
 
     @Test
     fun `旧路由重定向到新分组`() {
         assertEquals(SettingsSection.APPEARANCE, SettingsSection.fromId("display"))
-        assertEquals(SettingsSection.DATA, SettingsSection.fromId("import"))
-        assertEquals(SettingsSection.DATA, SettingsSection.fromId("storage"))
-        assertEquals(SettingsSection.PLAYBACK, SettingsSection.fromId("subtitle"))
+        assertEquals(SettingsSection.IMPORT, SettingsSection.fromId("import"))
+        assertEquals(SettingsSection.STORAGE, SettingsSection.fromId("storage"))
+        assertEquals(SettingsSection.SUBTITLE, SettingsSection.fromId("subtitle"))
     }
 
     @Test
@@ -30,7 +28,7 @@ class SettingsSectionRoutingTest {
         assertEquals(SettingsSection.PLAYBACK, SettingsSection.fromId("playback"))
         assertEquals(SettingsSection.GESTURE, SettingsSection.fromId("gesture"))
         assertEquals(SettingsSection.APPEARANCE, SettingsSection.fromId("appearance"))
-        assertEquals(SettingsSection.DATA, SettingsSection.fromId("data"))
+        assertEquals(SettingsSection.STORAGE, SettingsSection.fromId("data"))
         assertEquals(SettingsSection.ABOUT, SettingsSection.fromId("about"))
         assertNull(SettingsSection.fromId("unknown"))
         assertNull(SettingsSection.fromId(null))

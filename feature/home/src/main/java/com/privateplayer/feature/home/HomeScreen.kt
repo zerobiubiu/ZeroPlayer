@@ -24,7 +24,11 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.DriveFileMove
 import androidx.compose.material.icons.outlined.CreateNewFolder
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.FolderOpen
+import androidx.compose.material.icons.outlined.MoreVert
+import androidx.compose.material.icons.outlined.SelectAll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -33,12 +37,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -59,6 +65,7 @@ import com.privateplayer.core.design.components.DeleteDialog
 import com.privateplayer.core.design.components.MoveDialog
 import com.privateplayer.core.design.components.NameDialog
 import com.privateplayer.core.design.components.ErrorState
+import com.privateplayer.core.design.components.FileAction
 import com.privateplayer.core.design.components.LoadingState
 import com.privateplayer.core.design.theme.Spacing
 import com.privateplayer.core.design.R as DesignR
@@ -80,30 +87,46 @@ fun HomeScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     var pendingMessage by remember { mutableStateOf<HomeMessage?>(null) }
-    var dialog by remember { mutableStateOf<HomeDialog?>(null) }
-    var selectedPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var batchDeleteConfirm by remember { mutableStateOf(false) }
-    var batchMove by remember { mutableStateOf(false) }
-    val selectionMode = selectedPaths.isNotEmpty()
-    val messageText = pendingMessage?.let { stringResource(it.labelRes(), *it.formatArgs()) }
+    var dialog by remember(state.currentDirectory) { mutableStateOf<HomeDialog?>(null) }
+    val selection = remember(state.currentDirectory) { mutableStateMapOf<String, FileTreeEntry>() }
+    val selectionMode = selection.isNotEmpty()
+    val messageText = pendingMessage?.let { message ->
+        val summary = stringResource(message.labelRes(), *message.formatArgs())
+        if (message is HomeMessage.BatchDone && message.result.changedTargets.isNotEmpty()) {
+            stringResource(R.string.home_batch_changed_summary, summary, stringResource(R.string.home_delete_target_changed))
+        } else summary
+    }
+    val failuresLabel = stringResource(R.string.home_batch_failures)
 
-    // 切换目录时清空选择，避免跨目录误操作。
-    LaunchedEffect(state.currentDirectory) { selectedPaths = emptySet() }
+    fun onFileAction(entry: FileTreeEntry, action: FileAction) {
+        when (action) {
+            FileAction.Details -> viewModel.resolveVideo(entry, onOpenMedia)
+            FileAction.Export -> onExportFile(entry.path, entry.name)
+            FileAction.Share -> onShareFile(entry.path)
+            FileAction.Rename -> dialog = HomeDialog.Rename(entry)
+            FileAction.Move -> dialog = HomeDialog.Move(entry)
+            FileAction.Delete -> dialog = HomeDialog.Delete(entry)
+            FileAction.FileInfo -> error("Unexpected home menu action: $action")
+        }
+    }
 
     fun handleBatchResult(result: BatchResult) {
-        selectedPaths = result.failed.map { it.first }.toSet()
+        val failures = result.failed.mapTo(mutableSetOf()) { it.first }
+        selection.keys.retainAll(failures)
         pendingMessage = HomeMessage.BatchDone(result)
     }
 
     BackHandler(enabled = selectionMode || state.currentDirectory.isNotEmpty()) {
-        if (selectionMode) selectedPaths = emptySet() else viewModel.navigateUp()
+        if (selectionMode) selection.clear() else viewModel.navigateUp()
     }
     LaunchedEffect(viewModel) {
         viewModel.messages.collect { message -> pendingMessage = message }
     }
-    LaunchedEffect(messageText) {
+    LaunchedEffect(pendingMessage, messageText) {
         messageText?.let {
-            snackbarHostState.showSnackbar(it)
+            val failures = (pendingMessage as? HomeMessage.BatchDone)?.result?.failed.orEmpty()
+            val result = snackbarHostState.showSnackbar(it, actionLabel = failuresLabel.takeIf { failures.isNotEmpty() }, withDismissAction = failures.isNotEmpty())
+            if (result == SnackbarResult.ActionPerformed && failures.isNotEmpty()) dialog = HomeDialog.BatchFailures(failures)
             pendingMessage = null
         }
     }
@@ -113,21 +136,34 @@ fun HomeScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         topBar = {
             if (selectionMode) {
+                val single = selection.values.singleOrNull()
+                var menuEntry by remember { mutableStateOf<FileTreeEntry?>(null) }
                 SelectionTopBar(
-                    selectedCount = selectedPaths.size,
-                    onClose = { selectedPaths = emptySet() },
+                    selectedCount = selection.size,
+                    onClose = selection::clear,
                     actions = {
-                        TextButton(onClick = { selectedPaths = state.entries.map { it.path }.toSet() }) {
-                            Text(stringResource(R.string.home_select_all))
+                        IconButton(onClick = {
+                            state.entries.forEach { entry -> selection.putIfAbsent(entry.path, entry) }
+                        }, enabled = !state.isWorking) {
+                            Icon(Icons.Outlined.SelectAll, contentDescription = stringResource(R.string.home_select_all))
                         }
-                        TextButton(onClick = { selectedPaths = emptySet() }) {
-                            Text(stringResource(R.string.home_clear_selection))
-                        }
-                        IconButton(onClick = { batchMove = true }, enabled = !state.isWorking) {
-                            Icon(Icons.Outlined.DriveFileMove, contentDescription = stringResource(R.string.home_batch_move))
-                        }
-                        IconButton(onClick = { batchDeleteConfirm = true }, enabled = !state.isWorking) {
-                            Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.home_batch_delete))
+                        if (single != null) {
+                            IconButton(onClick = { dialog = HomeDialog.Rename(single) }, enabled = !state.isWorking) {
+                                Icon(Icons.Outlined.Edit, contentDescription = stringResource(DesignR.string.design_action_rename))
+                            }
+                            Box {
+                                IconButton(onClick = { menuEntry = single }, enabled = !state.isWorking) {
+                                    Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.home_more))
+                                }
+                                HomeFileMenu(menuEntry, renameInToolbar = true, onDismiss = { menuEntry = null }, onAction = ::onFileAction)
+                            }
+                        } else {
+                            IconButton(onClick = { dialog = HomeDialog.BatchMove(selection.values.toList()) }, enabled = !state.isWorking) {
+                                Icon(Icons.Outlined.DriveFileMove, contentDescription = stringResource(R.string.home_batch_move))
+                            }
+                            IconButton(onClick = { dialog = HomeDialog.BatchDelete(selection.values.toList()) }, enabled = !state.isWorking) {
+                                Icon(Icons.Outlined.Delete, contentDescription = stringResource(R.string.home_batch_delete))
+                            }
                         }
                     },
                 )
@@ -143,11 +179,11 @@ fun HomeScreen(
                 )
             }
         },
-        snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).consumeWindowInsets(padding),
         ) {
+            SnackbarHost(snackbarHostState)
             when {
                 state.isLoading -> Box(
                     modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState())
@@ -161,7 +197,8 @@ fun HomeScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     ErrorState(
-                        message = stringResource(state.errorRes!!),
+                        title = stringResource(state.errorRes!!),
+                        reason = state.errorReason,
                         onRetry = viewModel::retry,
                         secondaryActionLabel = if (state.currentDirectory.isNotEmpty()) {
                             stringResource(DesignR.string.design_back_parent)
@@ -178,8 +215,7 @@ fun HomeScreen(
                     EmptyState(
                         icon = Icons.Outlined.FolderOpen,
                         title = stringResource(R.string.home_empty_title),
-                        message = stringResource(R.string.home_empty_message),
-                        actionLabel = if (state.isWorking) null else stringResource(R.string.home_empty_import),
+                        actionLabel = if (state.isWorking) null else stringResource(R.string.home_import_files),
                         onAction = if (state.isWorking) null else ({ onOpenLocalImport(state.currentDirectory) }),
                         modifier = Modifier.padding(horizontal = Spacing.screenHorizontal),
                     )
@@ -190,37 +226,25 @@ fun HomeScreen(
                     contentPadding = PaddingValues(bottom = Spacing.xl),
                 ) {
                     items(state.entries, key = FileTreeEntry::path) { entry ->
+                        val selected = selection[entry.path]?.let {
+                            it.identity == entry.identity && it.isDirectory == entry.isDirectory
+                        } == true
                         FileTreeRow(
                             entry = entry,
                             enabled = !state.isWorking,
                             selectionMode = selectionMode,
-                            selected = entry.path in selectedPaths,
+                            selected = selected,
                             onToggleSelect = {
-                                selectedPaths = if (entry.path in selectedPaths) {
-                                    selectedPaths - entry.path
-                                } else {
-                                    selectedPaths + entry.path
-                                }
+                                if (selected) selection.remove(entry.path) else selection[entry.path] = entry
                             },
-                            onEnterSelection = { selectedPaths = selectedPaths + entry.path },
                             onOpen = {
                                 when {
-                                    selectionMode -> selectedPaths = if (entry.path in selectedPaths) {
-                                        selectedPaths - entry.path
-                                    } else {
-                                        selectedPaths + entry.path
-                                    }
                                     entry.isDirectory -> viewModel.openDirectory(entry.path)
                                     entry.isVideo -> viewModel.resolveVideo(entry, onPlayMedia)
                                     else -> viewModel.showUnsupportedFileMessage(entry)
                                 }
                             },
-                            onDetails = { viewModel.resolveVideo(entry, onOpenMedia) },
-                            onRename = { dialog = HomeDialog.Rename(entry) },
-                            onMove = { dialog = HomeDialog.Move(entry) },
-                            onDelete = { dialog = HomeDialog.Delete(entry) },
-                            onExport = { onExportFile(entry.path, entry.name) },
-                            onShare = { onShareFile(entry.path) },
+                            onAction = ::onFileAction,
                         )
                     }
                 }
@@ -248,6 +272,7 @@ fun HomeScreen(
             onDismiss = { dialog = null },
             onConfirm = { name ->
                 dialog = null
+                selection.clear()
                 viewModel.rename(active.entry, name)
             },
         )
@@ -258,6 +283,7 @@ fun HomeScreen(
             onDismiss = { dialog = null },
             onConfirm = { destination ->
                 dialog = null
+                selection.clear()
                 viewModel.move(active.entry, destination)
             },
         )
@@ -267,44 +293,51 @@ fun HomeScreen(
             onDismiss = { dialog = null },
             onConfirm = {
                 dialog = null
+                selection.clear()
                 viewModel.delete(active.entry)
             },
         )
 
-        null -> Unit
-    }
-
-    // F-41：批量删除二次确认（点名数量、不可撤销）。
-    if (batchDeleteConfirm) {
-        val selectedEntries = state.entries.filter { it.path in selectedPaths }
-        ConfirmDialog(
-            title = stringResource(R.string.home_batch_delete_title, selectedEntries.size),
-            message = stringResource(R.string.home_batch_delete_message, selectedEntries.size),
+        is HomeDialog.BatchDelete -> ConfirmDialog(
+            title = stringResource(R.string.home_batch_delete_title, active.entries.size),
+            message = stringResource(R.string.home_batch_delete_message),
             confirmLabel = stringResource(R.string.home_batch_delete),
             destructive = true,
             onConfirm = {
-                batchDeleteConfirm = false
-                viewModel.deleteBatch(selectedEntries, ::handleBatchResult)
+                dialog = null
+                viewModel.deleteBatch(active.entries, ::handleBatchResult)
             },
-            onDismiss = { batchDeleteConfirm = false },
+            onDismiss = { dialog = null },
         )
-    }
 
-    // F-41：批量移动复用目录选择器（以首个选中项约束目标）。
-    if (batchMove) {
-        val selectedEntries = state.entries.filter { it.path in selectedPaths }
-        val anchor = selectedEntries.firstOrNull()
-        if (anchor != null) {
-            MoveDialog(
-                entry = anchor,
-                loadDirectories = viewModel::directoriesForMove,
-                onDismiss = { batchMove = false },
-                onConfirm = { destination ->
-                    batchMove = false
-                    viewModel.moveBatch(selectedEntries, destination, ::handleBatchResult)
-                },
-            )
-        }
+        is HomeDialog.BatchMove -> MoveDialog(
+            entry = active.entries.first(),
+            title = stringResource(R.string.home_batch_move_title, active.entries.size),
+            loadDirectories = viewModel::directoriesForMove,
+            onDismiss = { dialog = null },
+            onConfirm = { destination ->
+                dialog = null
+                viewModel.moveBatch(active.entries, destination, ::handleBatchResult)
+            },
+        )
+
+        is HomeDialog.BatchFailures -> AlertDialog(
+            onDismissRequest = { dialog = null },
+            title = { Text(failuresLabel) },
+            text = {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(Spacing.sm)) {
+                    items(active.failures) { (path, reason) ->
+                        Column {
+                            Text(path.substringAfterLast('/'), style = MaterialTheme.typography.titleSmall)
+                            Text(reason.ifBlank { stringResource(R.string.home_batch_retry) })
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { dialog = null }) { Text(stringResource(R.string.home_close)) } },
+        )
+
+        null -> Unit
     }
 }
 

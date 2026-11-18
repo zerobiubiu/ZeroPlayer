@@ -4,10 +4,18 @@ import android.content.ContentValues
 import android.os.Build
 import android.provider.MediaStore
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.isPopup
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -42,6 +50,8 @@ import com.privateplayer.domain.model.LibraryStats
 import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.OperationOutcome
 import com.privateplayer.domain.model.StorageUsage
+import com.privateplayer.domain.model.PlaybackProgressMode
+import com.privateplayer.domain.model.PrivateFileIdentity
 import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaRepository
@@ -66,6 +76,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -88,11 +100,10 @@ class DetailSettingsInstrumentedTest {
         val siblingSubtitle = File(storage.mediaRoot, "${videoFile.nameWithoutExtension}.zh.srt")
             .apply { writeText("同目录字幕") }
         val fileTree = DetailFileTreeRepository(videoFile.name, siblingSubtitle)
-        val subtitle = storage.saveSubtitle(
-            mediaId,
-            "回归字幕.srt",
-            ByteArrayInputStream("1\n00:00:00,000 --> 00:00:01,000\n字幕\n".toByteArray()),
-        )
+        val subtitle = runBlocking {
+            storage.saveSubtitle(mediaId, "回归字幕.srt",
+                ByteArrayInputStream("1\n00:00:00,000 --> 00:00:01,000\n字幕\n".toByteArray()))
+        }
         val media = Media(
             id = mediaId,
             displayName = "详情回归视频",
@@ -183,7 +194,8 @@ class DetailSettingsInstrumentedTest {
             siblingSubtitle.delete()
             fileTree.notifyChanged()
             compose.waitUntil(10_000) { viewModel.uiState.value.sameDirectorySubtitles.isEmpty() }
-            compose.onNodeWithText("还没有外挂字幕。", substring = true).assertExists()
+            compose.onNodeWithText("外挂字幕（0）").assertExists()
+            compose.onNodeWithText("添加").assertIsEnabled()
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val sourceName = "字幕回归-${UUID.randomUUID()}.srt"
                 val contents = "1\n00:00:00,000 --> 00:00:01,000\n导入字幕\n"
@@ -222,8 +234,9 @@ class DetailSettingsInstrumentedTest {
     @Test
     fun settingsShowsFileStorageWithBinaryUnitsAndNoObsoleteEntries() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
+        val repository = PreferencesSettingsRepository(context)
         val viewModel = SettingsViewModel(
-            PreferencesSettingsRepository(context),
+            repository,
             object : StorageRepository {
                 override fun observeUsage(): Flow<StorageUsage> = flowOf(
                     StorageUsage(
@@ -248,7 +261,9 @@ class DetailSettingsInstrumentedTest {
             Dispatchers.IO,
         )
         val selectedSection = mutableStateOf<SettingsSection?>(null)
+        val direction = mutableStateOf(LayoutDirection.Ltr)
         compose.setContent {
+            CompositionLocalProvider(LocalLayoutDirection provides direction.value) {
             MaterialTheme {
                 val section = selectedSection.value
                 if (section == null) {
@@ -264,6 +279,7 @@ class DetailSettingsInstrumentedTest {
                     )
                 }
             }
+            }
         }
         compose.waitUntil(10_000) { viewModel.uiState.value.usage.mediaCount == 3 }
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
@@ -276,8 +292,63 @@ class DetailSettingsInstrumentedTest {
         compose.onAllNodesWithText("媒体库", substring = true).assertCountEquals(0)
         compose.onNodeWithContentDescription("返回").performClick()
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("数据与存储"))
-        compose.onNodeWithText("数据与存储").performClick()
+        fun open(section: String) {
+            compose.onNode(hasScrollAction()).performScrollToNode(hasText(section))
+            compose.onNode(hasText(section) and hasClickAction()).performClick()
+        }
+        fun back() = compose.onNodeWithContentDescription("返回").performClick()
+        val original = runBlocking { repository.observeSettings().first().playback.progressMode }
+        try {
+            open("播放")
+            compose.onNodeWithText("字幕字号").assertDoesNotExist()
+            compose.onNodeWithText("双击跳转时长").assertDoesNotExist()
+            val next = if (original == PlaybackProgressMode.RESUME) PlaybackProgressMode.RECORD_ONLY else PlaybackProgressMode.RESUME
+            val nextLabel = context.getString(next.labelRes)
+            val title = "播放进度"
+            for (layout in listOf(LayoutDirection.Ltr, LayoutDirection.Rtl)) {
+                compose.runOnIdle { direction.value = layout }
+                val arrow = compose.onNodeWithTag("setting-affordance-$title", useUnmergedTree = true).fetchSemanticsNode()
+                val arrowX = compose.runOnIdle { arrow.positionOnScreen.x + arrow.size.width / 2f }
+                // 点击行的文字端，不是点箭头本身。
+                compose.onNodeWithText(title, useUnmergedTree = true).performTouchInput { click() }
+                val current = compose.onNode(hasAnyAncestor(isPopup()) and hasText(context.getString(original.labelRes)))
+                current.assertIsSelected()
+                val popup = compose.onNode(isPopup()).fetchSemanticsNode()
+                val (left, right) = compose.runOnIdle { popup.positionOnScreen.x.let { it to it + popup.size.width } }
+                assertTrue("$layout: 箭头=$arrowX 弹窗屏幕边界=[$left, $right]", arrowX in left..right)
+                if (layout == LayoutDirection.Ltr) {
+                    pressBack()
+                    compose.onNode(isPopup()).assertDoesNotExist()
+                } else {
+                    compose.onNode(hasAnyAncestor(isPopup()) and hasText(nextLabel)).performTouchInput { click() }
+                }
+            }
+            compose.waitUntil(5_000) { viewModel.uiState.value.settings.playback.progressMode == next }
+            assertEquals(next, runBlocking { repository.observeSettings().first().playback.progressMode })
+            back()
+            open("播放")
+            compose.onNodeWithTag("setting-value-$title", useUnmergedTree = true).assertTextContains(nextLabel)
+            back()
+        } finally {
+            runBlocking { repository.setPlaybackProgressMode(original) }
+            compose.runOnIdle { direction.value = LayoutDirection.Ltr }
+        }
+        open("字幕")
+        compose.onNodeWithText("字幕字号").assertExists()
+        compose.onNodeWithText("延迟调节步长").assertExists()
+        compose.onNodeWithText("默认倍速").assertDoesNotExist()
+        back()
+        open("手势与控制")
+        compose.onNodeWithText("双击跳转时长").assertExists()
+        compose.onNodeWithText("左侧上下滑动调节亮度").assertExists()
+        compose.onNodeWithText("默认画面比例").assertDoesNotExist()
+        back()
+        open("文件导入")
+        compose.onNodeWithText("导入时生成缩略图").assertExists()
+        compose.onNodeWithText("可用空间").assertDoesNotExist()
+        back()
+        open("存储与清理")
+        compose.onNodeWithText("导入时生成缩略图").assertDoesNotExist()
         compose.onNodeWithText("文件").assertExists()
         compose.onNodeWithText("3 个视频 · 1.5 GiB").assertExists()
         compose.onNodeWithText("2.0 MiB").assertExists()
@@ -299,6 +370,15 @@ class DetailSettingsInstrumentedTest {
     fun settingsNumericRowsSaveImmediatelyWithoutSaveButton() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
         val repository = PreferencesSettingsRepository(context)
+        val original = runBlocking { repository.observeSettings().first().playback.defaultSpeed }
+        try {
+            exerciseNumericSettings(repository)
+        } finally {
+            runBlocking { repository.setDefaultSpeed(original) }
+        }
+    }
+
+    private fun exerciseNumericSettings(repository: PreferencesSettingsRepository) {
         val viewModel = SettingsViewModel(
             repository,
             object : StorageRepository {
@@ -336,21 +416,21 @@ class DetailSettingsInstrumentedTest {
         }
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed > 0f }
 
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放与字幕"))
-        compose.onNodeWithText("播放与字幕").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
+        compose.onNodeWithText("播放").performClick()
 
         // 页面不再有逐行“保存”按钮
         compose.onAllNodesWithText("保存", substring = true).assertCountEquals(0)
 
         // 紧凑行：默认不显示范围提示（F-29）
-        compose.onNodeWithText("允许范围：0.25～4 倍").assertDoesNotExist()
+        compose.onNodeWithText("允许范围：0.25～8 倍").assertDoesNotExist()
 
         // 点击紧凑行打开编辑对话框，预填当前值
         compose.onNodeWithTag("setting-默认倍速").performClick()
         compose.onNodeWithText("编辑默认倍速").assertExists()
         // 聚焦后显示范围提示（F-29）；requestFocus 异步，等待焦点生效
         compose.waitUntil(10_000) {
-            compose.onAllNodesWithText("允许范围：0.25～4 倍").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithText("允许范围：0.25～8 倍").fetchSemanticsNodes().isNotEmpty()
         }
 
         // 先归一到一个确定的基线值，后续断言不依赖设备上残留的旧设置
@@ -362,7 +442,7 @@ class DetailSettingsInstrumentedTest {
         compose.onNodeWithTag("setting-默认倍速").performClick()
         compose.onNodeWithTag("setting-edit-默认倍速").performTextReplacement("9")
         compose.onNodeWithTag("setting-edit-默认倍速").performImeAction()
-        compose.onNodeWithText("请输入0.25～4 倍").assertExists()
+        compose.onNodeWithText("请输入0.25～8 倍").assertExists()
         assertEquals(1.0f, viewModel.uiState.value.settings.playback.defaultSpeed, 0.0f)
 
         // 合法值键盘完成即写入，无需点击保存（对话框仍开着，直接改值）
@@ -378,8 +458,8 @@ class DetailSettingsInstrumentedTest {
 
         // 返回一级再进入，值保留
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放与字幕"))
-        compose.onNodeWithText("播放与字幕").performClick()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("播放"))
+        compose.onNodeWithText("播放").performClick()
         compose.waitUntil(10_000) { viewModel.uiState.value.settings.playback.defaultSpeed == 3.0f }
         compose.onNodeWithTag("setting-value-默认倍速", useUnmergedTree = true)
             .assert(SemanticsMatcher("值含 3.0") { node ->
@@ -402,12 +482,14 @@ private class DetailMediaRepository(private val media: Media) : MediaRepository 
     override suspend fun setFavorite(ids: List<Long>, favorite: Boolean): OperationOutcome = error("详情页不应调用")
     override suspend fun rename(id: Long, newDisplayName: String): OperationOutcome = error("详情页不应调用")
     override suspend fun moveToFolder(ids: List<Long>, folderId: Long?): OperationOutcome = error("详情页不应调用")
-    override suspend fun delete(ids: List<Long>): OperationOutcome = error("详情页不应调用")
-    override suspend fun recordPlayback(mediaId: Long, positionMs: Long, watchedMs: Long, playIncrement: Int) =
-        error("详情页不应调用")
+    override suspend fun delete(entries: List<FileTreeEntry>): OperationOutcome = error("详情页不应调用")
+    override suspend fun recordPlayback(
+        mediaId: Long, positionMs: Long, observedDurationMs: Long, watchedMs: Long, playIncrement: Int,
+    ) = error("详情页不应调用")
 
     override suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?) =
         error("详情页不应调用")
+    override suspend fun setSubtitleDelayMs(mediaId: Long, delayMs: Long): Unit = error("详情页不应调用")
 }
 
 private class DetailFileTreeRepository(
@@ -437,7 +519,7 @@ private class DetailFileTreeRepository(
     override suspend fun createDirectory(parent: String, name: String): FileTreeEntry = error("详情页不应调用")
     override suspend fun rename(path: String, name: String): FileTreeEntry = error("详情页不应调用")
     override suspend fun move(path: String, destination: String): FileTreeEntry = error("详情页不应调用")
-    override suspend fun delete(path: String): Unit = error("详情页不应调用")
+    override suspend fun delete(path: String, identity: PrivateFileIdentity, isDirectory: Boolean): Unit = error("详情页不应调用")
     override suspend fun openForRead(path: String): File = error("详情页不应调用")
     override suspend fun requireDirectory(path: String): File = error("详情页不应调用")
     override suspend fun ensureMedia(path: String): Long = error("详情页不应调用")

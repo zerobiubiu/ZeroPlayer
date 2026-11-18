@@ -20,7 +20,7 @@
     clearFinished: byId("clear-finished"),
     queueHint: byId("queue-hint"),
     queueSummary: byId("queue-summary"),
-    queueEmpty: byId("queue-empty"),
+    queuePanel: byId("queue-panel"),
     queueList: byId("queue-list"),
     announcement: byId("announcement"),
     dialog: byId("action-dialog"),
@@ -36,8 +36,8 @@
   const taskStorageKey = "zeroplayer-upload-tasks-v1";
   const terminalStates = new Set(["completed", "failed", "canceled", "unknown"]);
   const queue = [];
-  let nextId = 0;
   let currentPath = "";
+  let requestedPath = "";
   let pathReady = false;
   let configLoaded = false;
   let filesLoading = false;
@@ -62,8 +62,9 @@
   }
 
   function setConnection(connected) {
+    if (ui.connectionStatus.dataset.connected === String(connected)) return;
     ui.connectionStatus.dataset.connected = String(connected);
-    ui.connectionStatus.textContent = connected ? "已连接" : "连接中断";
+    ui.connectionStatus.textContent = connected ? "已连接" : "未连接";
     ui.connectionError.hidden = connected;
   }
 
@@ -99,7 +100,6 @@
         signal: controller.signal,
       });
       text = await response.text();
-      setConnection(true);
     } catch (error) {
       setConnection(false);
       if (error.name === "AbortError") throw new Error("连接超时，请检查手机服务和网络");
@@ -108,6 +108,7 @@
       window.clearTimeout(timer);
     }
     const body = parseJson(text);
+    setConnection(body !== null && typeof body === "object");
     if (!response.ok || (body && typeof body.error === "string" && body.error)) {
       throw new Error(serverError(body, response.status));
     }
@@ -137,7 +138,7 @@
   }
 
   function displayPath(path) {
-    return path ? `文件 / ${path.split("/").join(" / ")}` : "文件";
+    return path ? `根目录 / ${path.split("/").join(" / ")}` : "根目录";
   }
 
   function parentPath(path) {
@@ -146,25 +147,38 @@
   }
 
   function updateControls() {
-    const pending = queue.filter((item) => item.state === "pending").length;
-    const finished = queue.some((item) => terminalStates.has(item.state));
-    ui.chooseFiles.disabled = !pathReady || filesLoading;
+    let pending = 0, saved = 0, ended = 0;
+    for (const item of queue) {
+      if (item.state === "pending") pending++;
+      if (item.state === "completed") saved++;
+      if (terminalStates.has(item.state)) ended++;
+      if (item.uploadRetryButton) item.uploadRetryButton.disabled = busy;
+    }
+    const focused = document.activeElement;
+    ui.fileInput.disabled = !pathReady || (filesLoading && requestedPath !== currentPath);
     ui.createFolder.disabled = !pathReady || filesLoading;
-    ui.startUploads.disabled = busy || pending === 0;
-    ui.cancelUpload.disabled = !activeRequest || !activeCancelable;
-    ui.clearPending.disabled = pending === 0;
-    ui.clearFinished.disabled = !finished;
-    ui.queueEmpty.hidden = queue.length !== 0;
-    ui.queueSummary.textContent = queue.length
-      ? `共 ${queue.length} 个文件，待上传 ${pending} 个`
-      : "尚未选择文件";
+    ui.chooseFiles.textContent = pending || busy ? "添加文件" : "选择文件";
+    ui.chooseFiles.className = `button ${pending || busy ? "button-secondary" : "button-primary"}`;
+    ui.startUploads.textContent = `上传 ${pending} 个文件`;
+    ui.startUploads.hidden = busy || pending === 0;
+    ui.cancelUpload.hidden = !activeRequest || !activeCancelable;
+    ui.clearPending.hidden = pending < 2;
+    ui.clearFinished.hidden = ended === 0;
+    ui.queuePanel.hidden = queue.length === 0;
+    const summary = [`${queue.length} 个文件`];
+    if (pending) summary.push(`${pending} 个待上传`);
+    if (saved) summary.push(`${saved} 个已保存`);
+    ui.queueSummary.textContent = summary.join(" · ");
+    if (ui.queuePanel.contains(focused) && focused.closest("[hidden]")) {
+      (ui.fileInput.disabled ? ui.refreshFiles : ui.fileInput).focus();
+    }
   }
 
   function renderBreadcrumbs(path) {
     const parts = path ? path.split("/") : [];
     const fragment = document.createDocumentFragment();
     let accumulated = "";
-    const entries = [{ name: "文件", path: "" }];
+    const entries = [{ name: "根目录", path: "" }];
     for (const part of parts) {
       accumulated = accumulated ? `${accumulated}/${part}` : part;
       entries.push({ name: part, path: accumulated });
@@ -205,30 +219,39 @@
     meta.textContent = `${kind} · ${formatDate(entry.modifiedAt)}`;
     info.append(name, meta);
 
-    const actions = element("div", "entry-actions");
+    const tools = element("div", "entry-tools");
     if (entry.type === "file") {
       const download = element("a", "button button-quiet", "下载");
       download.href = url("/api/download", { path: entry.path });
       download.setAttribute("aria-label", `下载：${entry.name}`);
-      actions.append(download);
+      tools.append(download);
     }
+    const management = element("details", "entry-management");
+    const toggle = element("summary", "", "管理");
+    toggle.setAttribute("aria-label", `管理：${entry.name}`);
+    const actions = element("div", "entry-actions");
     actions.append(
       entryAction("重命名", entry, () => renameEntry(entry)),
       entryAction("移动", entry, () => moveEntry(entry)),
       entryAction("删除", entry, () => deleteEntry(entry)),
     );
-    item.append(info, actions);
+    management.append(toggle, actions);
+    tools.append(management);
+    item.append(info, tools);
     return item;
   }
 
   function validListing(body) {
     return typeof body.path === "string" && Array.isArray(body.entries) && body.entries.every((entry) =>
-      entry && typeof entry.name === "string" && typeof entry.path === "string" &&
+      entry && typeof entry.name === "string" && typeof entry.path === "string" && entry.path.length > 0 &&
+      typeof entry.device === "string" && entry.device.length > 0 &&
+      typeof entry.inode === "string" && entry.inode.length > 0 &&
       (entry.type === "file" || entry.type === "directory"));
   }
 
   async function loadFiles(path) {
     const sequence = ++filesSequence;
+    requestedPath = path;
     filesLoading = true;
     ui.filesState.hidden = false;
     ui.filesState.dataset.error = "false";
@@ -240,18 +263,28 @@
       if (sequence !== filesSequence) return;
       currentPath = body.path;
       pathReady = true;
+      const restoreFocus = ui.filesList.contains(document.activeElement) || ui.breadcrumbs.contains(document.activeElement);
       renderBreadcrumbs(currentPath);
       const fragment = document.createDocumentFragment();
       body.entries.forEach((entry) => fragment.append(makeEntry(entry)));
       ui.filesList.replaceChildren(fragment);
       ui.filesState.hidden = body.entries.length !== 0;
-      ui.filesState.textContent = "此文件夹为空。可以上传文件或新建文件夹。";
+      ui.filesState.textContent = "目录为空";
+      if (restoreFocus) ui.breadcrumbs.querySelector('[aria-current="page"]').focus();
     } catch (error) {
       if (sequence !== filesSequence) return;
       ui.filesState.hidden = false;
       ui.filesState.dataset.error = "true";
-      const previous = pathReady ? "当前仍显示上次读取的内容。" : "可以刷新重试或返回根文件夹。";
-      ui.filesState.textContent = `读取失败：${error.message}。${previous}`;
+      ui.filesState.textContent = `读取失败：${error.message}。${pathReady ? "仍显示上一次读取的目录。" : "请刷新重试。"}`;
+      if (!pathReady) {
+        ui.uploadPath.textContent = "未读取目录";
+        if (path) {
+          const root = element("button", "button button-quiet", "打开根目录");
+          root.type = "button";
+          root.addEventListener("click", () => loadFiles(""));
+          ui.filesState.append(root);
+        }
+      }
     } finally {
       if (sequence === filesSequence) {
         filesLoading = false;
@@ -274,6 +307,8 @@
     } catch (error) {
       if (sequence !== filesSequence) return;
       ui.filesState.dataset.error = "true";
+      setConnection(false);
+      if (!pathReady) ui.uploadPath.textContent = "未读取目录";
       ui.filesState.textContent = `连接失败：${error.message}。请刷新重试。`;
     }
   }
@@ -285,7 +320,8 @@
     dialogPending = false;
     dialogAction = options.submit;
     ui.dialogTitle.textContent = options.title;
-    ui.dialogDescription.textContent = options.description;
+    ui.dialogDescription.textContent = options.description || "";
+    ui.dialogDescription.hidden = !options.description;
     ui.dialogFields.replaceChildren();
     ui.dialogError.textContent = "";
     ui.dialogError.hidden = true;
@@ -317,8 +353,8 @@
     let input;
     const generation = openDialog({
       title: "新建文件夹",
-      description: `将在 ${displayPath(parent)} 中创建文件夹。`,
-      submitLabel: "创建文件夹",
+      description: displayPath(parent),
+      submitLabel: "创建",
       submit: async () => {
         await api("/api/folders", { path: parent, name: input.value }, "POST");
         return "文件夹已创建。";
@@ -331,8 +367,7 @@
     let input;
     const generation = openDialog({
       title: "重命名",
-      description: `为“${entry.name}”输入新名称。`,
-      submitLabel: "保存名称",
+      submitLabel: "保存",
       submit: async () => {
         await api("/api/rename", { path: entry.path, name: input.value }, "POST");
         return "名称已更新。";
@@ -341,16 +376,16 @@
     if (generation !== null) input = nameField(entry.name);
   }
 
-  function deleteEntry(entry) {
+  function deleteEntry({ name, path, type, device, inode }) {
     openDialog({
-      title: `删除${entry.type === "directory" ? "文件夹" : "文件"}`,
-      description: entry.type === "directory"
-        ? `确定删除“${entry.name}”吗？文件夹内的内容也可能被删除，此操作无法撤销。`
-        : `确定删除“${entry.name}”吗？此操作无法撤销。`,
+      title: `删除${type === "directory" ? "文件夹" : "文件"}`,
+      description: type === "directory"
+        ? `“${name}”及其中的全部内容将永久删除，无法撤销。`
+        : `“${name}”将永久删除，无法撤销。`,
       submitLabel: "确认删除",
       danger: true,
       submit: async () => {
-        await api("/api/delete", { path: entry.path }, "POST");
+        await api("/api/delete", { path, type, device, inode }, "POST");
         return "已删除。";
       },
     });
@@ -361,7 +396,7 @@
     let pickerSequence = 0;
     const generation = openDialog({
       title: "移动",
-      description: `选择“${entry.name}”的目标文件夹。`,
+      description: entry.name,
       submitLabel: "移动到此处",
       initiallyDisabled: true,
       submit: async () => {
@@ -415,11 +450,11 @@
         const insideItself = entry.type === "directory" &&
           (destination === entry.path || destination.startsWith(`${entry.path}/`));
         if (insideItself) {
-          state.textContent = "不能将文件夹移动到自身或其子文件夹，请选择其他位置。";
+          state.textContent = "不能移入自身或子文件夹。";
         } else if (destination === parentPath(entry.path)) {
-          state.textContent = "这已经是当前文件夹，请选择其他位置。";
+          state.textContent = "已在此文件夹中。";
         } else {
-          state.textContent = directories.length ? "选择下方文件夹可继续进入。" : "此处没有子文件夹。";
+          state.textContent = directories.length ? "" : "没有子文件夹";
           ui.dialogSubmit.disabled = false;
         }
       } catch (error) {
@@ -475,14 +510,15 @@
       if (records.length) localStorage.setItem(taskStorageKey, JSON.stringify(records));
       else localStorage.removeItem(taskStorageKey);
     } catch {
-      const message = "浏览器无法保存任务记录，刷新后可能无法恢复查询。请保持页面开启，直到任务结束。";
+      const message = "浏览器无法记录已接收的任务。请保持页面开启，直到保存结束。";
+      ui.queueHint.hidden = false;
       ui.queueHint.textContent = message;
       announce(message);
     }
   }
 
   function setState(item, state, label, detail = "") {
-    const changed = item.state !== state || item.status.textContent !== label || item.detail.textContent !== detail;
+    if (item.state === state && item.status.textContent === label && item.detail.textContent === detail) return;
     item.state = state;
     item.element.dataset.state = state;
     item.status.textContent = label;
@@ -490,7 +526,7 @@
     item.detail.hidden = !detail;
     renderItemActions(item);
     updateControls();
-    if (changed) announce(`${item.name}：${label}${detail ? `。${detail}` : ""}`);
+    announce(`${item.name}：${label}${detail ? `。${detail}` : ""}`);
   }
 
   function setProgress(item, loaded, total, label) {
@@ -526,7 +562,6 @@
     actions.hidden = true;
     row.append(heading, destination, status, detail, progressRow, actions);
     const item = {
-      id: ++nextId,
       name,
       size,
       path,
@@ -560,21 +595,27 @@
     if (index < 0) return;
     queue.splice(index, 1);
     item.file = null;
+    const restoreFocus = item.element.contains(document.activeElement);
     item.element.remove();
     saveTasks();
     updateControls();
+    if (restoreFocus) (ui.fileInput.disabled ? ui.refreshFiles : ui.fileInput).focus();
   }
 
   function renderItemActions(item) {
     const buttons = [];
+    item.uploadRetryButton = null;
     if (item.state === "pending") {
       buttons.push(queueAction(item, "移除", () => {
         removeItem(item);
         announce(`已从待上传中移除 ${item.name}。`);
       }));
+    } else if (item.state === "failed" && item.file && !item.taskId) {
+      item.uploadRetryButton = queueAction(item, "重新上传", () => runQueue([item]));
+      buttons.push(item.uploadRetryButton);
     } else if (item.state === "unknown" && item.taskId && !item.tracking) {
       buttons.push(queueAction(item, "重新查询", () => trackTask(item)));
-    } else if (item.state === "failed" && item.taskId && !item.tracking) {
+    } else if (item.state === "failed" && item.taskId && item.canRetry && !item.tracking) {
       buttons.push(queueAction(item, "重试保存", () => retryTask(item)));
       const download = element("a", "button button-quiet", "下载已接收文件");
       download.href = `/api/uploads/${encodeURIComponent(item.taskId)}/download`;
@@ -587,7 +628,7 @@
   }
 
   async function retryTask(item) {
-    if (!queue.includes(item) || item.state !== "failed" || !item.taskId || item.tracking) return;
+    if (!queue.includes(item) || item.state !== "failed" || !item.taskId || !item.canRetry || item.tracking) return;
     setState(item, "retrying", "正在请求重试保存");
     try {
       const result = await api(`/api/uploads/${encodeURIComponent(item.taskId)}/retry`, undefined, "POST");
@@ -601,7 +642,7 @@
   }
 
   function addFiles(files) {
-    if (!pathReady || filesLoading) {
+    if (ui.fileInput.disabled) {
       announce("请先等待文件夹读取完成，再选择文件。");
       return;
     }
@@ -613,7 +654,7 @@
       added += 1;
     }
     updateControls();
-    if (added) announce(`已添加 ${added} 个文件${busy ? "，将按顺序继续传输" : "，点击开始上传"}。`);
+    if (added) announce(`已添加 ${added} 个待上传文件。`);
   }
 
   function upload(item) {
@@ -650,16 +691,17 @@
         setConnection(true);
         const body = parseJson(request.responseText);
         if (request.status < 200 || request.status >= 300 || (body && body.error)) {
-          finish({ kind: "failed", detail: serverError(body, request.status) });
+          const rejected = request.status >= 400 && (request.status < 500 || request.status === 507);
+          finish({ kind: rejected ? "failed" : "unknown", detail: serverError(body, request.status) });
         } else if (!body || typeof body.taskId !== "string" || !body.taskId) {
-          finish({ kind: "unknown", detail: "设备没有返回有效的任务编号，文件可能已被接收。请检查目标文件夹后再重试。" });
+          finish({ kind: "unknown", detail: "设备没有返回任务编号，文件可能已被接收。" });
         } else {
           finish({ kind: "accepted", taskId: body.taskId });
         }
       });
       request.addEventListener("error", () => {
         setConnection(false);
-        finish({ kind: "unknown", detail: "连接中断，无法确认设备是否已接收。请检查目标文件夹后再重试。" });
+        finish({ kind: "unknown", detail: "连接中断，无法确认手机是否已接收。" });
       });
       request.addEventListener("abort", () => {
         finish({ kind: "canceled", detail: "已请求取消传输。设备可能已接收部分或全部数据，请检查目标文件夹后再重试。" });
@@ -677,48 +719,48 @@
   async function trackTask(item) {
     if (item.tracking || !item.taskId || !queue.includes(item)) return;
     item.tracking = true;
-    setState(item, "importing", "正在查询处理状态");
+    // 入队时文件已接收完毕，任务字节数不代表手机的保存进度。
+    setProgress(item, null, null, "保存进度");
+    item.progressLabel.hidden = true;
+    setState(item, "importing", "已接收，正在查询保存状态");
     try {
       while (queue.includes(item)) {
         const result = await api(`/api/uploads/${encodeURIComponent(item.taskId)}`);
         if (!queue.includes(item)) return;
         const labels = {
-          QUEUED: "已接收，等待处理",
-          RUNNING: "正在处理文件",
-          COMMITTING: "正在保存文件",
-          COMPLETED: "已完成",
-          FAILED: "处理失败",
-          CANCELED: "处理已取消",
+          QUEUED: "已接收，等待保存",
+          RUNNING: "正在保存",
+          COMMITTING: "正在确认保存结果",
+          COMPLETED: "已保存",
+          FAILED: "保存失败",
+          CANCELED: "已取消保存",
         };
         if (!Object.prototype.hasOwnProperty.call(labels, result.state)) {
           throw new Error("设备返回了无法识别的任务状态");
         }
         const detail = typeof result.errorMessage === "string" ? result.errorMessage : "";
         if (result.state === "COMPLETED") {
-          setProgress(item, 1, 1, "处理进度");
+          item.progressRow.hidden = true;
           setState(item, "completed", labels[result.state], detail);
-          if (pathReady && !filesLoading && currentPath === item.path) loadFiles(currentPath);
+          if (pathReady && requestedPath === item.path) loadFiles(item.path);
           return;
         }
         if (result.state === "FAILED" || result.state === "CANCELED") {
+          item.progressRow.hidden = true;
+          // 旧版状态响应没有此字段；新服务对已丢失的上传暂存明确返回 false。
+          item.canRetry = result.state === "FAILED" && result.canRetry !== false;
           setState(item, result.state === "FAILED" ? "failed" : "canceled", labels[result.state],
             detail || "请检查文件夹中的文件以及手机上的任务状态。");
-          if (pathReady && !filesLoading && currentPath === item.path) loadFiles(currentPath);
+          if (pathReady && requestedPath === item.path) loadFiles(item.path);
           return;
-        }
-        const copied = Number(result.bytesCopied);
-        const total = Number(result.sizeBytes);
-        if (Number.isFinite(copied) && Number.isFinite(total) && total > 0) {
-          setProgress(item, copied, total, "处理进度");
-        } else {
-          setProgress(item, Number.isFinite(copied) ? copied : 0, 0, "处理进度");
         }
         setState(item, "importing", labels[result.state], detail);
         await new Promise((resolve) => window.setTimeout(resolve, 2000));
       }
     } catch (error) {
       if (queue.includes(item)) {
-        setState(item, "unknown", "处理状态未知", `查询失败：${error.message}。设备可能仍在处理，请重新查询。`);
+        item.progressRow.hidden = true;
+        setState(item, "unknown", "保存状态未知", `查询失败：${error.message}。可重新查询，不必再次上传。`);
       }
     } finally {
       item.tracking = false;
@@ -726,14 +768,15 @@
     }
   }
 
-  async function runQueue() {
-    if (busy) return;
+  async function runQueue(items) {
+    if (busy || items.length === 0) return;
     busy = true;
     let paused = false;
     updateControls();
     try {
-      let item;
-      while ((item = queue.find((entry) => entry.state === "pending"))) {
+      for (const item of items) {
+        // 等待上一项期间可能被移除；removeItem 会释放对应的 File。
+        if (!item.file || item.taskId || (item.state !== "pending" && item.state !== "failed")) continue;
         setState(item, "uploading", "正在传输");
         setProgress(item, 0, item.size, "传输进度");
         const result = await upload(item);
@@ -741,15 +784,16 @@
           item.taskId = result.taskId;
           item.file = null;
           saveTasks();
-          setState(item, "importing", "已接收，正在查询处理状态");
+          item.progressRow.hidden = true;
           trackTask(item);
         } else {
-          item.file = null;
-          const detail = `${result.detail} 如需重试，请重新选择文件并上传。`;
+          item.progressRow.hidden = true;
+          if (result.kind !== "failed") item.file = null;
+          const detail = result.detail;
           if (result.kind === "canceled") {
             setState(item, "canceled", "已请求取消传输", detail);
           } else if (result.kind === "unknown") {
-            setState(item, "unknown", "接收状态未知", detail);
+            setState(item, "unknown", "接收状态未知", `${detail} 请先查看手机记录或目标目录，再决定是否重新上传。`);
             paused = true;
             break;
           } else {
@@ -764,7 +808,7 @@
       updateControls();
       announce(paused
         ? "队列已暂停，请确认接收状态并检查连接后继续。"
-        : "队列传输处理结束，请查看各文件的状态。");
+        : `本次传输已结束。${ui.startUploads.hidden ? "保存结果见队列。" : "其余文件仍待上传。"}`);
     }
   }
 
@@ -773,7 +817,8 @@
     try {
       records = JSON.parse(localStorage.getItem(taskStorageKey) || "[]");
     } catch {
-      ui.queueHint.textContent = "浏览器无法读取已保存的任务记录，刷新后可能无法恢复查询。请保持页面开启。";
+      ui.queueHint.hidden = false;
+      ui.queueHint.textContent = "无法读取浏览器中的任务记录。请在手机上查看保存结果。";
       return;
     }
     if (!Array.isArray(records)) return;
@@ -791,12 +836,11 @@
     updateControls();
   }
 
-  ui.chooseFiles.addEventListener("click", () => ui.fileInput.click());
   ui.fileInput.addEventListener("change", () => {
     addFiles(ui.fileInput.files);
     ui.fileInput.value = "";
   });
-  ui.startUploads.addEventListener("click", runQueue);
+  ui.startUploads.addEventListener("click", () => runQueue(queue.filter((item) => item.state === "pending")));
   ui.cancelUpload.addEventListener("click", () => {
     if (activeRequest && activeCancelable) activeRequest.abort();
   });
@@ -811,7 +855,7 @@
     if (queue.some((item) => item.taskId && (item.state === "failed" || item.state === "unknown"))) {
       openDialog({
         title: "清除传输记录",
-        description: "只清除本网页记录，不会删除手机上的文件。清除后本网页将无法继续查询或恢复这些失败或状态未知的任务。",
+        description: "手机文件不变；清除后无法从本页查询或恢复这些任务。",
         submitLabel: "清除记录",
         submit: async () => {
           clearRecords();
@@ -825,7 +869,7 @@
   });
   ui.createFolder.addEventListener("click", createFolder);
   ui.refreshFiles.addEventListener("click", () => {
-    if (configLoaded) loadFiles(currentPath);
+    if (configLoaded) loadFiles(requestedPath);
     else initializeFiles();
   });
 
@@ -841,8 +885,8 @@
   ui.dropZone.addEventListener("dragover", (event) => {
     if (!containsFiles(event)) return;
     event.preventDefault();
-    event.dataTransfer.dropEffect = pathReady && !filesLoading ? "copy" : "none";
-    ui.dropZone.classList.add("is-dragging");
+    event.dataTransfer.dropEffect = ui.fileInput.disabled ? "none" : "copy";
+    ui.dropZone.classList.toggle("is-dragging", !ui.fileInput.disabled);
   });
   ui.dropZone.addEventListener("dragleave", (event) => {
     if (!event.relatedTarget || !ui.dropZone.contains(event.relatedTarget)) ui.dropZone.classList.remove("is-dragging");
@@ -872,7 +916,6 @@
     if (skippedDirectories) announce("文件夹不能直接拖放上传。请先创建文件夹，再选择其中的文件。");
   });
 
-  renderBreadcrumbs("");
   updateControls();
   restoreTasks();
   initializeFiles();

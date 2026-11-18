@@ -1,5 +1,6 @@
 package com.privateplayer.media
 
+import android.system.Os
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.longClick
 import androidx.lifecycle.SavedStateHandle
@@ -30,11 +32,14 @@ import com.privateplayer.core.design.components.fileActionMenuGroups
 import com.privateplayer.core.storage.LocalSubtitleStore
 import com.privateplayer.core.storage.PrivateStorage
 import com.privateplayer.core.storage.SafDocuments
+import com.privateplayer.core.storage.privateIdentity
 import com.privateplayer.core.storage.StorageMediaFileLocator
 import com.privateplayer.domain.model.LibraryQuery
 import com.privateplayer.domain.model.LibraryStats
 import com.privateplayer.domain.model.Media
 import com.privateplayer.domain.model.OperationOutcome
+import com.privateplayer.domain.model.PrivateFileIdentity
+import com.privateplayer.domain.repository.FileTreeEntryChangedException
 import com.privateplayer.domain.repository.FileTreeEntry
 import com.privateplayer.domain.repository.FileTreeRepository
 import com.privateplayer.domain.repository.MediaRepository
@@ -73,6 +78,7 @@ class FileMenuAndDetailActionsInstrumentedTest {
     private fun videoEntry(name: String = "影片.mp4", path: String = name) = FileTreeEntry(
         name = name, path = path, isDirectory = false, sizeBytes = 10, modifiedAt = 0,
         mediaId = 1L, isVideo = true,
+        identity = PrivateFileIdentity(1, 1),
     )
 
     // ------------------------------------------------------------ F-22 菜单分组
@@ -107,18 +113,17 @@ class FileMenuAndDetailActionsInstrumentedTest {
     @Test
     fun homeRowMenuShowsGroupedActionsAndDeleteOpensConfirm() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext.applicationContext
-        val storage = PrivateStorage(context)
-        val video = File(storage.mediaRoot, "菜单回归-${UUID.randomUUID()}.mp4").apply {
-            parentFile!!.mkdirs()
-            writeBytes(byteArrayOf(1, 2, 3))
-        }
-        val tree = MenuFileTreeRepository(video)
+        val directory = java.nio.file.Files.createTempDirectory(context.cacheDir.toPath(), "menu-").toFile()
+        val video = File(directory, "影片.mp4").apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val other = File(directory, "清单.txt").apply { writeText("清单") }
+        val tree = DetailActionFileTreeRepository(video, 1L)
         val viewModel = HomeViewModel(tree, NoOpPlaybackStopper, Dispatchers.IO)
+        val details = AtomicReference<Long?>()
         try {
             compose.setContent {
                 MaterialTheme {
                     HomeScreen(
-                        onOpenMedia = {},
+                        onOpenMedia = details::set,
                         onPlayMedia = {},
                         onOpenLocalImport = {},
                         onOpenWifiImport = {},
@@ -154,17 +159,102 @@ class FileMenuAndDetailActionsInstrumentedTest {
             // F-41：长按进入多选（不再打开菜单），顶栏显示已选数量
             compose.onNodeWithText(video.name).performTouchInput { longClick() }
             compose.onNodeWithText("已选择 1 项").assertIsDisplayed()
-            // 多选态批量删除：二次确认后删除
-            compose.onNodeWithContentDescription("删除").performClick()
-            compose.onNodeWithText("删除 1 项？").assertIsDisplayed()
+            compose.onNodeWithContentDescription("更多").performTouchInput { click() }
+            compose.onNodeWithTag("文件菜单-视频详情").performTouchInput { click() }
+            compose.waitUntil(5_000) { details.get() == 1L }
+            compose.onNodeWithText(other.name).performTouchInput { click() }
+            compose.onNodeWithText("已选择 2 项").assertIsDisplayed()
+            compose.onNodeWithContentDescription("更多").assertDoesNotExist()
+            compose.onNodeWithContentDescription("重命名").assertDoesNotExist()
+            compose.onNodeWithContentDescription("删除").performTouchInput { click() }
+            compose.onNodeWithText("删除 2 项？").assertIsDisplayed()
             compose.onNode(hasText("删除") and hasClickAction() and hasAnyAncestor(isDialog())).performClick()
-            compose.waitUntil(10_000) { !video.exists() }
+            compose.waitUntil(10_000) { !video.exists() && !other.exists() }
             compose.waitUntil(10_000) {
                 compose.onAllNodesWithText(video.name).fetchSemanticsNodes().isEmpty()
             }
         } finally {
-            video.delete()
+            directory.deleteRecursively()
         }
+    }
+
+    @Test
+    fun ordinaryFileLongPressRenamesDirectlyAndMoreExportsAndShares() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = java.nio.file.Files.createTempDirectory(context.cacheDir.toPath(), "touch-menu-").toFile()
+        val original = File(dir, "原名.txt").apply { writeText("保留内容") }
+        val renamed = File(dir, "新名.txt")
+        val tree = DetailActionFileTreeRepository(original, 1L)
+        val model = HomeViewModel(tree, NoOpPlaybackStopper, Dispatchers.IO)
+        val exported = AtomicReference<Pair<String, String>?>()
+        val shared = AtomicReference<String?>()
+        try {
+            compose.setContent {
+                MaterialTheme {
+                    HomeScreen({}, {}, {}, {}, { path, name -> exported.set(path to name) }, shared::set, viewModel = model)
+                }
+            }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(original.name).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(original.name).performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("重命名").performTouchInput { click() }
+            compose.onNodeWithTag("名称输入").performTextReplacement(renamed.name)
+            compose.onNodeWithTag("名称确认").performTouchInput { click() }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(renamed.name).fetchSemanticsNodes().isNotEmpty() }
+            assertEquals("保留内容", renamed.readText())
+            compose.onNodeWithText(renamed.name).performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("更多").performTouchInput { click() }
+            compose.onNodeWithTag("文件菜单-视频详情").assertDoesNotExist()
+            compose.onNodeWithTag("文件菜单-重命名").assertDoesNotExist()
+            compose.onNodeWithTag("文件菜单-导出").performTouchInput { click() }
+            assertEquals(renamed.name to renamed.name, exported.get())
+            compose.onNodeWithContentDescription("更多").performTouchInput { click() }
+            compose.onNodeWithTag("文件菜单-分享").performTouchInput { click() }
+            assertEquals(renamed.name, shared.get())
+        } finally { dir.deleteRecursively() }
+    }
+
+    @Test
+    fun selectionAndConfirmationNeverRebindAReplacementAtTheSamePath() {
+        val context = InstrumentationRegistry.getInstrumentation().targetContext
+        val dir = java.nio.file.Files.createTempDirectory(context.cacheDir.toPath(), "snapshot-").toFile()
+        val file = File(dir, "原件.txt").apply { writeText("初始") }
+        val other = File(dir, "同批.txt").apply { writeText("可删除") }
+        val tree = DetailActionFileTreeRepository(file, 1L)
+        val model = HomeViewModel(tree, NoOpPlaybackStopper, Dispatchers.IO)
+        fun replace(body: String) {
+            val replacement = File.createTempFile("replace", null, dir).apply { writeText(body) }
+            java.nio.file.Files.move(replacement.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            tree.notifyChanged()
+            compose.waitUntil(5_000) { model.uiState.value.entries.any { it.path == file.name && it.identity == Os.lstat(file.path).privateIdentity } }
+        }
+        fun confirm() = compose.onNode(hasText("删除") and hasClickAction() and hasAnyAncestor(isDialog())).performTouchInput { click() }
+        try {
+            compose.setContent { MaterialTheme { HomeScreen({}, {}, {}, {}, { _, _ -> }, {}, viewModel = model) } }
+            compose.waitUntil(5_000) { compose.onAllNodesWithText(file.name).fetchSemanticsNodes().isNotEmpty() }
+            compose.onNodeWithText(file.name).performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("更多").performTouchInput { click() }
+            compose.onNodeWithTag("文件菜单-删除").performTouchInput { click() }
+            replace("第一次替换")
+            confirm()
+            compose.waitUntil(5_000) { compose.onAllNodesWithText("文件或文件夹已变化，请重新选择后再删除。").fetchSemanticsNodes().isNotEmpty() }
+            assertEquals("第一次替换", file.readText())
+            compose.onNodeWithText(file.name).performTouchInput { longClick() }
+            compose.onNodeWithText(other.name).performTouchInput { click() }
+            // 替换发生在弹框之前，已选条目也不能随目录刷新重新绑定。
+            replace("第二次替换")
+            compose.onNodeWithContentDescription("删除").performTouchInput { click() }
+            compose.onNodeWithText("删除 2 项？").assertIsDisplayed()
+            confirm()
+            compose.waitUntil(5_000) { !other.exists() }
+            compose.waitUntil(5_000) {
+                compose.onAllNodesWithText("成功 1 项，失败 1 项。文件或文件夹已变化，请重新选择后再删除。").fetchSemanticsNodes().isNotEmpty()
+            }
+            compose.onNodeWithText("失败详情").performClick()
+            compose.onNode(hasText(file.name) and hasAnyAncestor(isDialog())).assertIsDisplayed()
+            compose.onNode(hasText(other.name) and hasAnyAncestor(isDialog())).assertDoesNotExist()
+            compose.onNodeWithText("关闭").performClick()
+            assertEquals("第二次替换", file.readText())
+        } finally { dir.deleteRecursively() }
     }
 
     // ------------------------------------------------------------ F-21 详情页操作
@@ -202,7 +292,7 @@ class FileMenuAndDetailActionsInstrumentedTest {
             playedDurationMs = 0L,
             playCount = 0,
         )
-        val tree = DetailActionFileTreeRepository(video)
+        val tree = DetailActionFileTreeRepository(video, mediaId)
         val mediaRepository = MutableMediaRepository(media)
         // 真实实现里文件操作与媒体记录同事务更新；替身用回调模拟同一同步。
         tree.onChanged = { path, deleted ->
@@ -279,6 +369,7 @@ class FileMenuAndDetailActionsInstrumentedTest {
     @Test
     fun detailRenameValidatesAndSyncsMedia() {
         val fixture = detailFixture()
+        val newName = "已改名-${UUID.randomUUID()}.mp4"
         try {
             showDetail(fixture)
             openDetailMoreMenu()
@@ -295,7 +386,6 @@ class FileMenuAndDetailActionsInstrumentedTest {
             compose.onNodeWithTag("名称确认").assertIsNotEnabled()
 
             // 合法新名：确认后媒体记录与磁盘同步
-            val newName = "已改名-${UUID.randomUUID()}.mp4"
             compose.onNodeWithTag("名称输入").performTextReplacement(newName)
             compose.onNodeWithTag("名称确认").assertIsEnabled()
             compose.onNodeWithTag("名称确认").performClick()
@@ -307,7 +397,8 @@ class FileMenuAndDetailActionsInstrumentedTest {
             }
             compose.onNodeWithText("已重命名").assertExists()
         } finally {
-            fixture.storage.mediaRoot.listFiles()?.forEach { it.delete() }
+            fixture.video.delete()
+            File(fixture.storage.mediaRoot, newName).delete()
         }
     }
 
@@ -408,44 +499,10 @@ class FileMenuAndDetailActionsInstrumentedTest {
     }
 }
 
-/** 首页菜单测试用文件树：真实磁盘列举 + 内存变更通知。 */
-private class MenuFileTreeRepository(private val video: File) : FileTreeRepository {
-    private val changes = MutableStateFlow(0L)
-
-    override fun observeChanges(): Flow<Long> = changes
-    override fun observeDirectory(path: String): Flow<List<FileTreeEntry>> = changes.map { list(path) }
-
-    override suspend fun list(path: String): List<FileTreeEntry> {
-        check(path.isEmpty())
-        return if (video.isFile) {
-            listOf(
-                FileTreeEntry(
-                    name = video.name, path = video.name, isDirectory = false,
-                    sizeBytes = video.length(), modifiedAt = video.lastModified(), isVideo = true,
-                ),
-            )
-        } else {
-            emptyList()
-        }
-    }
-
-    override suspend fun find(path: String): FileTreeEntry? = list("").firstOrNull { it.path == path }
-    override suspend fun createDirectory(parent: String, name: String): FileTreeEntry = error("本测试不新建目录")
-    override suspend fun rename(path: String, name: String): FileTreeEntry = error("本测试不重命名")
-    override suspend fun move(path: String, destination: String): FileTreeEntry = error("本测试不移动")
-    override suspend fun delete(path: String) {
-        check(video.delete()) { "删除失败" }
-        notifyChanged()
-    }
-    override suspend fun openForRead(path: String): File = error("本测试不读取文件")
-    override suspend fun requireDirectory(path: String): File = error("本测试不访问目录")
-    override suspend fun ensureMedia(path: String): Long = error("本测试不入库")
-    override suspend fun matchingSubtitles(path: String): List<String> = emptyList()
-    override fun notifyChanged() { changes.value++ }
-}
 
 /** 详情页操作用文件树：真实磁盘 rename/move/delete + 变更通知。 */
-private class DetailActionFileTreeRepository(private val video: File) : FileTreeRepository {
+private class DetailActionFileTreeRepository(private val video: File, private val mediaId: Long) : FileTreeRepository {
+    private val videoIdentity = Os.lstat(video.path).privateIdentity
     private val changes = MutableStateFlow(0L)
     private val root get() = video.parentFile!!
 
@@ -459,10 +516,13 @@ private class DetailActionFileTreeRepository(private val video: File) : FileTree
         val directory = if (path.isEmpty()) root else File(root, path)
         if (!directory.isDirectory) return emptyList()
         return directory.listFiles().orEmpty().map { child ->
+            val identity = Os.lstat(child.path).privateIdentity
             FileTreeEntry(
                 name = child.name,
                 path = if (path.isEmpty()) child.name else "$path/${child.name}",
                 isDirectory = child.isDirectory,
+                identity = identity,
+                mediaId = mediaId.takeIf { child.extension.equals("mp4", ignoreCase = true) && identity == videoIdentity },
                 sizeBytes = if (child.isDirectory) 0 else child.length(),
                 modifiedAt = child.lastModified(),
                 isVideo = child.isFile && child.extension.equals("mp4", ignoreCase = true),
@@ -475,6 +535,8 @@ private class DetailActionFileTreeRepository(private val video: File) : FileTree
         if (!file.exists()) return null
         return FileTreeEntry(
             name = file.name, path = path, isDirectory = file.isDirectory,
+            identity = Os.lstat(file.path).privateIdentity,
+            mediaId = mediaId.takeIf { Os.lstat(file.path).privateIdentity == videoIdentity },
             sizeBytes = file.length(), modifiedAt = file.lastModified(),
         )
     }
@@ -501,7 +563,9 @@ private class DetailActionFileTreeRepository(private val video: File) : FileTree
         return find(newPath)!!
     }
 
-    override suspend fun delete(path: String) {
+    override suspend fun delete(path: String, identity: PrivateFileIdentity, isDirectory: Boolean) {
+        val current = find(path)
+        if (current == null || current.identity != identity || current.isDirectory != isDirectory) throw FileTreeEntryChangedException()
         check(File(root, path).delete()) { "删除失败" }
         onChanged?.invoke(path, true)
         notifyChanged()
@@ -538,8 +602,10 @@ private class MutableMediaRepository(initial: Media) : MediaRepository {
     override suspend fun setFavorite(ids: List<Long>, favorite: Boolean): OperationOutcome = error("详情页不应调用")
     override suspend fun rename(id: Long, newDisplayName: String): OperationOutcome = error("详情页不应调用")
     override suspend fun moveToFolder(ids: List<Long>, folderId: Long?): OperationOutcome = error("详情页不应调用")
-    override suspend fun delete(ids: List<Long>): OperationOutcome = error("详情页不应调用")
-    override suspend fun recordPlayback(mediaId: Long, positionMs: Long, watchedMs: Long, playIncrement: Int) =
-        error("详情页不应调用")
+    override suspend fun delete(entries: List<FileTreeEntry>): OperationOutcome = error("详情页不应调用")
+    override suspend fun recordPlayback(
+        mediaId: Long, positionMs: Long, observedDurationMs: Long, watchedMs: Long, playIncrement: Int,
+    ) = error("详情页不应调用")
     override suspend fun setSelectedSubtitleTrack(mediaId: Long, trackId: String?) = error("详情页不应调用")
+    override suspend fun setSubtitleDelayMs(mediaId: Long, delayMs: Long): Unit = error("详情页不应调用")
 }

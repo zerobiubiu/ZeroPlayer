@@ -17,7 +17,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
@@ -34,7 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -91,7 +91,7 @@ fun MediaDetailScreen(
     val messageText = state.messageRes?.let { stringResource(it, *state.messageArgs) }
 
     var subtitleToDelete by remember { mutableStateOf<SubtitleFile?>(null) }
-    var moreMenuExpanded by remember { mutableStateOf(false) }
+    var menuEntry by remember { mutableStateOf<FileTreeEntry?>(null) }
     var fileDialog by remember { mutableStateOf<DetailFileDialog?>(null) }
 
     val subtitlePicker = rememberLauncherForActivityResult(
@@ -131,22 +131,22 @@ fun MediaDetailScreen(
                     }
                     Box {
                         IconButton(
-                            onClick = { moreMenuExpanded = true },
-                            enabled = !state.isWorking,
+                            onClick = { menuEntry = state.fileEntry },
+                            enabled = !state.isWorking && state.fileEntry != null,
                         ) {
                             Icon(Icons.Outlined.MoreVert, contentDescription = stringResource(R.string.detail_more))
                         }
                         // 详情页取共享分组菜单的子集：不含“视频详情”（已在本页），
                         // “文件信息”保留在顶栏，菜单内不再重复。
-                        val entry = viewModel.treeEntry()
+                        val entry = menuEntry
                         if (entry != null) {
                             val groups = rememberFileActionMenuGroups(
                                 entry,
                                 setOf(FileAction.Export, FileAction.Share, FileAction.Rename, FileAction.Move, FileAction.Delete),
                             )
-                            DropdownMenu(expanded = moreMenuExpanded, onDismissRequest = { moreMenuExpanded = false }) {
+                            DropdownMenu(expanded = true, onDismissRequest = { menuEntry = null }) {
                                 FileActionMenuContent(groups) { action ->
-                                    moreMenuExpanded = false
+                                    menuEntry = null
                                     when (action) {
                                         FileAction.Export -> onExportFile(entry.path, entry.name)
                                         FileAction.Share -> onShareFile(entry.path)
@@ -161,6 +161,7 @@ fun MediaDetailScreen(
                     }
                 },
             )
+            SnackbarHost(snackbarHostState)
 
             LazyColumn(
                 contentPadding = PaddingValues(bottom = Spacing.contentBottom),
@@ -179,7 +180,6 @@ fun MediaDetailScreen(
                                 .fillMaxWidth()
                                 .aspectRatio(16f / 9f),
                             cornerRadius = Radius.card,
-                            durationText = formatDuration(media.durationMs),
                         )
                         Button(
                             onClick = { onPlay(media.id) },
@@ -216,16 +216,14 @@ fun MediaDetailScreen(
                             maxLines = 3,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        Spacer(Modifier.height(Spacing.sm))
-                        Text(
-                            text = if (media.hasProgress) {
-                                stringResource(R.string.detail_progress_format, formatPercent(media.progress), formatDateTime(media.lastPlayedAt))
-                            } else {
-                                stringResource(R.string.detail_no_progress)
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (media.hasProgress) {
+                            Spacer(Modifier.height(Spacing.sm))
+                            Text(
+                                stringResource(R.string.detail_progress_format, formatPercent(media.progress)),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
 
@@ -238,11 +236,8 @@ fun MediaDetailScreen(
                         InfoRow(stringResource(R.string.detail_file_name), media.fileName)
                         InfoRow(stringResource(R.string.detail_size), formatBytes(media.sizeBytes))
                         InfoRow(stringResource(R.string.detail_added_at), formatDateTime(media.addedAt))
-                        state.fileInfo?.let { info ->
-                            InfoRow(
-                                stringResource(R.string.detail_file_status),
-                                stringResource(if (info.exists) R.string.detail_file_status_ok else R.string.detail_file_status_missing),
-                            )
+                        if (state.fileInfo?.exists == false) {
+                            InfoRow(stringResource(R.string.detail_file_status), stringResource(R.string.detail_file_status_missing))
                         }
                     }
                 }
@@ -252,38 +247,29 @@ fun MediaDetailScreen(
                 }
                 item {
                     Column {
-                        InfoRow(stringResource(R.string.detail_duration), formatDuration(media.durationMs))
-                        InfoRow(
-                            label = stringResource(R.string.detail_resolution),
-                            value = if (media.width > 0) {
-                                stringResource(R.string.detail_resolution_dimensions, media.width, media.height)
-                            } else {
-                                stringResource(R.string.detail_unknown)
-                            },
-                        )
-                        InfoRow(stringResource(R.string.detail_video_codec), media.videoCodec ?: stringResource(R.string.detail_unknown))
-                        InfoRow(
-                            label = stringResource(R.string.detail_bitrate),
-                            value = formatBitrate(media.bitrate) ?: stringResource(R.string.detail_unknown),
-                        )
+                        val resolution = media.width > 0 && media.height > 0
+                        val bitrate = formatBitrate(media.bitrate)
+                        if (media.durationMs > 0) InfoRow(stringResource(R.string.detail_duration), formatDuration(media.durationMs))
+                        if (resolution) InfoRow(stringResource(R.string.detail_resolution), stringResource(R.string.detail_resolution_dimensions, media.width, media.height))
+                        media.videoCodec?.let { InfoRow(stringResource(R.string.detail_video_codec), it) }
+                        if (bitrate != null) InfoRow(stringResource(R.string.detail_bitrate), bitrate)
+                        if (media.durationMs <= 0 && !resolution && media.videoCodec == null && bitrate == null) {
+                            Text(stringResource(R.string.detail_not_probed), modifier = Modifier.padding(horizontal = Spacing.screenHorizontal))
+                        }
                     }
                 }
-                item {
-                    Spacer(Modifier.height(Spacing.lg))
-                    SectionHeader(title = stringResource(R.string.detail_group_audio))
-                }
-                item {
-                    Column {
-                        InfoRow(stringResource(R.string.detail_audio_codec), media.audioCodec ?: stringResource(R.string.detail_unknown))
+                media.audioCodec?.let { codec ->
+                    item {
+                        Spacer(Modifier.height(Spacing.lg))
+                        SectionHeader(title = stringResource(R.string.detail_group_audio))
+                        InfoRow(stringResource(R.string.detail_audio_codec), codec)
                     }
                 }
-                item {
-                    Spacer(Modifier.height(Spacing.lg))
-                    SectionHeader(title = stringResource(R.string.detail_group_playback))
-                }
-                item {
-                    Column {
-                        InfoRow(stringResource(R.string.detail_last_played), formatDateTime(media.lastPlayedAt))
+                if (media.playCount > 0 || media.lastPlayedAt != null) {
+                    item {
+                        Spacer(Modifier.height(Spacing.lg))
+                        SectionHeader(title = stringResource(R.string.detail_group_playback))
+                        media.lastPlayedAt?.let { InfoRow(stringResource(R.string.detail_last_played), formatDateTime(it)) }
                         InfoRow(stringResource(R.string.detail_play_count), "${media.playCount}")
                     }
                 }
@@ -330,39 +316,8 @@ fun MediaDetailScreen(
                         }
                     }
                 }
-
-                item {
-                    Spacer(Modifier.height(Spacing.xl))
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLow,
-                        shape = RoundedCornerShape(Radius.card),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.screenHorizontal),
-                    ) {
-                        Column(modifier = Modifier.padding(Spacing.lg)) {
-                            Text(
-                                text = stringResource(R.string.detail_private_storage_title),
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            Spacer(Modifier.height(Spacing.xs))
-                            Text(
-                                text = stringResource(R.string.detail_private_storage_note),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
             }
         }
-
-        SnackbarHost(
-            hostState = snackbarHostState,
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = Spacing.contentBottom),
-        )
     }
 
 
@@ -385,9 +340,11 @@ fun MediaDetailScreen(
             title = media.displayName,
             rows = buildList {
                 add(stringResource(R.string.detail_info_relative_path) to media.relativePath)
-                add(stringResource(R.string.detail_info_absolute_path) to (state.fileInfo?.absolutePath ?: stringResource(R.string.detail_info_dash)))
-                add(stringResource(R.string.detail_info_exists) to stringResource(if (state.fileInfo?.exists == true) R.string.detail_info_yes else R.string.detail_info_no))
-                add(stringResource(R.string.detail_info_disk_size) to formatBytes(state.fileInfo?.sizeBytes ?: 0L))
+                state.fileInfo?.let { info ->
+                    add(stringResource(R.string.detail_info_absolute_path) to info.absolutePath)
+                    add(stringResource(R.string.detail_info_exists) to stringResource(if (info.exists) R.string.detail_info_yes else R.string.detail_info_no))
+                    if (info.exists) add(stringResource(R.string.detail_info_disk_size) to formatBytes(info.sizeBytes))
+                }
                 add(stringResource(R.string.detail_info_mime) to (media.mimeType ?: stringResource(R.string.detail_unknown)))
                 add(stringResource(R.string.detail_info_thumbnail) to (media.thumbnailPath ?: stringResource(R.string.detail_info_thumbnail_none)))
                 // F-06：导入探测的轨道数移入文件信息并注明来源，主表不再展示。
@@ -396,7 +353,7 @@ fun MediaDetailScreen(
                     stringResource(R.string.detail_subtitle_tracks_probe) to
                         if (media.subtitleTrackCount == 0) stringResource(R.string.detail_subtitle_tracks_unknown) else "${media.subtitleTrackCount}",
                 )
-                add(stringResource(R.string.detail_probe_source) to stringResource(R.string.detail_added_at) + " " + formatDateTime(media.addedAt))
+                add(stringResource(R.string.detail_probe_source) to formatDateTime(media.addedAt))
             },
             onDismiss = { viewModel.setShowFileInfo(false) },
         )
@@ -411,7 +368,7 @@ fun MediaDetailScreen(
             onDismiss = { fileDialog = null },
             onConfirm = { name ->
                 fileDialog = null
-                viewModel.rename(name)
+                viewModel.rename(active.entry, name)
             },
         )
 
@@ -421,7 +378,7 @@ fun MediaDetailScreen(
             onDismiss = { fileDialog = null },
             onConfirm = { destination ->
                 fileDialog = null
-                viewModel.move(destination)
+                viewModel.move(active.entry, destination)
             },
         )
 
@@ -430,7 +387,7 @@ fun MediaDetailScreen(
             onDismiss = { fileDialog = null },
             onConfirm = {
                 fileDialog = null
-                viewModel.delete()
+                viewModel.delete(active.entry)
             },
         )
 
@@ -504,7 +461,7 @@ private fun FileInfoSheet(
         sheetState = sheetState,
         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
-        Column(modifier = Modifier.padding(bottom = Spacing.xl)) {
+        Column(modifier = Modifier.verticalScroll(rememberScrollState()).padding(bottom = Spacing.xl)) {
             Text(
                 text = stringResource(R.string.detail_file_info),
                 style = MaterialTheme.typography.titleMedium,
@@ -520,6 +477,11 @@ private fun FileInfoSheet(
             rows.forEach { (label, value) ->
                 InfoRow(label = label, value = value)
             }
+            Text(
+                stringResource(R.string.detail_private_storage_note),
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(horizontal = Spacing.screenHorizontal, vertical = Spacing.sm),
+            )
         }
     }
 }

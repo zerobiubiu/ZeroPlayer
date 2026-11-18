@@ -194,8 +194,8 @@ class PlayerQueueInstrumentedTest {
         compose.waitUntil(10_000) {
             compose.onAllNodesWithText("队列为空").fetchSemanticsNodes().isNotEmpty()
         }
-        compose.onNodeWithText("当前没有可播放的队列条目。").assertExists()
-        compose.onNodeWithText("播放队列 · 1/1").assertExists()
+        compose.onNodeWithText("当前没有可播放的队列条目。").assertDoesNotExist()
+        compose.onNodeWithText("播放队列 · 1/1").assertDoesNotExist()
         compose.onNodeWithText("上一集").assertIsNotEnabled()
         compose.onNodeWithText("下一集").assertIsNotEnabled()
         // 模式选择仍然可用
