@@ -1,13 +1,14 @@
 package com.privateplayer.feature.home
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.outlined.Circle
-import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.Icon
@@ -21,17 +22,21 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.privateplayer.core.common.format.formatBytes
 import com.privateplayer.core.design.components.FileAction
 import com.privateplayer.core.design.components.FileActionMenuContent
 import com.privateplayer.core.design.components.rememberFileActionMenuGroups
 import com.privateplayer.domain.repository.FileTreeEntry
+import com.privateplayer.feature.home.fileicons.materialFileIcon
 
 /**
  * 文件行（F-28/F-41）：普通态单击打开、长按进入多选；多选态单击/长按切换选中。
@@ -102,11 +107,21 @@ internal fun FileTreeRow(
                         contentDescription = null,
                         tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                } else {
+                } else if (entry.isDirectory) {
                     Icon(
-                        imageVector = if (entry.isDirectory) Icons.Outlined.Folder else Icons.Outlined.Description,
+                        imageVector = Icons.Outlined.Folder,
                         contentDescription = null,
-                        tint = if (entry.isDirectory) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                } else {
+                    val surface = MaterialTheme.colorScheme.surface
+                    val drawable = remember(entry, surface) {
+                        materialFileIcon(entry.name, entry.path, entry.isVideo, light = surface.luminance() > 0.5f)
+                    }
+                    Image(
+                        painter = painterResource(drawable),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp),
                     )
                 }
             },

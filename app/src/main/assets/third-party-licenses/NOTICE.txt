@@ -38,3 +38,17 @@ FreeType 要求适当署名；libunibreak 包含 Unicode 数据，须查阅该�
 版权所有 Android Open Source Project，使用 Apache License 2.0。
 许可全文随包见 sources/fast_float/LICENSE-APACHE，项目源码见
 https://github.com/androidx/media 。本应用未引入 Media3 ExoPlayer 播放引擎。
+
+首页文件图标：Material Icon Theme 5.40.0（PKief.material-icon-theme）
+https://github.com/material-extensions/vscode-material-icon-theme
+使用默认文件名与扩展名关联，将其引用的原始 SVG 转为小尺寸无损 WebP；
+未引入编辑器扩展代码。以下是该发行包 LICENSE.txt 的原文。
+
+The MIT License (MIT)
+Copyright (c) 2025 Material Extensions
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

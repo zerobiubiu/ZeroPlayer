@@ -33,3 +33,7 @@ JNI 桥接代码来自 [jarnedemeulemeester/libmpv-android](https://github.com/j
 ## 应用层依赖
 
 Kotlin 标准库、AndroidX（Compose、Room、WorkManager、Media3 Session 等）、Hilt、Coil 等依赖均来自 Maven Central / Google Maven，遵循其各自的 Apache-2.0 等许可证；依赖版本见 `gradle/libs.versions.toml`。
+
+## 首页文件类型图标
+
+[Material Icon Theme 5.40.0](https://marketplace.visualstudio.com/items?itemName=PKief.material-icon-theme)（[上游仓库](https://github.com/material-extensions/vscode-material-icon-theme)），**Copyright (c) 2025 Material Extensions，MIT**。首页使用正式发行版 `dist/material-icons.json` 中的文件关联及其引用的 SVG，图形转为无损 WebP；不分发 VS Code 扩展程序。该发行包 `LICENSE.txt` 的完整原文见 [APK 内的 NOTICE](app/src/main/assets/third-party-licenses/NOTICE.txt)，也可在应用「设置 → 关于 → 开源许可」阅读。版本校验、图标范围和转换方式见[变更记录 0029](docs/changes/0029-home-material-file-icons.md)。
