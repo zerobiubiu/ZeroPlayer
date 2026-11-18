@@ -1,6 +1,7 @@
 package com.privateplayer.core.playback.session
 
 import androidx.media3.common.Player
+import com.google.common.util.concurrent.ListenableFuture
 import com.privateplayer.core.playback.PlaybackSnapshot
 import com.privateplayer.core.playback.PlaybackStatus
 import java.util.Collections
@@ -8,6 +9,7 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -152,6 +155,7 @@ class SerialEngineCommandQueueTest {
         val enteredGate = CountDownLatch(1)
         val calls = Collections.synchronizedList(mutableListOf<Int>())
         val discarded = AtomicInteger()
+        val retiredBeforeCompletion = AtomicBoolean(false)
         val queue = SerialEngineCommandQueue(snapshots, media) { _, action ->
             enteredGate.countDown()
             gate.withLock {
@@ -159,25 +163,52 @@ class SerialEngineCommandQueueTest {
                 true
             }
         }
-        var gateHeld = true
+        lateinit var pending: ListenableFuture<*>
         try {
-            val pending = queue.enqueue(onDiscard = { discarded.incrementAndGet() }) { calls.add(1) }
+            pending = queue.enqueue(onDiscard = {
+                retiredBeforeCompletion.set(!pending.isDone)
+                discarded.incrementAndGet()
+            }) { calls.add(1) }
             assertTrue(enteredGate.await(5, TimeUnit.SECONDS))
             queue.close()
-            gate.unlock()
-            gateHeld = false
-            val cancelled = try {
-                pending.get(5, TimeUnit.SECONDS)
-                false
-            } catch (_: CancellationException) {
-                true
-            }
-            assertTrue(cancelled)
+            // 不能靠打开切源门完成取消；回调内直接观察 Future，避免调度顺序掩盖提前终结。
+            assertThrows(CancellationException::class.java) { pending.get(5, TimeUnit.SECONDS) }
+            assertTrue("应先退役票据，再公布取消终态", retiredBeforeCompletion.get())
             assertEquals(1, discarded.get())
             assertTrue(calls.isEmpty())
         } finally {
-            if (gateHeld) gate.unlock()
             queue.close()
+            gate.unlock()
+        }
+    }
+
+    @Test
+    fun `close cancels unexecuted work even when the gate returns normally`() {
+        val enteredGate = CountDownLatch(1)
+        val openGate = CountDownLatch(1)
+        val discarded = AtomicInteger()
+        val calls = Collections.synchronizedList(mutableListOf<String>())
+        val old = SerialEngineCommandQueue(snapshots, media) { _, action ->
+            enteredGate.countDown()
+            // 模拟已通过预检但未挂起的门：关闭后仍会正常返回，不能依赖它抛取消异常。
+            check(openGate.await(5, TimeUnit.SECONDS))
+            action()
+            true
+        }
+        val next = newQueue()
+        try {
+            val pending = old.enqueue(onDiscard = { discarded.incrementAndGet() }) { calls.add("旧命令") }
+            assertTrue(enteredGate.await(5, TimeUnit.SECONDS))
+            old.close()
+            next.enqueue { calls.add("新命令") }.get(5, TimeUnit.SECONDS)
+            openGate.countDown()
+            assertThrows(CancellationException::class.java) { pending.get(5, TimeUnit.SECONDS) }
+            assertEquals(1, discarded.get())
+            assertEquals(listOf("新命令"), calls.toList())
+        } finally {
+            openGate.countDown()
+            old.close()
+            next.close()
         }
     }
 

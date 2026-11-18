@@ -264,13 +264,20 @@ internal class SerialEngineCommandQueue(
         fun discard() {
             discardAction?.getAndSet(null)?.invoke()
         }
+
+        fun cancel() {
+            // Future 先唤醒等待者，再通知监听器；队列主动取消时须先退役仍持有的票据。
+            try {
+                discard()
+            } finally {
+                completion.cancel(false)
+            }
+        }
     }
 
     private val closed = AtomicBoolean(false)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private val commands = Channel<Command>(Channel.UNLIMITED, onUndeliveredElement = {
-        it.completion.cancel(false)
-    })
+    private val commands = Channel<Command>(Channel.UNLIMITED, onUndeliveredElement = Command::cancel)
 
     init {
         scope.launch {
@@ -301,11 +308,15 @@ internal class SerialEngineCommandQueue(
                     } else {
                         false
                     }
+                    if (!executed && closed.get()) {
+                        // 切源门正常返回而未执行时，关闭仍应是取消，不是切换媒体引起的正常无操作。
+                        command.cancel()
+                        continue
+                    }
                     if (!accepted || !executed) command.discard()
                     command.completion.set(null)
                 } catch (cancelled: CancellationException) {
-                    command.completion.cancel(false)
-                    command.discard()
+                    command.cancel()
                     throw cancelled
                 } catch (error: Exception) {
                     try {
@@ -341,7 +352,7 @@ internal class SerialEngineCommandQueue(
         if (onDiscard != null) {
             future.addListener({ if (future.isCancelled) command.discard() }, MoreExecutors.directExecutor())
         }
-        if (commands.trySend(command).isFailure) future.cancel(false)
+        if (commands.trySend(command).isFailure) command.cancel()
         return future
     }
 

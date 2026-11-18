@@ -71,6 +71,7 @@
 | [0037](changes/0037-import-failure-recovery.md) | 导入失败的原因、恢复操作及设备验证 |
 | [0038](changes/0038-compact-speed-fan.md) | 单手倍速扇面、主动滑回 1×、指尖键帽与实时倍速反馈；轨迹和设备证据 |
 | [0039](changes/0039-official-release-verification.md) | 正式发行门禁：缺少签名配置即停止，核对唯一证书、实际包名与版本、ARM64 和可调试属性 |
+| [0040](changes/0040-session-command-release.md) | 媒体会话关闭：未执行的命令先清理倍速票据再通知取消，区分正常切源与关闭丢弃 |
 
 ### troubleshooting/（长期可复现的问题）
 
